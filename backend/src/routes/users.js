@@ -12,10 +12,17 @@ router.get('/', async (req, res) => {
     const { rows } = await db.query(`
       SELECT u.id, u.name, u.email, u.avatar_color, u.is_active, u.created_at,
              r.id AS role_id, r.name AS role_name, r.display_name AS role_display,
-             COUNT(bi.id) AS assigned_items
+             COUNT(DISTINCT bi.id) AS assigned_items,
+             COALESCE(
+               json_agg(DISTINCT jsonb_build_object('id', p.id, 'name', p.name))
+               FILTER (WHERE p.id IS NOT NULL),
+               '[]'
+             ) AS products
       FROM users u
       LEFT JOIN roles r ON r.id = u.role_id
       LEFT JOIN backlog_items bi ON bi.assignee_id = u.id AND bi.status NOT IN ('done','backlog')
+      LEFT JOIN user_products up ON up.user_id = u.id
+      LEFT JOIN products p ON p.id = up.product_id
       GROUP BY u.id, r.id
       ORDER BY u.name
     `);
