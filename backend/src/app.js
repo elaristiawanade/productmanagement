@@ -31,6 +31,7 @@ app.use('/activities',   require('./routes/activities'));
 app.use('/attachments',  require('./routes/attachments'));
 app.use('/roadmap',      require('./routes/roadmap'));
 app.use('/import',       require('./routes/import'));
+app.use('/roles',        require('./routes/roles'));
 
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
