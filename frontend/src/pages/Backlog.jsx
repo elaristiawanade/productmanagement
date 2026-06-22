@@ -48,7 +48,7 @@ function ActivitySection({ itemId }) {
     if (!comment.trim() || sending) return;
     setSending(true);
     try {
-      await client.post(`/backlog/${itemId}/comments`, { content: comment.trim() });
+      await client.post(`/backlog/${itemId}/activities`, { content: comment.trim() });
       setComment('');
       load();
     } catch (err) {
