@@ -78,28 +78,6 @@ export default function Login() {
               {loading ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : 'Masuk'}
             </button>
           </form>
-
-          <div className="mt-6 pt-5 border-t border-white/10">
-            <p className="text-xs text-slate-500 text-center mb-3">Demo Accounts</p>
-            <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
-              {[
-                ['admin@company.com', 'Super Admin'],
-                ['citra@company.com', 'Product Owner'],
-                ['andi@company.com',  'Developer'],
-                ['rafi@company.com',  'QA Engineer'],
-              ].map(([email, role]) => (
-                <button
-                  key={email}
-                  onClick={() => setForm({ email, password: 'password' })}
-                  className="text-left px-2 py-1.5 rounded-lg hover:bg-white/10 transition-colors"
-                >
-                  <span className="block text-indigo-300 font-medium">{role}</span>
-                  <span className="block truncate">{email}</span>
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-slate-600 text-center mt-2">Password: password</p>
-          </div>
         </div>
       </div>
     </div>
