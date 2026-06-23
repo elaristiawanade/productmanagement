@@ -143,14 +143,43 @@ public class StandupController {
         boolean hasBlocker = Boolean.TRUE.equals(body.get("has_blocker")) ||
             "true".equals(String.valueOf(body.get("has_blocker")));
 
-        jdbc.update(
-            "UPDATE standups SET yesterday=?, today=?, has_blocker=?, blocker=?, blocker_plan=? WHERE id=?",
-            body.get("yesterday"), body.get("today"),
-            hasBlocker,
-            hasBlocker ? body.get("blocker") : null,
-            hasBlocker ? body.get("blocker_plan") : null,
-            id
-        );
+        String dateStr = body.get("standup_date") != null
+            ? body.get("standup_date").toString() : null;
+        java.sql.Date standupDate = null;
+        if (dateStr != null && !dateStr.isBlank()) {
+            try { standupDate = java.sql.Date.valueOf(dateStr.substring(0, 10)); }
+            catch (Exception e) { return ResponseEntity.badRequest().body(Map.of("error", "Format tanggal tidak valid")); }
+        }
+
+        try {
+            if (standupDate != null) {
+                jdbc.update(
+                    "UPDATE standups SET standup_date=?, yesterday=?, today=?, has_blocker=?, blocker=?, blocker_plan=? WHERE id=?",
+                    standupDate,
+                    body.get("yesterday"), body.get("today"),
+                    hasBlocker,
+                    hasBlocker ? body.get("blocker") : null,
+                    hasBlocker ? body.get("blocker_plan") : null,
+                    id
+                );
+            } else {
+                jdbc.update(
+                    "UPDATE standups SET yesterday=?, today=?, has_blocker=?, blocker=?, blocker_plan=? WHERE id=?",
+                    body.get("yesterday"), body.get("today"),
+                    hasBlocker,
+                    hasBlocker ? body.get("blocker") : null,
+                    hasBlocker ? body.get("blocker_plan") : null,
+                    id
+                );
+            }
+        } catch (Exception e) {
+            String msg = e.getMessage() != null ? e.getMessage() : "";
+            if (msg.contains("duplicate key") || msg.contains("unique")) {
+                return ResponseEntity.status(409).body(Map.of("error", "Standup untuk tanggal ini sudah ada"));
+            }
+            return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
+        }
+
         Map<String, Object> updated = jdbc.queryForMap("SELECT * FROM standups WHERE id=?", id);
         return ResponseEntity.ok(updated);
     }
