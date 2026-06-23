@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ChevronRight, ChevronDown, Search, ExternalLink, AlertCircle, Plus, Layers } from 'lucide-react';
+import { ChevronRight, ChevronDown, Search, ExternalLink, AlertCircle, Plus, Layers, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import client from '../api/client';
@@ -277,6 +277,87 @@ function EpicRow({ epic }) {
   );
 }
 
+// ─── Add Epic Modal ───────────────────────────────────────────────────────────
+
+const EMPTY_FORM = { product_id: '', title: '', priority: 'medium' };
+
+function AddEpicModal({ products, onClose, onSaved }) {
+  const [form,    setForm]    = useState(EMPTY_FORM);
+  const [saving,  setSaving]  = useState(false);
+  const [error,   setError]   = useState('');
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.product_id) { setError('Pilih produk terlebih dahulu'); return; }
+    if (!form.title.trim()) { setError('Judul epic wajib diisi'); return; }
+    setSaving(true);
+    setError('');
+    try {
+      await client.post('/backlog', { ...form, type: 'epic' });
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Gagal menyimpan epic');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
+            <Layers className="w-4 h-4 text-purple-500" /> Tambah Epic
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+          {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Produk <span className="text-red-500">*</span></label>
+            <select className="select w-full" value={form.product_id} onChange={e => set('product_id', e.target.value)} required>
+              <option value="">Pilih produk...</option>
+              {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Judul Epic <span className="text-red-500">*</span></label>
+            <input
+              className="input w-full" placeholder="Nama epic..."
+              value={form.title} onChange={e => set('title', e.target.value)} required autoFocus />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Prioritas</label>
+            <select className="select w-full" value={form.priority} onChange={e => set('priority', e.target.value)}>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={onClose} className="btn-secondary">Batal</button>
+            <button type="submit" disabled={saving} className="btn-primary flex items-center gap-1.5">
+              {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Plus className="w-4 h-4" />}
+              {saving ? 'Menyimpan...' : 'Simpan Epic'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function EpicBoard() {
@@ -287,6 +368,7 @@ export default function EpicBoard() {
   const [filterProduct,  setFilterProduct]  = useState('');
   const [filterStatus,   setFilterStatus]   = useState('');
   const [search,         setSearch]         = useState('');
+  const [showAddModal,   setShowAddModal]   = useState(false);
 
   useEffect(() => {
     client.get('/products').then(r => setProducts(r.data || [])).catch(() => {});
@@ -319,9 +401,9 @@ export default function EpicBoard() {
           <p className="text-sm text-slate-500 mt-0.5">Hierarki Epic → Story → Task &amp; Bug</p>
         </div>
         {hasRole('super_admin', 'manager', 'po', 'developer') && (
-          <Link to="/backlog" className="btn-primary flex items-center gap-1.5">
-            <Plus className="w-4 h-4" /> Tambah Item
-          </Link>
+          <button onClick={() => setShowAddModal(true)} className="btn-primary flex items-center gap-1.5">
+            <Plus className="w-4 h-4" /> Tambah Epic
+          </button>
         )}
       </div>
 
@@ -355,12 +437,24 @@ export default function EpicBoard() {
         <div className="card py-16 text-center">
           <Layers className="w-12 h-12 text-slate-200 mx-auto mb-3" />
           <p className="text-slate-400 font-medium">Tidak ada epic ditemukan</p>
-          <p className="text-sm text-slate-300 mt-1">Buat epic baru melalui halaman Backlog</p>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="mt-3 text-sm text-indigo-600 hover:underline">
+            + Tambah epic baru
+          </button>
         </div>
       ) : (
         <div className="space-y-3">
           {epics.map(epic => <EpicRow key={epic.id} epic={epic} />)}
         </div>
+      )}
+
+      {showAddModal && (
+        <AddEpicModal
+          products={products}
+          onClose={() => setShowAddModal(false)}
+          onSaved={loadEpics}
+        />
       )}
     </div>
   );
