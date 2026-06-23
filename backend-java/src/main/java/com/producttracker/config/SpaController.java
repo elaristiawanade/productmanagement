@@ -7,6 +7,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -22,7 +23,7 @@ public class SpaController implements ErrorController {
 
     @RequestMapping
     public void handleError(HttpServletRequest request,
-                            HttpServletResponse response) throws IOException {
+                            HttpServletResponse response) throws IOException, ServletException {
         Object statusAttr = request.getAttribute(RequestDispatcher.ERROR_STATUS_CODE);
         Object uriAttr    = request.getAttribute(RequestDispatcher.ERROR_REQUEST_URI);
         Object msgAttr    = request.getAttribute(RequestDispatcher.ERROR_MESSAGE);
