@@ -33,7 +33,7 @@ public class EpicController {
             paramList.addAll(assignedIds);
         }
         if (product_id != null) { filters.add("e.product_id = ?"); paramList.add(product_id); }
-        String where = filters.isEmpty() ? "" : "WHERE " + String.join(" AND ", filters);
+        String where = filters.isEmpty() ? "" : "WHERE " + String.join(" AND ", filters) + " ";
         Object[] params = paramList.toArray();
         List<Map<String, Object>> rows = jdbc.queryForList(
             "SELECT e.*, u.name AS created_by_name, " +

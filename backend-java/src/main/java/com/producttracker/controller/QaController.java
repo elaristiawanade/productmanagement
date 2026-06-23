@@ -30,7 +30,7 @@ public class QaController {
         if (product_id != null)      { filters.add("tc.product_id = ?");      params.add(product_id); }
         if (backlog_item_id != null) { filters.add("tc.backlog_item_id = ?"); params.add(backlog_item_id); }
         if (status != null)          { filters.add("tc.status = ?");          params.add(status); }
-        String where = filters.isEmpty() ? "" : "WHERE " + String.join(" AND ", filters);
+        String where = filters.isEmpty() ? "" : "WHERE " + String.join(" AND ", filters) + " ";
 
         List<Map<String, Object>> rows = jdbc.queryForList(
             "SELECT tc.*, " +
@@ -129,7 +129,7 @@ public class QaController {
         if (sprint_id != null)    { filters.add("tr.sprint_id = ?");    params.add(sprint_id); }
         if (test_case_id != null) { filters.add("tr.test_case_id = ?"); params.add(test_case_id); }
         if (product_id != null)   { filters.add("tc.product_id = ?");   params.add(product_id); }
-        String where = filters.isEmpty() ? "" : "WHERE " + String.join(" AND ", filters);
+        String where = filters.isEmpty() ? "" : "WHERE " + String.join(" AND ", filters) + " ";
 
         List<Map<String, Object>> rows = jdbc.queryForList(
             "SELECT tr.*, tc.code AS tc_code, tc.title AS tc_title, " +

@@ -33,7 +33,7 @@ public class FeatureController {
             paramList.addAll(assignedIds);
         }
         if (product_id != null) { filters.add("f.product_id = ?"); paramList.add(product_id); }
-        String where = filters.isEmpty() ? "" : "WHERE " + String.join(" AND ", filters);
+        String where = filters.isEmpty() ? "" : "WHERE " + String.join(" AND ", filters) + " ";
         Object[] params = paramList.toArray();
         List<Map<String, Object>> rows = jdbc.queryForList(
             "SELECT f.*, u.name AS owner_name, e.name AS epic_name, " +

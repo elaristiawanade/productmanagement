@@ -94,7 +94,7 @@ public class BacklogController {
             params.add("%" + search + "%");
         }
 
-        String where = filters.isEmpty() ? "" : "WHERE " + String.join(" AND ", filters);
+        String where = filters.isEmpty() ? "" : "WHERE " + String.join(" AND ", filters) + " ";
         int offset = (page - 1) * limit;
 
         try {
