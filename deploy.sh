@@ -5,68 +5,71 @@ echo "=============================="
 echo " Product Tracker — Deploy"
 echo "=============================="
 
-# Cek Docker
+# ── Cek Docker ───────────────────────────────────────────────────
 if ! command -v docker &>/dev/null; then
     echo "ERROR: Docker tidak ditemukan."
     echo "Install: https://docs.docker.com/engine/install/"
     exit 1
 fi
 
-if ! docker compose version &>/dev/null; then
-    echo "ERROR: Docker Compose tidak ditemukan."
+if ! docker compose version &>/dev/null 2>&1; then
+    echo "ERROR: Docker Compose plugin tidak ditemukan."
     echo "Install: https://docs.docker.com/compose/install/"
     exit 1
 fi
 
-# Cek .env
+# ── Buat .env jika belum ada ─────────────────────────────────────
 if [ ! -f .env ]; then
     cp .env.example .env
     echo ""
-    echo "File .env berhasil dibuat dari .env.example"
-    echo "Edit .env terlebih dahulu:"
+    echo "File .env dibuat dari .env.example."
+    echo "Wajib edit sebelum deploy:"
     echo "  nano .env"
     echo ""
-    echo "Isi yang wajib diubah:"
-    echo "  CORS_ORIGIN  → IP atau domain server ini"
-    echo "  JWT_SECRET   → string acak panjang (minimal 32 karakter)"
-    echo "  DB_PASSWORD  → password database"
+    echo "Yang harus diisi:"
+    echo "  DB_PASSWORD  → password database PostgreSQL"
+    echo "  JWT_SECRET   → string random panjang (min 32 karakter)"
     echo ""
-    echo "Setelah edit .env, jalankan script ini lagi."
+    echo "Setelah selesai, jalankan script ini lagi:"
+    echo "  bash deploy.sh"
     exit 1
 fi
 
-# Cek nilai placeholder belum diganti
-if grep -q "GANTI_DENGAN" .env; then
-    echo "ERROR: .env masih mengandung nilai placeholder."
-    echo "Edit .env dan ganti semua nilai 'GANTI_DENGAN_...' dulu."
-    exit 1
-fi
+# ── Pull kode terbaru ─────────────────────────────────────────────
+echo "[1/4] Pulling latest code..."
+git pull origin main
 
-echo "Membangun image Docker..."
-docker compose build --no-cache
+# ── Stop container lama ───────────────────────────────────────────
+echo "[2/4] Stopping existing containers..."
+docker compose down
 
-echo "Menjalankan container..."
-docker compose up -d
+# ── Build & start ─────────────────────────────────────────────────
+echo "[3/4] Building and starting containers..."
+docker compose up -d --build
 
-echo "Menunggu aplikasi siap..."
-sleep 10
+# ── Verifikasi ────────────────────────────────────────────────────
+echo "[4/4] Waiting for app to be ready..."
+sleep 20
 
-# Cek apakah frontend bisa diakses
-HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost || echo "000")
+FRONTEND_PORT=$(grep -E '^FRONTEND_PORT=' .env 2>/dev/null | cut -d'=' -f2 || echo "8500")
+SERVER_IP=$(hostname -I | awk '{print $1}')
+HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${FRONTEND_PORT}" 2>/dev/null || echo "000")
+
+echo ""
+echo "=============================="
 if [ "$HTTP_STATUS" = "200" ]; then
-    SERVER_IP=$(hostname -I | awk '{print $1}')
-    echo ""
-    echo "=============================="
     echo " Deploy berhasil!"
-    echo " Akses: http://$SERVER_IP"
-    echo "=============================="
-    echo ""
-    echo "Login default:"
-    echo "  Email    : admin@company.com"
-    echo "  Password : password"
 else
-    echo ""
-    echo "Container berjalan. Cek status dengan:"
-    echo "  docker compose ps"
-    echo "  docker compose logs -f"
+    echo " Container berjalan (status HTTP: $HTTP_STATUS)"
+    echo " Cek logs jika ada masalah:"
+    echo "   docker compose logs -f"
 fi
+echo ""
+echo " URL:"
+echo "   Frontend : http://$SERVER_IP:${FRONTEND_PORT}"
+echo "   Backend  : http://$SERVER_IP:4000"
+echo ""
+echo " Login:"
+echo "   Email    : admin@admin.com"
+echo "   Password : 1234"
+echo "=============================="
