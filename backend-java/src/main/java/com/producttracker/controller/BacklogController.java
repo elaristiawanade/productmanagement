@@ -97,26 +97,30 @@ public class BacklogController {
         String where = filters.isEmpty() ? "" : "WHERE " + String.join(" AND ", filters);
         int offset = (page - 1) * limit;
 
-        Long total = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM backlog_items bi " + where, Long.class, params.toArray()
-        );
+        try {
+            Long total = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM backlog_items bi " + where, Long.class, params.toArray()
+            );
 
-        List<Object> pageParams = new ArrayList<>(params);
-        pageParams.add(limit);
-        pageParams.add(offset);
+            List<Object> pageParams = new ArrayList<>(params);
+            pageParams.add(limit);
+            pageParams.add(offset);
 
-        List<Map<String, Object>> items = jdbc.queryForList(
-            "SELECT " + ITEM_FIELDS + ITEM_JOINS + where +
-            "ORDER BY " +
-            "  CASE bi.priority WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END, " +
-            "  bi.created_at DESC " +
-            "LIMIT ? OFFSET ?",
-            pageParams.toArray()
-        );
+            List<Map<String, Object>> items = jdbc.queryForList(
+                "SELECT " + ITEM_FIELDS + ITEM_JOINS + where +
+                "ORDER BY " +
+                "  CASE bi.priority WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END, " +
+                "  bi.created_at DESC " +
+                "LIMIT ? OFFSET ?",
+                pageParams.toArray()
+            );
 
-        return ResponseEntity.ok(Map.of(
-            "items", items, "total", total != null ? total : 0, "page", page, "limit", limit
-        ));
+            return ResponseEntity.ok(Map.of(
+                "items", items, "total", total != null ? total : 0, "page", page, "limit", limit
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage() != null ? e.getMessage() : e.getClass().getName()));
+        }
     }
 
     // ─── GET ONE ───────────────────────────────────────────────────────────
