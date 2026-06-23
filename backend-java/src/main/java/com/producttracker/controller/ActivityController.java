@@ -28,7 +28,7 @@ public class ActivityController {
         return ResponseEntity.ok(rows);
     }
 
-    @PostMapping("/api/backlog/{id}/comments")
+    @PostMapping({"/api/backlog/{id}/comments", "/api/backlog/{id}/activities"})
     public ResponseEntity<?> addComment(@PathVariable Long id,
                                          @RequestBody Map<String, Object> body,
                                          @AuthenticationPrincipal Object principal) {
