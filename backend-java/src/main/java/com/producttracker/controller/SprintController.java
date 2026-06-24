@@ -115,7 +115,14 @@ public class SprintController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> delete(@PathVariable Long id) {
+    public ResponseEntity<?> delete(@PathVariable Long id,
+                                    @AuthenticationPrincipal Object principal) {
+        Map<String, Object> user = toMap(principal);
+        if (user == null) return ResponseEntity.status(401).build();
+        Object rn = user.get("role_name");
+        if (!"super_admin".equals(rn) && !"manager".equals(rn) && !"po".equals(rn)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Hanya Manager, PO, atau Super Admin yang bisa menghapus sprint"));
+        }
         int deleted = jdbc.update("DELETE FROM sprints WHERE id=?", id);
         if (deleted == 0) return ResponseEntity.status(404).body(Map.of("error", "Sprint tidak ditemukan"));
         return ResponseEntity.ok(Map.of("message", "Sprint dihapus"));

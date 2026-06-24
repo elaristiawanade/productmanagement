@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
-import { Plus, Calendar, Target, Layers, ChevronDown, ChevronUp, Pencil } from 'lucide-react';
+import { Plus, Calendar, Target, Layers, ChevronDown, ChevronUp, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
@@ -113,7 +113,8 @@ export default function Sprints() {
   const [burndown,  setBurndown]  = useState([]);
   const [epics,     setEpics]     = useState([]);
   const [expanded,  setExpanded]  = useState({});
-  const [modal,     setModal]     = useState({ open: false, sprint: null });
+  const [modal,        setModal]        = useState({ open: false, sprint: null });
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // sprint object
   const [loading,   setLoading]   = useState(false);
 
   useEffect(() => {
@@ -149,6 +150,18 @@ export default function Sprints() {
   const reloadSprints = async () => {
     const r = await client.get('/sprints', { params: { product_id: selProduct } });
     setSprints(r.data);
+  };
+
+  const deleteSprint = async (sprint) => {
+    try {
+      await client.delete(`/sprints/${sprint.id}`);
+      toast.success(`Sprint "${sprint.name}" berhasil dihapus`);
+      setDeleteConfirm(null);
+      if (selSprint?.id === sprint.id) setSelSprint(null);
+      reloadSprints();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Gagal menghapus sprint');
+    }
   };
 
   const pct = selSprint ? Math.round((selSprint.completed_points / (selSprint.committed_points || 1)) * 100) : 0;
@@ -190,9 +203,16 @@ export default function Sprints() {
                   <h2 className="text-lg font-bold text-slate-800">{selSprint.name}</h2>
                   <StatusBadge status={selSprint.status} />
                   {hasRole('super_admin','manager','po') && (
-                    <button className="btn-ghost btn-sm p-1 rounded" onClick={() => setModal({ open: true, sprint: selSprint })}>
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
+                    <>
+                      <button className="btn-ghost btn-sm p-1 rounded" title="Edit Sprint"
+                        onClick={() => setModal({ open: true, sprint: selSprint })}>
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button className="btn-ghost btn-sm p-1 rounded text-red-500 hover:bg-red-50" title="Hapus Sprint"
+                        onClick={() => setDeleteConfirm(selSprint)}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </>
                   )}
                 </div>
                 {selSprint.goal && <p className="text-sm text-slate-500 mt-1">{selSprint.goal}</p>}
@@ -344,6 +364,38 @@ export default function Sprints() {
           onSave={() => { setModal({ open: false, sprint: null }); reloadSprints(); }}
           onClose={() => setModal({ open: false, sprint: null })} />
       </Modal>
+
+      {/* ── Konfirmasi Hapus Sprint ── */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-slate-800">Hapus Sprint</p>
+                <p className="text-sm text-slate-500">Tindakan ini tidak bisa dibatalkan</p>
+              </div>
+            </div>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-5 text-sm text-red-700 space-y-1">
+              <p>Sprint <strong>{deleteConfirm.name}</strong> akan dihapus beserta:</p>
+              <ul className="list-disc list-inside text-xs space-y-0.5 mt-1">
+                <li>Semua data burndown sprint ini</li>
+                <li>Backlog item dalam sprint akan menjadi <em>unassigned dari sprint</em></li>
+              </ul>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button className="btn-secondary" onClick={() => setDeleteConfirm(null)}>Batal</button>
+              <button
+                className="bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                onClick={() => deleteSprint(deleteConfirm)}>
+                Ya, Hapus Sprint
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
