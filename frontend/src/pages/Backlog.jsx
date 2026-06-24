@@ -205,7 +205,6 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
     title: item?.title || '',
     type: item?.type || 'story',
     feature_id: item?.feature_id || '',
-    epic_id: item?.epic_id || '',
     parent_id: item?.parent_id || '',
     priority: item?.priority || 'medium',
     story_points: item?.story_points || 0,
@@ -224,7 +223,7 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
   const fileInputRef = useRef(null);
 
   const filteredSprints  = sprints.filter(s => s.product_id === +form.product_id);
-  const filteredFeatures = features.filter(f => f.product_id === +form.product_id);
+  const filteredFeatures = features.filter(f => +f.product_id === +form.product_id);
   const filteredEpics    = epics.filter(e => e.product_id === +form.product_id);
 
   useEffect(() => {
@@ -315,7 +314,7 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
     <form onSubmit={save} className="grid grid-cols-2 gap-4">
       <F label="Produk" required>
         <select className="select" value={form.product_id}
-          onChange={e => setForm(f => ({ ...f, product_id: e.target.value, sprint_id: '', feature_id: '', epic_id: '', parent_id: '' }))}
+          onChange={e => setForm(f => ({ ...f, product_id: e.target.value, sprint_id: '', feature_id: '', parent_id: '' }))}
           required>
           <option value="">Pilih produk</option>
           {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -405,14 +404,11 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
       <F label="Feature">
         <select className="select" value={form.feature_id} onChange={e => setForm(f => ({ ...f, feature_id: e.target.value }))}>
           <option value="">—</option>
-          {filteredFeatures.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+          {filteredFeatures.map(f => <option key={f.id} value={f.id}>{f.feature_name}</option>)}
         </select>
-      </F>
-      <F label="Epic">
-        <select className="select" value={form.epic_id} onChange={e => setForm(f => ({ ...f, epic_id: e.target.value }))}>
-          <option value="">—</option>
-          {filteredEpics.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-        </select>
+        {form.product_id && filteredFeatures.length === 0 && (
+          <p className="text-xs text-slate-400 mt-1">Belum ada feature. Tambahkan di <strong>Products → Roadmap</strong>.</p>
+        )}
       </F>
       <F label="Assignee">
         <select className="select" value={form.assignee_id} onChange={e => setForm(f => ({ ...f, assignee_id: e.target.value }))}>
@@ -549,7 +545,7 @@ export default function Backlog() {
         products.length ? null : client.get('/products'),
         users.length ? null : client.get('/users'),
         sprints.length ? null : client.get('/sprints'),
-        features.length ? null : client.get('/features'),
+        features.length ? null : client.get('/roadmap'),
         epics.length ? null : client.get('/epics'),
       ]);
       setItems(bl.data.items);

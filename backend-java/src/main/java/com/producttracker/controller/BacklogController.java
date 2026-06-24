@@ -26,7 +26,7 @@ public class BacklogController {
         "bi.parent_id, bi.assignee_id, bi.sprint_id, bi.feature_id, bi.epic_id, " +
         "bi.created_at, bi.updated_at, " +
         "p.name AS product_name, p.color AS product_color, p.code AS product_code, " +
-        "f.name AS feature_name, f.code AS feature_code, " +
+        "f.feature_name AS feature_name, CAST(f.id AS VARCHAR) AS feature_code, " +
         "e.name AS epic_name, e.code AS epic_code, " +
         "s.name AS sprint_name, " +
         "u.name AS assignee_name, u.avatar_color AS assignee_color, " +
@@ -36,7 +36,7 @@ public class BacklogController {
     private static final String ITEM_JOINS =
         "FROM backlog_items bi " +
         "LEFT JOIN products p        ON p.id   = bi.product_id " +
-        "LEFT JOIN features f        ON f.id   = bi.feature_id " +
+        "LEFT JOIN product_roadmap f  ON f.id   = bi.feature_id " +
         "LEFT JOIN epics    e        ON e.id   = bi.epic_id " +
         "LEFT JOIN sprints  s        ON s.id   = bi.sprint_id " +
         "LEFT JOIN users    u        ON u.id   = bi.assignee_id " +
