@@ -1,7 +1,10 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { format, parseISO, isToday } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
-import { Pencil, AlertCircle, CheckCircle2, Trophy, Calendar, Users } from 'lucide-react';
+import {
+  Pencil, AlertCircle, CheckCircle2, Trophy, Calendar, Users,
+  Upload, FileDown, X, CheckCircle, Info, SkipForward
+} from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
 import { useAuth } from '../context/AuthContext';
@@ -151,6 +154,212 @@ function StandupCard({ standup, onEdit, canEdit }) {
   );
 }
 
+// ─── StandupImport ────────────────────────────────────────────────────────────
+const CSV_COLUMNS = [
+  { key: 'standup_date', label: 'standup_date', req: true,  desc: 'Format YYYY-MM-DD, mis: 2024-01-15' },
+  { key: 'email',        label: 'email',         req: true,  desc: 'Email user yang terdaftar di sistem' },
+  { key: 'yesterday',    label: 'yesterday',     req: true,  desc: 'Pekerjaan yang dilakukan kemarin' },
+  { key: 'today',        label: 'today',         req: true,  desc: 'Rencana pekerjaan hari ini' },
+  { key: 'has_blocker',  label: 'has_blocker',   req: false, desc: 'true / false (default false)' },
+  { key: 'blocker',      label: 'blocker',       req: false, desc: 'Deskripsi blocker (jika has_blocker=true)' },
+  { key: 'blocker_plan', label: 'blocker_plan',  req: false, desc: 'Rencana mengatasi blocker' },
+];
+
+function StandupImport({ onDone }) {
+  const [file,      setFile]      = useState(null);
+  const [dragOver,  setDragOver]  = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [result,    setResult]    = useState(null);
+  const inputRef = useRef();
+
+  const downloadTemplate = () => {
+    const rows = [
+      CSV_COLUMNS.map(c => c.key).join(','),
+      '2024-01-15,alice@example.com,"Menyelesaikan feature login","Review PR dan bug fix",false,,',
+      '2024-01-15,bob@example.com,"Meeting sprint planning","Mulai implementasi API baru",true,"Server staging error","Koordinasi dengan tim DevOps"',
+    ];
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'standup_import_template.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleFiles = (files) => {
+    const f = files[0];
+    if (!f) return;
+    if (!f.name.endsWith('.csv')) { toast.error('Hanya file CSV yang diperbolehkan'); return; }
+    setFile(f);
+    setResult(null);
+  };
+
+  const handleImport = async () => {
+    if (!file) return;
+    setImporting(true);
+    setResult(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await client.post('/standups/import', fd);
+      setResult(res.data);
+      if (res.data.imported > 0) {
+        toast.success(`${res.data.imported} standup berhasil diimpor`);
+        onDone();
+      }
+    } catch (err) {
+      setResult({ imported: 0, skipped: 0, errors: 1, error_details: [err?.response?.data?.error || 'Gagal mengimpor file'] });
+    } finally { setImporting(false); }
+  };
+
+  const clearFile = () => { setFile(null); setResult(null); if (inputRef.current) inputRef.current.value = ''; };
+
+  return (
+    <div className="max-w-2xl space-y-5">
+
+      {/* ── Format info ── */}
+      <div className="card p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Info className="w-4 h-4 text-indigo-500" />
+            <h3 className="font-semibold text-slate-700">Format CSV</h3>
+          </div>
+          <button onClick={downloadTemplate}
+            className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 font-medium px-3 py-1.5 rounded-lg hover:bg-indigo-50 border border-indigo-200 transition-colors">
+            <FileDown className="w-3.5 h-3.5" /> Download Template
+          </button>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
+            <thead>
+              <tr className="bg-slate-50 text-slate-600">
+                <th className="text-left px-3 py-2 font-semibold">Kolom</th>
+                <th className="text-center px-3 py-2 font-semibold">Wajib</th>
+                <th className="text-left px-3 py-2 font-semibold">Keterangan</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {CSV_COLUMNS.map(c => (
+                <tr key={c.key}>
+                  <td className="px-3 py-2 font-mono text-indigo-700 font-medium">{c.label}</td>
+                  <td className="px-3 py-2 text-center">
+                    {c.req
+                      ? <span className="text-red-500 font-bold">✓</span>
+                      : <span className="text-slate-300">—</span>}
+                  </td>
+                  <td className="px-3 py-2 text-slate-500">{c.desc}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <p className="text-xs text-slate-400 flex items-start gap-1.5">
+          <span className="shrink-0 mt-0.5">💡</span>
+          Data duplikat (user + tanggal sudah ada) akan dilewati otomatis tanpa error.
+          Field yang mengandung koma harus diapit tanda kutip ganda.
+        </p>
+      </div>
+
+      {/* ── Upload area ── */}
+      <div className="card p-5 space-y-4">
+        <h3 className="font-semibold text-slate-700 flex items-center gap-2">
+          <Upload className="w-4 h-4 text-indigo-500" /> Upload File CSV
+        </h3>
+
+        {!file ? (
+          <div
+            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={e => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
+            onClick={() => inputRef.current?.click()}
+            className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all
+              ${dragOver ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50'}`}>
+            <Upload className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+            <p className="text-sm font-medium text-slate-600">Drag & drop file CSV ke sini</p>
+            <p className="text-xs text-slate-400 mt-1">atau klik untuk pilih file</p>
+            <input ref={inputRef} type="file" accept=".csv" className="hidden"
+              onChange={e => handleFiles(e.target.files)} />
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 p-4 bg-indigo-50 border border-indigo-200 rounded-xl">
+            <div className="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center shrink-0">
+              <Upload className="w-4 h-4 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-slate-700 truncate">{file.name}</p>
+              <p className="text-xs text-slate-400">{(file.size / 1024).toFixed(1)} KB</p>
+            </div>
+            <button onClick={clearFile} className="p-1.5 rounded-lg hover:bg-indigo-100 text-slate-400 hover:text-red-500 transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        <div className="flex justify-end">
+          <button
+            disabled={!file || importing}
+            onClick={handleImport}
+            className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+            {importing
+              ? <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Mengimpor...</>
+              : <><Upload className="w-3.5 h-3.5" /> Mulai Import</>}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Result ── */}
+      {result && (
+        <div className="card p-5 space-y-4">
+          <h3 className="font-semibold text-slate-700">Hasil Import</h3>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+              <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+              <div>
+                <p className="text-xl font-bold text-emerald-700">{result.imported ?? 0}</p>
+                <p className="text-xs text-emerald-600">Berhasil diimpor</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+              <SkipForward className="w-5 h-5 text-amber-600 shrink-0" />
+              <div>
+                <p className="text-xl font-bold text-amber-700">{result.skipped ?? 0}</p>
+                <p className="text-xs text-amber-600">Dilewati (duplikat)</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-xl">
+              <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+              <div>
+                <p className="text-xl font-bold text-red-700">{result.errors ?? 0}</p>
+                <p className="text-xs text-red-600">Error</p>
+              </div>
+            </div>
+          </div>
+
+          {result.error_details?.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">Detail Error</p>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-1 max-h-48 overflow-y-auto">
+                {result.error_details.map((e, i) => (
+                  <p key={i} className="text-xs text-red-700 font-mono">• {e}</p>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {result.imported > 0 && result.errors === 0 && (
+            <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <p className="text-sm text-emerald-700 font-medium">Import selesai! Data standup sudah tersedia di tab Riwayat.</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function Standup() {
   const { user, hasRole } = useAuth();
@@ -234,9 +443,10 @@ export default function Standup() {
       {/* Tabs */}
       <div className="flex gap-2 border-b border-slate-200 pb-0">
         {[
-          ['standup', 'Input Standup'],
-          ['history', 'Riwayat'],
-          ['achievement', 'Achievement'],
+          ['standup',    'Input Standup'],
+          ['history',    'Riwayat'],
+          ['achievement','Achievement'],
+          ...(isManagerOrAbove ? [['import', 'Import CSV']] : []),
         ].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors
@@ -419,6 +629,11 @@ export default function Standup() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── IMPORT CSV TAB ── */}
+      {tab === 'import' && isManagerOrAbove && (
+        <StandupImport onDone={loadHistory} />
       )}
 
       {/* Edit modal */}

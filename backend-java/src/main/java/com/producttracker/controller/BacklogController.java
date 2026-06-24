@@ -1,5 +1,6 @@
 package com.producttracker.controller;
 
+import com.producttracker.config.PermissionHelper;
 import com.producttracker.service.TeamsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -63,7 +64,12 @@ public class BacklogController {
         List<Object> params  = new ArrayList<>();
 
         Map<String, Object> user = toMap(principal);
-        if (user != null && !isManagerOrAbove(user)) {
+        // Skip product restriction when user is viewing their own assigned tasks
+        // (MyTask module uses assignee_id=current_user — users must always see their own items)
+        boolean isMyTasksQuery = user != null && assignee_id != null
+            && assignee_id.equals(toLong(user.get("id")));
+
+        if (user != null && !isManagerOrAbove(user) && !isMyTasksQuery) {
             List<Long> assignedIds = getAssignedProductIds(toLong(user.get("id")));
             if (assignedIds.isEmpty()) {
                 return ResponseEntity.ok(Map.of("items", List.of(), "total", 0, "page", page, "limit", limit));
@@ -142,6 +148,11 @@ public class BacklogController {
         if (body.get("product_id") == null || body.get("title") == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "product_id dan title wajib"));
         }
+        Map<String, Object> actorCheck = toMap(principal);
+        if (actorCheck == null) return ResponseEntity.status(401).build();
+        if (!canWriteBacklog(principal)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki izin untuk menambah backlog item"));
+        }
 
         String type    = (String) orDefault(body.get("type"), "story");
         Long parentId  = toLong(body.get("parent_id"));
@@ -212,6 +223,9 @@ public class BacklogController {
             // Teams
             teams.sendTaskCreated(item, actorName);
 
+            // Cascade SP up: Story SP = Σ tasks, Epic SP = Σ stories
+            recalcAncestorSp(parentId);
+
             return ResponseEntity.status(201).body(item);
         } catch (Exception e) {
             String msg = e.getMessage() != null ? e.getMessage() : "";
@@ -228,6 +242,26 @@ public class BacklogController {
     public ResponseEntity<?> update(@PathVariable Long id,
                                      @AuthenticationPrincipal Object principal,
                                      @RequestBody Map<String, Object> body) {
+        Map<String, Object> actorUpd = toMap(principal);
+        if (actorUpd == null) return ResponseEntity.status(401).build();
+
+        // Check: can write backlog, OR has update_assigned AND is the assignee
+        if (!canWriteBacklog(principal)) {
+            if (PermissionHelper.hasPermission(principal, "update_assigned")) {
+                Long actorId = PermissionHelper.getUserId(principal);
+                List<Map<String, Object>> assigneeCheck = jdbc.queryForList(
+                    "SELECT assignee_id FROM backlog_items WHERE id = ?", id
+                );
+                Long currentAssignee = assigneeCheck.isEmpty() ? null
+                    : toLong(assigneeCheck.get(0).get("assignee_id"));
+                if (!java.util.Objects.equals(actorId, currentAssignee)) {
+                    return ResponseEntity.status(403).body(Map.of("error", "Hanya bisa mengubah item yang di-assign kepadamu"));
+                }
+            } else {
+                return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki izin untuk mengubah backlog item"));
+            }
+        }
+
         String type   = (String) body.get("type");
         Long parentId = toLong(body.get("parent_id"));
 
@@ -257,6 +291,13 @@ public class BacklogController {
             body.get("acceptance_criteria"), body.get("notes"), toSqlDate(body.get("deadline")),
             id
         );
+
+        // Cascade SP up: Story SP = Σ tasks, Epic SP = Σ stories
+        Long oldParentId = toLong(prev.get("parent_id"));
+        if (parentId != null) recalcAncestorSp(parentId);
+        if (oldParentId != null && !java.util.Objects.equals(oldParentId, parentId)) {
+            recalcAncestorSp(oldParentId); // also recalc old parent if parent changed
+        }
 
         List<Map<String, Object>> detail = jdbc.queryForList(
             "SELECT " + ITEM_FIELDS + ITEM_JOINS + "WHERE bi.id=?", id
@@ -300,6 +341,11 @@ public class BacklogController {
         if (body.get("status") == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "Status wajib"));
         }
+        Map<String, Object> actorPatch = toMap(principal);
+        if (actorPatch == null) return ResponseEntity.status(401).build();
+        if (!canWriteBacklog(principal) && !PermissionHelper.hasPermission(principal, "update_assigned")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki izin untuk mengubah status item"));
+        }
 
         // Get old status
         List<Map<String, Object>> rows = jdbc.queryForList(
@@ -332,9 +378,23 @@ public class BacklogController {
     // ─── DELETE ────────────────────────────────────────────────────────────
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> delete(@PathVariable Long id) {
+    public ResponseEntity<?> delete(@PathVariable Long id,
+                                     @AuthenticationPrincipal Object principal) {
+        if (!canDeleteBacklog(principal)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki izin untuk menghapus backlog item"));
+        }
+        // Capture parent before delete so we can cascade SP after
+        List<Map<String, Object>> beforeDel = jdbc.queryForList(
+            "SELECT parent_id FROM backlog_items WHERE id = ?", id
+        );
+        if (beforeDel.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "Item tidak ditemukan"));
+        Long delParentId = toLong(beforeDel.get(0).get("parent_id"));
+
         int deleted = jdbc.update("DELETE FROM backlog_items WHERE id=?", id);
         if (deleted == 0) return ResponseEntity.status(404).body(Map.of("error", "Item tidak ditemukan"));
+
+        // Cascade SP up after deletion
+        recalcAncestorSp(delParentId);
         return ResponseEntity.ok(Map.of("message", "Item dihapus"));
     }
 
@@ -409,9 +469,48 @@ public class BacklogController {
         return column + " IN (" + String.join(",", placeholders) + ")";
     }
 
+    /**
+     * Recalculates story_points for the given item as SUM(direct children SP),
+     * then cascades up to the grandparent (Story → Epic chain).
+     */
+    private void recalcAncestorSp(Long parentId) {
+        if (parentId == null) return;
+        try {
+            Long sumSp = jdbc.queryForObject(
+                "SELECT COALESCE(SUM(story_points), 0) FROM backlog_items WHERE parent_id = ?",
+                Long.class, parentId
+            );
+            jdbc.update("UPDATE backlog_items SET story_points = ? WHERE id = ?", sumSp, parentId);
+            List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT parent_id FROM backlog_items WHERE id = ?", parentId
+            );
+            if (!rows.isEmpty() && rows.get(0).get("parent_id") != null) {
+                recalcAncestorSp(toLong(rows.get(0).get("parent_id")));
+            }
+        } catch (Exception ignored) {}
+    }
+
     private boolean isManagerOrAbove(Map<String, Object> user) {
         Object rn = user.get("role_name");
         return "super_admin".equals(rn) || "manager".equals(rn);
+    }
+
+    /** Create / edit backlog: managers, PO, developers by role, OR manage_backlog permission. */
+    private boolean canWriteBacklog(Object principal) {
+        String rn = PermissionHelper.getRoleName(principal);
+        if ("super_admin".equals(rn) || "manager".equals(rn) || "po".equals(rn) || "developer".equals(rn) || "qa".equals(rn)) {
+            return true;
+        }
+        return PermissionHelper.hasPermission(principal, "manage_backlog");
+    }
+
+    /** Delete backlog: only managers, PO and above by role, OR manage_backlog permission. */
+    private boolean canDeleteBacklog(Object principal) {
+        String rn = PermissionHelper.getRoleName(principal);
+        if ("super_admin".equals(rn) || "manager".equals(rn) || "po".equals(rn)) {
+            return true;
+        }
+        return PermissionHelper.hasPermission(principal, "manage_backlog");
     }
 
     private List<Long> getAssignedProductIds(Long userId) {

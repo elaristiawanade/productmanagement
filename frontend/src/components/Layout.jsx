@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, Link } from 'react-router-dom';
 import { LogOut, Menu } from 'lucide-react';
 import Sidebar from './Sidebar';
 import NotificationBell from './NotificationBell';
@@ -14,6 +14,7 @@ const PAGE_TITLES = {
   '/qa':           'QA Module',
   '/standup':      'Daily Standup',
   '/import/jira':  'Import dari Jira',
+  '/profile':      'Profile Saya',
 };
 
 export default function Layout() {
@@ -38,12 +39,13 @@ export default function Layout() {
           <h1 className="text-lg font-semibold text-slate-800 flex-1 truncate">{title}</h1>
           <div className="flex items-center gap-2 shrink-0">
             <NotificationBell />
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold cursor-pointer"
+            <Link
+              to="/profile"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold hover:ring-2 hover:ring-indigo-400 hover:ring-offset-1 transition-all"
               style={{ backgroundColor: user?.avatarColor || '#4F46E5' }}
-              title={user?.name}>
+              title={`${user?.name} — Edit Profil`}>
               {user?.name?.charAt(0).toUpperCase()}
-            </div>
+            </Link>
             <button onClick={logout} className="btn-ghost btn-sm rounded-lg p-2" title="Logout">
               <LogOut className="w-4 h-4 text-slate-500" />
             </button>

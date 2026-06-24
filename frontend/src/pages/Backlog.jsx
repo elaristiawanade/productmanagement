@@ -263,9 +263,7 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
     try {
       const fd = new FormData();
       fd.append('file', file);
-      await client.post(`/backlog/${item.id}/attachments`, fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      await client.post(`/backlog/${item.id}/attachments`, fd);
       toast.success('Gambar berhasil diunggah');
       loadAttachments();
     } catch (err) {
@@ -385,10 +383,25 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
           {STATUSES.map(s => <option key={s} value={s}>{s.replace('_',' ')}</option>)}
         </select>
       </F>
-      <F label="Story Points">
-        <input type="number" className="input" min="0" value={form.story_points}
-          onChange={e => setForm(f => ({ ...f, story_points: +e.target.value }))} />
-      </F>
+      {form.type === 'epic' ? (
+        <div>
+          <label className="label">
+            Story Points&nbsp;<span className="text-xs font-normal text-indigo-400">(otomatis)</span>
+          </label>
+          <div className="input bg-slate-50 text-slate-600 flex items-center gap-2 cursor-default select-none">
+            <span className="font-semibold">{form.story_points || 0}</span>
+            <span className="text-xs text-slate-400">∑ dari child stories</span>
+          </div>
+        </div>
+      ) : (
+        <F label="Story Points">
+          <input type="number" className="input" min="0" value={form.story_points}
+            onChange={e => setForm(f => ({ ...f, story_points: +e.target.value }))} />
+          {form.type === 'story' && (
+            <p className="text-xs text-slate-400 mt-1">Otomatis dijumlah dari task child yang memiliki SP</p>
+          )}
+        </F>
+      )}
       <F label="Feature">
         <select className="select" value={form.feature_id} onChange={e => setForm(f => ({ ...f, feature_id: e.target.value }))}>
           <option value="">—</option>

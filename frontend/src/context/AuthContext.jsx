@@ -42,8 +42,21 @@ export function AuthProvider({ children }) {
     return roles.includes(user.role);
   };
 
+  const hasPermission = (permKey) => {
+    if (!user) return false;
+    if (user.permissions?.all) return true;
+    return !!user.permissions?.[permKey];
+  };
+
+  const refreshUser = async () => {
+    const r = await client.get('/auth/me');
+    setUser(r.data);
+    localStorage.setItem('pt_user', JSON.stringify(r.data));
+    return r.data;
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, hasRole }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, hasRole, hasPermission, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

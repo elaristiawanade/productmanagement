@@ -153,6 +153,63 @@ public class UserController {
         return ResponseEntity.ok(Map.of("message", "Password berhasil direset"));
     }
 
+    // ── Self profile update ─────────────────────────────────────────────────
+    @PutMapping("/me")
+    public ResponseEntity<?> updateSelf(@AuthenticationPrincipal Object principal,
+                                         @RequestBody Map<String, Object> body) {
+        Map<String, Object> actor = toMap(principal);
+        if (actor == null) return ResponseEntity.status(401).build();
+        Long actorId = toLong(actor.get("id"));
+        String email = (String) body.get("email");
+        try {
+            int updated = jdbc.update(
+                "UPDATE users SET name=?, email=?, avatar_color=? WHERE id=?",
+                body.get("name"),
+                email != null ? email.toLowerCase().trim() : null,
+                body.get("avatar_color"),
+                actorId
+            );
+            if (updated == 0) return ResponseEntity.status(404).body(Map.of("error", "User tidak ditemukan"));
+            return ResponseEntity.ok(Map.of("message", "Profil berhasil diperbarui"));
+        } catch (Exception e) {
+            String msg = e.getMessage() != null ? e.getMessage() : "";
+            if (msg.contains("duplicate key") || msg.contains("violates unique constraint")) {
+                return ResponseEntity.status(409).body(Map.of("error", "Email sudah digunakan"));
+            }
+            return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
+        }
+    }
+
+    // ── Self password change (verifies current password) ────────────────────
+    @PutMapping("/me/password")
+    public ResponseEntity<?> changeOwnPassword(@AuthenticationPrincipal Object principal,
+                                                @RequestBody Map<String, String> body) {
+        Map<String, Object> actor = toMap(principal);
+        if (actor == null) return ResponseEntity.status(401).build();
+        Long actorId = toLong(actor.get("id"));
+
+        String currentPwd = body.get("current_password");
+        String newPwd     = body.get("new_password");
+        if (currentPwd == null || newPwd == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "current_password dan new_password wajib"));
+        }
+        if (newPwd.length() < 6) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Password baru minimal 6 karakter"));
+        }
+
+        List<Map<String, Object>> rows = jdbc.queryForList(
+            "SELECT password_hash FROM users WHERE id=?", actorId
+        );
+        if (rows.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "User tidak ditemukan"));
+        String stored = (String) rows.get(0).get("password_hash");
+        if (!passwordEncoder.matches(currentPwd, stored)) {
+            return ResponseEntity.status(400).body(Map.of("error", "Password saat ini tidak sesuai"));
+        }
+
+        jdbc.update("UPDATE users SET password_hash=? WHERE id=?", passwordEncoder.encode(newPwd), actorId);
+        return ResponseEntity.ok(Map.of("message", "Password berhasil diperbarui"));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deactivate(@PathVariable Long id, @AuthenticationPrincipal Object principal) {
         Map<String, Object> currentUser = toMap(principal);
@@ -165,6 +222,31 @@ public class UserController {
         int updated = jdbc.update("UPDATE users SET is_active=false WHERE id=?", id);
         if (updated == 0) return ResponseEntity.status(404).body(Map.of("error", "User tidak ditemukan"));
         return ResponseEntity.ok(Map.of("message", "User dinonaktifkan"));
+    }
+
+    @DeleteMapping("/{id}/permanent")
+    public ResponseEntity<?> permanentDelete(@PathVariable Long id,
+                                              @AuthenticationPrincipal Object principal) {
+        Map<String, Object> actor = toMap(principal);
+        if (actor == null || !"super_admin".equals(actor.get("role_name"))) {
+            return ResponseEntity.status(403).body(Map.of("error", "Hanya super_admin yang bisa menghapus user secara permanen"));
+        }
+        Long actorId = toLong(actor.get("id"));
+        if (id.equals(actorId)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Tidak bisa menghapus akun sendiri"));
+        }
+        List<Map<String, Object>> targetRows = jdbc.queryForList(
+            "SELECT u.id, r.name AS role_name FROM users u " +
+            "LEFT JOIN roles r ON r.id = u.role_id WHERE u.id = ?", id
+        );
+        if (targetRows.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("error", "User tidak ditemukan"));
+        }
+        if ("super_admin".equals(targetRows.get(0).get("role_name"))) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak bisa menghapus sesama Super Admin"));
+        }
+        jdbc.update("DELETE FROM users WHERE id = ?", id);
+        return ResponseEntity.ok(Map.of("message", "User berhasil dihapus secara permanen"));
     }
 
     @SuppressWarnings("unchecked")

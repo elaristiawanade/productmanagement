@@ -5,10 +5,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/standups")
@@ -224,6 +228,155 @@ public class StandupController {
         });
 
         return ResponseEntity.ok(stats);
+    }
+
+    // ─── IMPORT CSV ──────────────────────────────────────────────────────
+
+    @PostMapping("/import")
+    public ResponseEntity<?> importCsv(@AuthenticationPrincipal Object principal,
+                                        @RequestParam("file") MultipartFile file) {
+        Map<String, Object> actor = toMap(principal);
+        if (actor == null) return ResponseEntity.status(401).build();
+        if (!isManagerOrAbove(actor)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Hanya manager ke atas yang bisa import data"));
+        }
+        if (file.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "File tidak boleh kosong"));
+        }
+
+        int imported = 0, skipped = 0, errors = 0;
+        List<String> errorDetails = new ArrayList<>();
+
+        try (BufferedReader br = new BufferedReader(
+                new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
+
+            String headerLine = br.readLine();
+            if (headerLine == null) {
+                return ResponseEntity.badRequest().body(Map.of("error", "File CSV kosong"));
+            }
+            // Strip BOM (Excel UTF-8)
+            if (headerLine.startsWith("﻿")) headerLine = headerLine.substring(1);
+
+            String[] headers = parseCsvLine(headerLine);
+            Map<String, Integer> colIdx = new LinkedHashMap<>();
+            for (int i = 0; i < headers.length; i++) {
+                colIdx.put(headers[i].trim().toLowerCase().replaceAll("^\"|\"$", ""), i);
+            }
+
+            List<String> required = List.of("standup_date", "email", "yesterday", "today");
+            List<String> missing = required.stream().filter(r -> !colIdx.containsKey(r)).collect(Collectors.toList());
+            if (!missing.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Kolom wajib tidak ditemukan: " + String.join(", ", missing)));
+            }
+
+            String line;
+            int rowNum = 1;
+            while ((line = br.readLine()) != null) {
+                rowNum++;
+                if (line.isBlank()) continue;
+
+                try {
+                    String[] cols      = parseCsvLine(line);
+                    String email       = getCol(cols, colIdx, "email");
+                    String dateStr     = getCol(cols, colIdx, "standup_date");
+                    String yesterday   = getCol(cols, colIdx, "yesterday");
+                    String today       = getCol(cols, colIdx, "today");
+                    String hasBlockerS = getCol(cols, colIdx, "has_blocker");
+                    String blocker     = getCol(cols, colIdx, "blocker");
+                    String blockerPlan = getCol(cols, colIdx, "blocker_plan");
+
+                    if (email.isBlank() || dateStr.isBlank() || yesterday.isBlank() || today.isBlank()) {
+                        errorDetails.add("Baris " + rowNum + ": kolom wajib (email/tanggal/yesterday/today) kosong");
+                        errors++;
+                        continue;
+                    }
+
+                    // Resolve user by email
+                    List<Map<String, Object>> userRows = jdbc.queryForList(
+                        "SELECT id FROM users WHERE LOWER(email) = ?", email.toLowerCase().trim()
+                    );
+                    if (userRows.isEmpty()) {
+                        errorDetails.add("Baris " + rowNum + ": email tidak ditemukan → " + email);
+                        errors++;
+                        continue;
+                    }
+                    Long userId = toLong(userRows.get(0).get("id"));
+
+                    // Parse date
+                    java.sql.Date standupDate;
+                    try { standupDate = java.sql.Date.valueOf(dateStr.trim().substring(0, 10)); }
+                    catch (Exception e) {
+                        errorDetails.add("Baris " + rowNum + ": format tanggal tidak valid → " + dateStr);
+                        errors++;
+                        continue;
+                    }
+
+                    // Check duplicate
+                    Long cnt = jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM standups WHERE user_id=? AND standup_date=?",
+                        Long.class, userId, standupDate
+                    );
+                    if (cnt != null && cnt > 0) { skipped++; continue; }
+
+                    boolean hasBlocker = "true".equalsIgnoreCase(hasBlockerS.trim())
+                        || "1".equals(hasBlockerS.trim())
+                        || "yes".equalsIgnoreCase(hasBlockerS.trim())
+                        || "ya".equalsIgnoreCase(hasBlockerS.trim());
+
+                    jdbc.update(
+                        "INSERT INTO standups (user_id, standup_date, yesterday, today, has_blocker, blocker, blocker_plan) " +
+                        "VALUES (?,?,?,?,?,?,?)",
+                        userId, standupDate, yesterday, today, hasBlocker,
+                        hasBlocker && !blocker.isBlank()     ? blocker     : null,
+                        hasBlocker && !blockerPlan.isBlank() ? blockerPlan : null
+                    );
+                    imported++;
+
+                } catch (Exception e) {
+                    errorDetails.add("Baris " + rowNum + ": " + (e.getMessage() != null ? e.getMessage() : "error tidak diketahui"));
+                    errors++;
+                }
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Gagal membaca file: " + e.getMessage()));
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("imported", imported);
+        result.put("skipped",  skipped);
+        result.put("errors",   errors);
+        if (!errorDetails.isEmpty()) result.put("error_details", errorDetails);
+        return ResponseEntity.ok(result);
+    }
+
+    /** Parses a single CSV line respecting double-quoted fields (including embedded commas). */
+    private String[] parseCsvLine(String line) {
+        List<String> fields = new ArrayList<>();
+        boolean inQuote = false;
+        StringBuilder cur = new StringBuilder();
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (c == '"') {
+                if (inQuote && i + 1 < line.length() && line.charAt(i + 1) == '"') {
+                    cur.append('"'); i++;
+                } else {
+                    inQuote = !inQuote;
+                }
+            } else if (c == ',' && !inQuote) {
+                fields.add(cur.toString());
+                cur = new StringBuilder();
+            } else {
+                cur.append(c);
+            }
+        }
+        fields.add(cur.toString());
+        return fields.toArray(new String[0]);
+    }
+
+    private String getCol(String[] cols, Map<String, Integer> idx, String name) {
+        Integer i = idx.get(name);
+        if (i == null || i >= cols.length) return "";
+        return cols[i].trim().replaceAll("^\"|\"$", "");
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────

@@ -12,6 +12,7 @@ import JiraImport from './pages/JiraImport';
 import Standup    from './pages/Standup';
 import EpicBoard  from './pages/EpicBoard';
 import MyTask     from './pages/MyTask';
+import Profile    from './pages/Profile';
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -42,6 +43,7 @@ function AppRoutes() {
         <Route path="epic-board"    element={<EpicBoard />} />
         <Route path="my-tasks"      element={<MyTask />} />
         <Route path="import/jira"  element={<JiraImport />} />
+        <Route path="profile"      element={<Profile />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
