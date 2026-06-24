@@ -254,8 +254,8 @@ export default function Products() {
       {/* ── Tabs ── */}
       <div className="flex gap-2 border-b border-slate-200 pb-0">
         {[
-          ['products', 'Produk'],
-          ['roadmap',  'Features & Roadmap'],
+          ['products', 'Produk & Features'],
+          ['roadmap',  'Roadmap'],
         ].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors
@@ -414,6 +414,9 @@ export default function Products() {
       {/* ── FEATURES & ROADMAP TAB ── */}
       {tab === 'roadmap' && (
         <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 text-sm text-blue-700">
+            <strong>Roadmap</strong> adalah perencanaan fitur produk secara umum. Untuk membuat <strong>Feature</strong> yang dapat dihubungkan ke Backlog Item, buka tab <strong>"Produk & Features"</strong> → expand produk → klik tombol "+ Feature".
+          </div>
           {/* Filter + action bar */}
           <div className="flex flex-wrap items-center gap-3">
             <select className="select w-48" value={filterRoadmapProduct}
@@ -429,7 +432,7 @@ export default function Products() {
             {hasRole('super_admin','manager','po') && (
               <button className="btn-primary ml-auto"
                 onClick={() => setModal({ open: true, type: 'roadmap', data: null, productId: null })}>
-                <Plus className="w-4 h-4" /> Tambah Feature
+                <Plus className="w-4 h-4" /> Tambah Item Roadmap
               </button>
             )}
           </div>
@@ -550,7 +553,7 @@ export default function Products() {
       </Modal>
 
       <Modal open={modal.open && modal.type === 'roadmap'} onClose={closeModal}
-        title={modal.data ? 'Edit Feature Roadmap' : 'Tambah Feature ke Roadmap'} size="md">
+        title={modal.data ? 'Edit Item Roadmap' : 'Tambah Item ke Roadmap'} size="md">
         <RoadmapForm item={modal.data} products={products}
           defaultProductId={modal.productId}
           onSave={() => { closeModal(); load(); }} onClose={closeModal} />

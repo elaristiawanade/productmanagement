@@ -38,6 +38,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-ptapp_secret}
       APP_JWT_SECRET: ${JWT_SECRET:-change_this_to_a_long_random_secret}
       APP_JWT_EXPIRATION: 604800000
+      UPLOAD_DIR: /app/uploads
     depends_on:
       db:
         condition: service_healthy

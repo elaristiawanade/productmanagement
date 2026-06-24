@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Pencil, UserX, UserCheck, Key, Shield, Package, Trash2 } from 'lucide-react';
+import { Plus, Pencil, UserX, UserCheck, Key, Shield, Package, Trash2, AlertTriangle } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
 import { useAuth } from '../context/AuthContext';
@@ -168,24 +168,69 @@ function ResetPasswordForm({ user, onClose }) {
   );
 }
 
-// ─── Predefined permissions ───────────────────────────────────────────────────
-const PREDEFINED_PERMISSIONS = [
-  { key: 'all',               label: 'Akses Penuh',              desc: 'Semua akses tanpa batasan (super admin)' },
-  { key: 'read_all',          label: 'Baca Semua Data',          desc: 'Lihat semua data tanpa filter produk' },
-  { key: 'view_all_products', label: 'Lihat Semua Produk',       desc: 'Bypass filter produk yang di-assign' },
-  { key: 'manage_users',      label: 'Kelola Users',             desc: 'Tambah, edit, nonaktifkan user' },
-  { key: 'manage_roles',      label: 'Kelola Roles',             desc: 'Tambah, edit, hapus roles' },
-  { key: 'manage_products',   label: 'Kelola Produk',            desc: 'Tambah, edit, hapus produk & roadmap' },
-  { key: 'manage_backlog',    label: 'Kelola Backlog',           desc: 'Buat dan edit backlog item' },
-  { key: 'manage_sprints',    label: 'Kelola Sprint',            desc: 'Buat dan kelola sprint' },
-  { key: 'manage_features',   label: 'Kelola Features',          desc: 'Kelola fitur dan roadmap produk' },
-  { key: 'manage_qa',         label: 'Kelola QA',                desc: 'Buat test case, jalankan test' },
-  { key: 'update_assigned',   label: 'Update Item Ditugaskan',   desc: 'Hanya item yang di-assign' },
-  { key: 'view_reports',      label: 'Lihat Reports',            desc: 'Akses analytics dan dashboard' },
-  { key: 'import_data',       label: 'Import Data',              desc: 'Import dari CSV/Jira' },
-  { key: 'report_bugs',       label: 'Lapor Bug',                desc: 'Submit bug report dan defect' },
-  { key: 'submit_standup',    label: 'Submit Standup',           desc: 'Kirim laporan standup harian' },
+// ─── Permissions grouped by module ────────────────────────────────────────────
+const PERMISSION_GROUPS = [
+  {
+    group: 'Global',
+    color: 'purple',
+    items: [
+      { key: 'all',               label: 'Akses Penuh',        desc: 'Add / Edit / Delete di semua modul tanpa batasan (khusus Super Admin)' },
+      { key: 'read_all',          label: 'Baca Semua Data',    desc: 'Lihat data semua produk tanpa filter produk yang di-assign' },
+      { key: 'view_all_products', label: 'Lihat Semua Produk', desc: 'Bypass filter produk — bisa lihat semua produk meski tidak di-assign' },
+      { key: 'view_reports',      label: 'Lihat Reports',      desc: 'Akses analytics dan dashboard laporan' },
+    ],
+  },
+  {
+    group: 'Backlog',
+    color: 'blue',
+    items: [
+      { key: 'manage_backlog',  label: 'Kelola Backlog',           desc: 'Add / Edit / Delete backlog item (Story, Task, Bug, Epic)' },
+      { key: 'update_assigned', label: 'Edit Item Ditugaskan',     desc: 'Hanya bisa Edit dan ubah Status item yang di-assign; tidak bisa Add atau Delete' },
+    ],
+  },
+  {
+    group: 'Sprint',
+    color: 'indigo',
+    items: [
+      { key: 'manage_sprints', label: 'Kelola Sprint', desc: 'Add / Edit / Delete sprint dan kelola item dalam sprint' },
+    ],
+  },
+  {
+    group: 'Produk & Features',
+    color: 'emerald',
+    items: [
+      { key: 'manage_products', label: 'Kelola Produk',         desc: 'Add / Edit / Delete produk dan item roadmap' },
+      { key: 'manage_features', label: 'Kelola Features & Epics', desc: 'Add / Edit / Delete feature dan epic dalam produk' },
+    ],
+  },
+  {
+    group: 'User Management',
+    color: 'orange',
+    items: [
+      { key: 'manage_users', label: 'Kelola Users', desc: 'Add user baru, Edit profil & role, nonaktifkan user' },
+      { key: 'manage_roles', label: 'Kelola Roles', desc: 'Add / Edit / Delete roles dan konfigurasi permissions' },
+    ],
+  },
+  {
+    group: 'QA',
+    color: 'amber',
+    items: [
+      { key: 'manage_qa',   label: 'Kelola QA',  desc: 'Add / Edit / Delete test case dan jalankan test run' },
+      { key: 'report_bugs', label: 'Lapor Bug',   desc: 'Buat bug report dan defect dari hasil testing' },
+    ],
+  },
+  {
+    group: 'Lainnya',
+    color: 'slate',
+    items: [
+      { key: 'submit_standup', label: 'Submit Standup', desc: 'Kirim dan edit laporan standup harian' },
+      { key: 'import_data',    label: 'Import Data',    desc: 'Import data dari CSV atau Jira' },
+    ],
+  },
 ];
+
+// Flat list for backward-compat with RoleForm checkboxes
+const PREDEFINED_PERMISSIONS = PERMISSION_GROUPS.flatMap(g => g.items);
 
 // ─── RoleForm ─────────────────────────────────────────────────────────────────
 function RoleForm({ role, onSave, onClose }) {
@@ -239,20 +284,39 @@ function RoleForm({ role, onSave, onClose }) {
       </div>
       <div>
         <label className="label">Permissions</label>
-        <div className="border border-slate-200 rounded-lg bg-slate-50 divide-y divide-slate-100 overflow-hidden">
-          {PREDEFINED_PERMISSIONS.map(p => (
-            <label key={p.key}
-              className="flex items-start gap-3 px-3 py-2.5 cursor-pointer hover:bg-white transition-colors">
-              <input type="checkbox" className="w-4 h-4 mt-0.5 rounded accent-indigo-600 shrink-0"
-                checked={!!checked[p.key]} onChange={() => toggle(p.key)} />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-700">{p.label}</p>
-                <p className="text-xs text-slate-400">{p.desc}</p>
+        <div className="space-y-2">
+          {PERMISSION_GROUPS.map(group => (
+            <div key={group.group} className="border border-slate-200 rounded-lg overflow-hidden">
+              <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{group.group}</span>
+                <button type="button"
+                  onClick={() => {
+                    const allChecked = group.items.every(p => checked[p.key]);
+                    const next = { ...checked };
+                    group.items.forEach(p => { next[p.key] = !allChecked; });
+                    setChecked(next);
+                  }}
+                  className="text-xs text-indigo-600 hover:text-indigo-800">
+                  {group.items.every(p => checked[p.key]) ? 'Hapus semua' : 'Pilih semua'}
+                </button>
               </div>
-            </label>
+              <div className="divide-y divide-slate-100">
+                {group.items.map(p => (
+                  <label key={p.key}
+                    className="flex items-start gap-3 px-3 py-2.5 cursor-pointer hover:bg-slate-50 transition-colors">
+                    <input type="checkbox" className="w-4 h-4 mt-0.5 rounded accent-indigo-600 shrink-0"
+                      checked={!!checked[p.key]} onChange={() => toggle(p.key)} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-700">{p.label}</p>
+                      <p className="text-xs text-slate-400">{p.desc}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
-        <p className="text-xs text-slate-400 mt-1">
+        <p className="text-xs text-slate-400 mt-1.5">
           {Object.values(checked).filter(Boolean).length} permission dipilih
         </p>
       </div>
@@ -268,7 +332,7 @@ function RoleForm({ role, onSave, onClose }) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function Users() {
-  const { hasRole } = useAuth();
+  const { hasRole, user: currentUser } = useAuth();
   const [users,    setUsers]    = useState([]);
   const [roles,    setRoles]    = useState([]);
   const [products, setProducts] = useState([]);
@@ -277,6 +341,7 @@ export default function Users() {
   const [tab,      setTab]      = useState('users');
   const [perPage,  setPerPage]  = useState(10);
   const [page,     setPage]     = useState(1);
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // user object to delete
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -298,6 +363,17 @@ export default function Users() {
     await client.put(`/users/${user.id}`, { ...user, is_active: !user.is_active, role_id: user.role_id });
     toast.success(user.is_active ? 'User dinonaktifkan' : 'User diaktifkan');
     load();
+  };
+
+  const deleteUserPermanent = async (user) => {
+    try {
+      await client.delete(`/users/${user.id}/permanent`);
+      toast.success(`User "${user.name}" berhasil dihapus`);
+      setDeleteConfirm(null);
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Gagal menghapus user');
+    }
   };
 
   const deleteRole = async (role) => {
@@ -437,6 +513,14 @@ export default function Users() {
                                     onClick={() => toggleActive(u)}>
                                     {u.is_active ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
                                   </button>
+                                  {u.role_name !== 'super_admin' && u.id !== currentUser?.id && (
+                                    <button
+                                      className="btn-ghost btn-sm p-1.5 rounded-lg text-red-500 hover:bg-red-50"
+                                      title="Hapus Permanen"
+                                      onClick={() => setDeleteConfirm(u)}>
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
                                 </>
                               )}
                             </>
@@ -483,19 +567,21 @@ export default function Users() {
               </button>
             </div>
           )}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {roles.map(role => {
-              const activePerms = PREDEFINED_PERMISSIONS.filter(p => role.permissions?.[p.key]);
-              const userCount   = users.filter(u => u.role_name === role.name).length;
+              const perms = role.permissions || {};
+              const userCount = users.filter(u => u.role_name === role.name).length;
+              const totalActive = PREDEFINED_PERMISSIONS.filter(p => perms[p.key]).length;
               return (
-                <div key={role.id} className="card p-5">
-                  <div className="flex items-start gap-3 mb-3">
+                <div key={role.id} className="card p-5 flex flex-col">
+                  <div className="flex items-start gap-3 mb-4">
                     <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
                       <Shield className="w-4 h-4 text-indigo-600" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-slate-800 truncate">{role.display_name}</p>
                       <p className="text-xs text-slate-400 font-mono">{role.name}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{totalActive} permission aktif · {userCount} user</p>
                     </div>
                     {hasRole('super_admin') && (
                       <div className="flex gap-1 shrink-0">
@@ -503,28 +589,42 @@ export default function Users() {
                           onClick={() => setModal({ open: true, type: 'role', data: role })}>
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
-                        <button className="btn-ghost btn-sm p-1.5 rounded-lg text-red-500 hover:bg-red-50"
-                          title="Hapus role" onClick={() => deleteRole(role)}>
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {role.name !== 'super_admin' && (
+                          <button className="btn-ghost btn-sm p-1.5 rounded-lg text-red-500 hover:bg-red-50"
+                            title="Hapus role" onClick={() => deleteRole(role)}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
-                  {activePerms.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5 mb-3">
-                      {activePerms.map(p => (
-                        <span key={p.key}
-                          className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-full">
-                          {p.label}
-                        </span>
-                      ))}
+
+                  {perms.all ? (
+                    <div className="flex-1 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 text-sm text-purple-700 font-medium flex items-center gap-2">
+                      <Shield className="w-4 h-4 shrink-0" />
+                      Akses Penuh — semua operasi diizinkan
                     </div>
                   ) : (
-                    <p className="text-xs text-slate-400 italic mb-3">Tidak ada permission</p>
+                    <div className="flex-1 space-y-2">
+                      {PERMISSION_GROUPS.filter(g => g.items.some(p => perms[p.key])).map(group => (
+                        <div key={group.group}>
+                          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">{group.group}</p>
+                          <div className="flex flex-wrap gap-1">
+                            {group.items.filter(p => perms[p.key]).map(p => (
+                              <span key={p.key}
+                                className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-full"
+                                title={p.desc}>
+                                {p.label}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      {totalActive === 0 && (
+                        <p className="text-xs text-slate-400 italic">Tidak ada permission — role ini hanya bisa melihat data yang di-assign</p>
+                      )}
+                    </div>
                   )}
-                  <div className="pt-2 border-t border-slate-100">
-                    <p className="text-xs text-slate-400">{userCount} user dengan role ini</p>
-                  </div>
                 </div>
               );
             })}
@@ -547,9 +647,44 @@ export default function Users() {
       </Modal>
 
       <Modal open={modal.open && modal.type === 'role'} onClose={closeModal}
-        title={modal.data ? 'Edit Role' : 'Tambah Role'} size="sm">
+        title={modal.data ? 'Edit Role' : 'Tambah Role'} size="md">
         <RoleForm role={modal.data} onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
+
+      {/* ── Delete User Permanent Confirm ── */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-slate-800">Hapus User Permanen</p>
+                <p className="text-sm text-slate-500">Tindakan ini tidak bisa dibatalkan</p>
+              </div>
+            </div>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-sm text-red-700 space-y-1">
+              <p>Menghapus <strong>{deleteConfirm.name}</strong> ({deleteConfirm.email}) akan:</p>
+              <ul className="list-disc list-inside space-y-0.5 mt-1 text-xs">
+                <li>Menghapus akun user secara permanen</li>
+                <li>Menghapus semua standup dan notifikasi user</li>
+                <li>Menghapus akses produk user</li>
+                <li>Menghapus semua komentar yang dibuat user</li>
+                <li>Backlog item yang di-assign akan menjadi <em>Unassigned</em></li>
+              </ul>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button className="btn-secondary" onClick={() => setDeleteConfirm(null)}>Batal</button>
+              <button
+                className="bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                onClick={() => deleteUserPermanent(deleteConfirm)}>
+                Ya, Hapus Permanen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
