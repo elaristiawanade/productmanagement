@@ -45,13 +45,10 @@ public class StandupController {
 
         java.util.List<Object> params = new java.util.ArrayList<>();
 
-        if (!isManagerOrAbove) {
-            sql.append(" AND s.user_id = ?");
-            params.add(actorId);
-        } else if (user_id != null) {
-            sql.append(" AND s.user_id = ?");
-            params.add(user_id);
-        }
+        // Default: show own standups. Manager may filter to another user via user_id param.
+        Long filterUserId = (isManagerOrAbove && user_id != null) ? user_id : actorId;
+        sql.append(" AND s.user_id = ?");
+        params.add(filterUserId);
         if (date_from != null && !date_from.isBlank()) {
             sql.append(" AND s.standup_date >= ?");
             params.add(java.sql.Date.valueOf(date_from));
