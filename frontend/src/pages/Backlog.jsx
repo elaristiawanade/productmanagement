@@ -753,6 +753,31 @@ export default function Backlog() {
             </button>
           )}
         </div>
+
+        {/* Shortcut filter chips */}
+        <div className="w-full flex items-center gap-2 pt-2.5 border-t border-slate-100">
+          <span className="text-[11px] font-medium text-slate-400 shrink-0">Shortcut:</span>
+          {[
+            { label: 'Backlog',  icon: '📋', filterKey: 'status', filterVal: 'backlog' },
+            { label: 'Story',    icon: '📖', filterKey: 'type',   filterVal: 'story'   },
+            { label: 'Epic',     icon: '🗂️', filterKey: 'type',   filterVal: 'epic'    },
+          ].map(({ label, icon, filterKey, filterVal }) => {
+            const active = filters[filterKey] === filterVal;
+            return (
+              <button key={label} type="button"
+                onClick={() => { setFilters(f => ({ ...f, [filterKey]: active ? '' : filterVal })); setPage(1); }}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                  active
+                    ? 'bg-indigo-100 text-indigo-700 border-indigo-300'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                }`}>
+                <span>{icon}</span>
+                {label}
+                {active && <X className="w-3 h-3 ml-0.5 opacity-60" />}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Table */}
