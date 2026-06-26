@@ -3,8 +3,8 @@
 
 | | |
 |---|---|
-| **Versi** | 1.0 |
-| **Tanggal** | 24 Juni 2026 |
+| **Versi** | 1.4 |
+| **Tanggal** | 26 Juni 2026 |
 | **Status** | Live — Production |
 | **Pemilik** | Tim Internal |
 
@@ -31,7 +31,7 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 | Role | Deskripsi | Hak Akses Utama |
 |---|---|---|
 | **Super Admin** | Akses penuh tanpa batasan | Semua modul + manajemen user + konfigurasi sistem |
-| **Manager** | Kepala tim / manajemen | Baca semua produk, manajemen user, laporan, import CSV standup |
+| **Manager** | Kepala tim / manajemen | Baca semua produk, manajemen user, laporan, import standup |
 | **Product Owner (PO)** | Pemilik produk | Kelola backlog, sprint, feature, epics untuk produk yang di-assign |
 | **Developer** | Anggota tim dev | Lihat & update item yang di-assign ke diri sendiri |
 | **QA Engineer** | Penguji | Kelola test case, test run, eksekusi pengujian |
@@ -49,7 +49,13 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 **Fitur:**
 - **Overview stats** — total backlog, sprint aktif, item selesai bulan ini, item terlambat
 - **Sprint velocity chart** — grafik poin yang diselesaikan per sprint (6 sprint terakhir)
-- **Workload per developer** — distribusi jumlah task aktif per orang
+- **Team Workload** — distribusi jumlah task aktif per orang. Hanya item bertipe `task` dan `bug` yang dihitung — tipe `story` dan `epic` dikecualikan
+- **User Occupation** — beban kerja per user berdasarkan konversi jam:
+  - Item sprint aktif: 1 Story Point = 6 jam
+  - Item tipe `independent`: menggunakan `estimated_hours` langsung
+  - Kapasitas baseline: 80 jam
+  - Indikator beban: Ringan / Normal / Padat / Overload
+  - Klik user untuk melihat detail item yang sedang dikerjakan
 - **Delayed items list** — item yang melewati due date atau target sprint
 
 **Akses:** Semua role (data disesuaikan dengan scope produk masing-masing role)
@@ -58,22 +64,42 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 
 ### 3.2 Backlog Management
 
-**Tujuan:** Kelola semua backlog item dalam hierarki Epic → Story → Task/Bug.
+**Tujuan:** Kelola semua backlog item dalam hierarki Epic → Story → Task/Bug, plus item independen.
 
-**Fitur:**
-- CRUD item dengan 4 tipe: `epic`, `story`, `task`, `bug`
-- Hierarki parent-child: Task/Bug adalah anak dari Story; Story adalah anak dari Epic
-- **Story Points auto-cascade:** SP pada Task otomatis dijumlahkan ke Story parent → lalu ke Epic grandparent. Berlaku untuk create, update, dan delete item
+**Tipe Item (5 tipe):**
+
+| Tipe | Warna | Deskripsi |
+|---|---|---|
+| `epic` | Ungu | Kontainer besar, SP otomatis dari child stories |
+| `story` | Biru | User story, dapat punya parent epic |
+| `task` | Abu | Implementasi, wajib punya parent story |
+| `bug` | Merah | Bug, wajib punya parent story |
+| `independent` | Orange | Task mandiri — tidak terikat sprint, epic, maupun story. Menggunakan **Estimasi Jam** bukan Story Points |
+
+**Fitur Backlog:**
+- CRUD item dengan 5 tipe di atas
+- Hierarki parent-child: Task/Bug ← Story ← Epic
+- **Story Points auto-cascade:** SP pada Task otomatis dijumlahkan ke Story parent → lalu ke Epic grandparent. Berlaku untuk create, update, dan delete
 - **Epic SP read-only:** Form Epic menampilkan SP sebagai kalkulasi otomatis (tidak bisa diinput manual)
-- Filter: produk, sprint, tipe, status, assignee, prioritas, pencarian teks
-- Status item: `backlog`, `in_progress`, `review`, `done`
+- **Story Points hints:** Panduan skala SP (1–13) ditampilkan langsung di form untuk membantu estimasi
+- **Independent task:** Tidak memiliki sprint, parent, atau epic. Field wajib: `estimated_hours` (jam kerja langsung). Nilai ini digunakan di Dashboard User Occupation
+- Filter: produk, sprint, tipe, status, assignee, prioritas, range deadline, pencarian teks
+- **Shortcut filter chips:** Backlog · Story · Epic · ✅ Selesai — klik sekali untuk filter cepat, klik lagi untuk hapus
+- **Hide done by default:** Item berstatus `done` disembunyikan dari tampilan default. Gunakan chip "✅ Selesai" untuk melihat item yang sudah selesai
+- Status item: `backlog`, `todo`, `in_progress`, `in_review`, `done`, `blocked`
 - Prioritas: `low`, `medium`, `high`, `critical`
 - Assign ke developer, set due date, set sprint, hubungkan ke epic/feature
 - Pagination dengan limit per halaman yang dapat dikonfigurasi
+- Import dari Jira (CSV)
+
+**Komentar & Aktivitas:**
+- Setiap item memiliki tab aktivitas yang menampilkan log perubahan dan komentar
+- **@mention:** Ketik `@` di kolom komentar untuk memunculkan dropdown user. Pilih dengan klik atau navigasi ↑↓ + Enter/Tab. Mention ditampilkan sebagai badge indigo `@Nama`
+- Hapus komentar sendiri (Super Admin bisa hapus semua)
 
 **Akses:**
-- PO, Super Admin, Manager: CRUD penuh
-- Developer: update status dan lihat item saja
+- Super Admin, Manager, PO: CRUD penuh
+- Developer, QA: update status item yang di-assign ke diri sendiri
 
 ---
 
@@ -142,21 +168,33 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 - Edit standup hari ini selama hari berjalan
 
 **Riwayat:**
-- Lihat semua standup dengan filter tanggal dan user
-- Manager/Super Admin dapat melihat standup seluruh tim
-- Developer hanya melihat standup sendiri
+- Lihat standup berdasarkan user yang sedang login (default semua role)
+- Manager/Super Admin dapat filter ke standup user lain via parameter `user_id`
+- Filter rentang tanggal
 
 **Achievement:**
 - Statistik konsistensi standup per user
-- Streak harian, total standup, dll.
+- Persentase kehadiran vs hari kerja bulan ini, total standup, total blocker
 
-**Import CSV (Manager/Super Admin only):**
-- Upload file CSV untuk migrasi data standup historis
-- Format kolom: `standup_date`, `email`, `yesterday`, `today`, `has_blocker`, `blocker`, `blocker_plan`
+**Import CSV / Excel (Manager/Super Admin only):**
+- Upload file `.csv`, `.xlsx`, atau `.xls` untuk migrasi data standup historis
+- Parser xlsx menggunakan Java ZIP+XML (tidak bergantung library eksternal) — kompatibel dengan semua versi Excel
+- Kolom yang didukung (fleksibel, case-insensitive, mendukung nama kolom Bahasa Indonesia dan Inggris):
+
+| Kolom Canonical | Alias yang Diterima |
+|---|---|
+| `email` | email |
+| `standup_date` | standup_date, date, tanggal, standup date, standup meeting date |
+| `yesterday` | yesterday, kemarin, task yang dilakukan kemarin |
+| `today` | today, hari ini, task yang akan dilakukan hari ini |
+| `has_blocker` | has_blocker, blocker?, ada blocker |
+| `blocker` | blocker, hambatan, apa yang diperlukan untuk menghilangkan blocker: |
+| `blocker_plan` | blocker_plan, rencana, estimasi penyelesaian task |
+
+- Header dapat berada di baris mana pun (baris kosong di atas header otomatis dilewati)
+- Tanggal Excel serial number otomatis dikonversi ke `YYYY-MM-DD`
 - Duplikat (user + tanggal sudah ada) dilewati otomatis
-- Laporan hasil import: jumlah berhasil, dilewati, error per baris
-- Template CSV dapat diunduh langsung dari UI
-- Support drag & drop upload
+- Laporan hasil: jumlah berhasil, dilewati, error per baris
 
 **Format nilai `has_blocker`:** `true/false`, `1/0`, `yes/no`, `ya/tidak`
 
@@ -204,8 +242,6 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 
 **Tujuan:** Memungkinkan user mengelola akun mereka sendiri.
 
-**Fitur:**
-
 **Edit Profil:**
 - Ubah nama tampilan
 - Ubah email (sistem mencegah duplikat email)
@@ -246,12 +282,22 @@ PO membuat Sprint
     → Sprint selesai → pindah item yang belum done ke sprint berikutnya
 ```
 
+### Alur Item Independent
+```
+User buat item tipe 'independent'
+    → Isi judul, prioritas, assignee, deadline
+    → Isi Estimasi Jam (wajib, min 0.5)
+    → Item muncul di daftar backlog dengan badge ⚡
+    → Jam estimasi langsung masuk ke perhitungan Dashboard User Occupation
+    → Update status saat dikerjakan
+```
+
 ### Alur Daily Standup
 ```
 Developer login setiap pagi
     → Isi form standup (kemarin, hari ini, blocker)
-    → Manager lihat ringkasan tim di Riwayat
-    → Untuk data historis: Manager upload CSV via Import CSV
+    → Manager lihat standup tim via filter user_id
+    → Untuk data historis: Manager upload CSV/Excel via Import
 ```
 
 ### Alur QA
@@ -271,11 +317,11 @@ QA Engineer buat Test Case → link ke backlog item
 | Layer | Teknologi |
 |---|---|
 | **Frontend** | React 18 + Vite, Tailwind CSS, React Router v6 |
-| **Backend** | Spring Boot 3.3 (Java 21), JdbcTemplate (no ORM) |
-| **Database** | PostgreSQL 15 |
+| **Backend** | Spring Boot 2.7.18 (Java 21), JdbcTemplate (no ORM) |
+| **Database** | PostgreSQL 13+ |
 | **Auth** | JWT Bearer Token (HS256), disimpan di `localStorage` |
 | **Container** | Docker + Docker Compose |
-| **HTTP Client** | Axios dengan auto-interceptor untuk token |
+| **HTTP Client** | Axios dengan auto-interceptor untuk token dan redirect 401 |
 
 ### Struktur Database (tabel utama)
 
@@ -283,9 +329,10 @@ QA Engineer buat Test Case → link ke backlog item
 |---|---|
 | `users` | Akun user dengan `role`, `password_hash`, `avatar_color` |
 | `products` | Produk dengan member assignments (`user_products`) |
-| `backlog_items` | Item dengan hierarki self-referencing via `parent_id` |
+| `backlog_items` | Item dengan hierarki self-referencing via `parent_id`; kolom `estimated_hours` untuk tipe `independent` |
 | `sprints` | Sprint per produk |
 | `standups` | Standup harian, `UNIQUE(user_id, standup_date)` |
+| `item_activities` | Log perubahan dan komentar per backlog item |
 | `qa_test_cases` | Test case dengan link ke backlog item |
 | `qa_test_runs` | Sesi pengujian |
 | `notifications` | Notifikasi per user |
@@ -311,11 +358,26 @@ GET  /api/auth/me             Data user yang sedang login
 
 ### Backlog
 ```
-GET    /api/backlog           List item (filter: product_id, sprint_id, type, status, assignee_id, search)
+GET    /api/backlog           List item
+                              Params: product_id, sprint_id, type, status, priority,
+                                      assignee_id, parent_id, deadline_from, deadline_to,
+                                      search, page, limit, hide_done
+                              hide_done=true  → sembunyikan item status 'done' (default perilaku UI)
 POST   /api/backlog           Buat item baru (auto-cascade SP ke parent)
-PUT    /api/backlog/:id       Update item (auto-cascade SP jika SP atau parent_id berubah)
+PUT    /api/backlog/:id       Update item (auto-cascade SP; type/parent_id fallback ke nilai DB)
+PATCH  /api/backlog/:id/status Update status saja
 DELETE /api/backlog/:id       Hapus item (auto-cascade SP ke parent yang tersisa)
+GET    /api/backlog/:id/activities     Log + komentar item
+POST   /api/backlog/:id/activities     Tambah komentar (mendukung @[Nama] mention)
+DELETE /api/activities/:id             Hapus komentar
+GET    /api/backlog/:id/attachments    Lampiran gambar
+POST   /api/backlog/:id/attachments    Upload lampiran (max 10MB, image only)
+DELETE /api/attachments/:id            Hapus lampiran
 ```
+
+**Format mention:** `@[Nama Lengkap]` — disimpan sebagai teks, dirender sebagai badge di UI.
+
+**Field `estimated_hours`:** Wajib untuk tipe `independent`, diabaikan untuk tipe lain. Nilai disimpan sebagai `NUMERIC(6,1)`.
 
 ### Sprint
 ```
@@ -327,10 +389,14 @@ GET  /api/sprints/:id/burndown  Data burndown chart
 
 ### Standup
 ```
-GET    /api/standups          List standup (filter: date_from, date_to, user_id)
+GET    /api/standups          List standup (default: standup user sendiri)
+                              Params: date_from, date_to, user_id (Manager+ untuk filter user lain)
 POST   /api/standups          Buat standup (1 per user per hari)
 PUT    /api/standups/:id      Edit standup
-POST   /api/standups/import   Import bulk dari CSV (Manager+ only, multipart/form-data)
+GET    /api/standups/today    Cek apakah sudah submit standup hari ini
+GET    /api/standups/achievement  Statistik konsistensi per user
+POST   /api/standups/import   Import bulk dari CSV atau Excel (Manager+ only)
+                              Accepts: multipart/form-data, file .csv / .xlsx / .xls
 ```
 
 ### Users
@@ -347,7 +413,7 @@ PUT    /api/users/me/password Ganti password sendiri (perlu current_password)
 ```
 CRUD /api/products            Manajemen produk
 CRUD /api/epics               Epic per produk
-CRUD /api/features            Feature per produk
+CRUD /api/roadmap             Feature/roadmap per produk
 ```
 
 ### QA
@@ -360,10 +426,13 @@ GET  /api/qa/dashboard        Statistik QA
 
 ### Dashboard
 ```
-GET /api/dashboard/stats      Statistik keseluruhan
-GET /api/dashboard/velocity   Sprint velocity
-GET /api/dashboard/workload   Workload per developer
-GET /api/dashboard/delayed    Item terlambat
+GET /api/dashboard/stats      Statistik keseluruhan per produk
+GET /api/dashboard/velocity   Sprint velocity per produk
+GET /api/dashboard/workload   Workload per developer (task & bug aktif; story & epic dikecualikan)
+GET /api/dashboard/occupation Okupasi per user dalam jam
+                              - Item sprint aktif: story_points * 6 = jam
+                              - Item independent: estimated_hours langsung
+GET /api/dashboard/delayed    Item yang melewati deadline
 ```
 
 ---
@@ -372,8 +441,10 @@ GET /api/dashboard/delayed    Item terlambat
 
 - Password di-hash dengan **BCrypt** (tidak disimpan plaintext)
 - JWT token dengan expiry (konfigurasi via `JWT_SECRET` env var)
+- Token tidak valid / kedaluwarsa mengembalikan **HTTP 401** (bukan 403)
+- Axios interceptor di frontend: 401 di luar halaman login → redirect ke `/login`; 401 di halaman login → tampilkan pesan error (tidak redirect)
 - Setiap endpoint divalidasi role sebelum diproses
-- Input CSV di-sanitize sebelum insert ke database
+- Input file di-parse server-side; format xlsx divalidasi via magic bytes ZIP
 - Email dinormalisasi ke lowercase sebelum disimpan
 - Self-update profil dibatasi hanya ke field yang aman (nama, email, avatar) — role tidak bisa diubah sendiri
 
@@ -388,7 +459,7 @@ cd backend-java
 mvn package -DskipTests
 java -jar target/product-tracker-1.0.0.jar
 
-# Frontend (Vite)
+# Frontend (Vite dev server)
 cd frontend
 npm install && npm run dev
 ```
@@ -403,10 +474,24 @@ docker compose up -d --build backend frontend
 SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/product_tracker
 SPRING_DATASOURCE_USERNAME=postgres
 SPRING_DATASOURCE_PASSWORD=<password>
-JWT_SECRET=<random-string-panjang>
-CORS_ORIGIN=http://<server-ip>:3000
+APP_JWT_SECRET=<random-string-panjang>
+APP_CORS_ORIGIN=http://<server-ip>:3000
 TEAMS_WEBHOOK_URL=<optional>
 ```
+
+### Database Migrations
+
+Jalankan migration secara berurutan pada database production yang sudah berjalan:
+
+```bash
+# Contoh via docker exec
+docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migration_vN.sql
+```
+
+| File | Isi |
+|---|---|
+| `migration_v7.sql` | Perbaikan FK `backlog_items.feature_id` → `product_roadmap(id)` |
+| `migration_v8.sql` | Tambah kolom `estimated_hours NUMERIC(6,1)` di `backlog_items` |
 
 ---
 
@@ -419,3 +504,21 @@ TEAMS_WEBHOOK_URL=<optional>
 | 24 Jun 2026 | — | Epic Story Points auto-cascade dari Task → Story → Epic |
 | 24 Jun 2026 | — | Fitur Edit Profil & Ubah Password |
 | 24 Jun 2026 | — | Fitur Import Standup dari CSV (Manager+) |
+| 26 Jun 2026 | 1.1 | Fix token kedaluwarsa mengembalikan 401 bukan 403 |
+| 26 Jun 2026 | 1.1 | Fix login error toast hilang akibat redirect dari axios interceptor |
+| 26 Jun 2026 | 1.1 | Fix standup list menampilkan semua user — sekarang default tampil standup sendiri |
+| 26 Jun 2026 | 1.1 | Tambah favicon inline SVG (hilangkan 404 vite.svg) |
+| 26 Jun 2026 | 1.2 | Tambah Story Points hints (skala 1–13) di form backlog |
+| 26 Jun 2026 | 1.2 | Tambah card User Occupation di Dashboard (1 SP = 6 jam, kapasitas 80 jam) |
+| 26 Jun 2026 | 1.2 | Fix backlog PUT 500 — `type` fallback ke nilai DB jika tidak dikirim di body |
+| 26 Jun 2026 | 1.2 | Tambah dukungan upload Excel (.xlsx/.xls) di Import Standup |
+| 26 Jun 2026 | 1.2 | Parser xlsx berbasis Java ZIP+XML — tidak bergantung Apache POI |
+| 26 Jun 2026 | 1.2 | Alias kolom fleksibel untuk header bahasa Indonesia/Inggris di import standup |
+| 26 Jun 2026 | 1.3 | Tambah fitur @mention di kolom komentar backlog item |
+| 26 Jun 2026 | 1.3 | Tambah shortcut filter chips: Backlog, Story, Epic di toolbar backlog |
+| 26 Jun 2026 | 1.3 | Fix Team Workload — story & epic dikecualikan dari perhitungan |
+| 26 Jun 2026 | 1.3 | Item status `done` disembunyikan by default; tambah chip filter ✅ Selesai |
+| 26 Jun 2026 | 1.4 | Tambah tipe backlog `independent` — tidak terikat sprint/epic/story |
+| 26 Jun 2026 | 1.4 | Field `estimated_hours` untuk tipe independent, dipakai di Dashboard Occupation |
+| 26 Jun 2026 | 1.4 | Dashboard Occupation mendukung jam independent (langsung) + sprint item (SP×6) |
+| 26 Jun 2026 | 1.4 | migration_v8: kolom `estimated_hours` di tabel `backlog_items` |
