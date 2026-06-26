@@ -640,6 +640,8 @@ export default function Backlog() {
     setLoading(true);
     const params = { ...filters, page, limit: PER_PAGE };
     Object.keys(params).forEach(k => !params[k] && delete params[k]);
+    // Hide done items by default; only show when status filter is explicitly set to 'done'
+    if (!filters.status) params.hide_done = true;
     try {
       const [bl, pr, us, sp, ft, ep] = await Promise.all([
         client.get('/backlog', { params }),
@@ -761,6 +763,7 @@ export default function Backlog() {
             { label: 'Backlog',  icon: '📋', filterKey: 'status', filterVal: 'backlog' },
             { label: 'Story',    icon: '📖', filterKey: 'type',   filterVal: 'story'   },
             { label: 'Epic',     icon: '🗂️', filterKey: 'type',   filterVal: 'epic'    },
+            { label: 'Selesai',  icon: '✅', filterKey: 'status', filterVal: 'done'    },
           ].map(({ label, icon, filterKey, filterVal }) => {
             const active = filters[filterKey] === filterVal;
             return (

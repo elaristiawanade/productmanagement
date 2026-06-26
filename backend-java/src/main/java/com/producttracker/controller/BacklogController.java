@@ -58,7 +58,8 @@ public class BacklogController {
             @RequestParam(required = false) String deadline_to,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "50") int limit) {
+            @RequestParam(defaultValue = "50") int limit,
+            @RequestParam(defaultValue = "false") boolean hide_done) {
 
         List<String> filters = new ArrayList<>();
         List<Object> params  = new ArrayList<>();
@@ -79,6 +80,7 @@ public class BacklogController {
             params.addAll(assignedIds);
         }
 
+        if (hide_done && status == null) { filters.add("bi.status != 'done'"); }
         if (product_id != null)  { filters.add("bi.product_id = ?");  params.add(product_id); }
         if (sprint_id != null)   { filters.add("bi.sprint_id = ?");   params.add(sprint_id); }
         if (status != null)      { filters.add(buildInFilter("bi.status", status, params)); }
