@@ -262,18 +262,18 @@ public class BacklogController {
             }
         }
 
-        String type   = (String) body.get("type");
-        Long parentId = toLong(body.get("parent_id"));
-
-        ResponseEntity<?> valErr = validateTaskParent(type, parentId);
-        if (valErr != null) return valErr;
-
-        // Snapshot before update to detect changes
+        // Snapshot before update — also used as defaults for fields not sent in body
         List<Map<String, Object>> before = jdbc.queryForList(
             "SELECT " + ITEM_FIELDS + ITEM_JOINS + "WHERE bi.id=?", id
         );
         if (before.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "Item tidak ditemukan"));
         Map<String, Object> prev = before.get(0);
+
+        String type   = body.get("type")      != null ? (String) body.get("type")      : str(prev.get("type"));
+        Long parentId = body.get("parent_id") != null ? toLong(body.get("parent_id"))  : toLong(prev.get("parent_id"));
+
+        ResponseEntity<?> valErr = validateTaskParent(type, parentId);
+        if (valErr != null) return valErr;
 
         Map<String, Object> actor = toMap(principal);
         String actorName = actor != null ? str(actor.get("name")) : "System";
