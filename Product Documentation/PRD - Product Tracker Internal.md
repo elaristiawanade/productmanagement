@@ -3,7 +3,7 @@
 
 | | |
 |---|---|
-| **Versi** | 1.4 |
+| **Versi** | 1.5 |
 | **Tanggal** | 26 Juni 2026 |
 | **Status** | Live — Production |
 | **Pemilik** | Tim Internal |
@@ -49,13 +49,13 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 **Fitur:**
 - **Overview stats** — total backlog, sprint aktif, item selesai bulan ini, item terlambat
 - **Sprint velocity chart** — grafik poin yang diselesaikan per sprint (6 sprint terakhir)
-- **Team Workload** — distribusi jumlah task aktif per orang. Hanya item bertipe `task` dan `bug` yang dihitung — tipe `story` dan `epic` dikecualikan
+- **Team Workload** — distribusi jumlah task aktif per orang dalam story points. Hanya item bertipe `task` dan `bug` yang dihitung — tipe `story`, `epic`, dan `independent` dikecualikan. Kapasitas maks: **20 pts**
 - **User Occupation** — beban kerja per user berdasarkan konversi jam:
-  - Item sprint aktif: 1 Story Point = 6 jam
-  - Item tipe `independent`: menggunakan `estimated_hours` langsung
-  - Kapasitas baseline: 80 jam
-  - Indikator beban: Ringan / Normal / Padat / Overload
-  - Klik user untuk melihat detail item yang sedang dikerjakan
+  - Item sprint aktif (non-independent): 1 Story Point = 6 jam
+  - Item tipe `independent`: menggunakan `estimated_hours` langsung (tanpa konversi)
+  - Kapasitas baseline: **80 jam** per sprint
+  - Indikator beban: **Ringan** (< 40j) / **Normal** (40–64j) / **Padat** (64–80j) / **Overload** (> 80j)
+  - Klik nama user untuk melihat detail item yang sedang dikerjakan
 - **Delayed items list** — item yang melewati due date atau target sprint
 
 **Akses:** Semua role (data disesuaikan dengan scope produk masing-masing role)
@@ -134,12 +134,12 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 
 **Fitur:**
 - Buat, edit, mulai, dan selesaikan sprint per produk
-- **Sprint board (Kanban):** Drag & drop item antar kolom status
+- Field sprint: nama, tanggal mulai/selesai, **capacity** (maks story points yang direncanakan, default 22 pts)
+- **Sprint board (Kanban):** Tampilan item dikelompokkan per kolom status (`todo`, `in_progress`, `in_review`, `done`, `blocked`). Status item diupdate via dropdown inline di masing-masing kartu
 - **Burndown chart:** Grafik poin tersisa vs ideal burndown per sprint
-- Sprint planning: pindahkan item dari backlog ke sprint
 - Lihat sprint aktif dan riwayat sprint
 
-**Status sprint:** `planning`, `active`, `completed`
+**Status sprint:** `planned`, `active`, `completed`
 
 ---
 
@@ -217,10 +217,12 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 **Tujuan:** Manajemen akun dan hak akses.
 
 **Fitur:**
-- CRUD user
+- CRUD user (nama, email, role, warna avatar, status aktif)
 - Assign/ubah role
-- Reset password user oleh admin
-- Lihat daftar produk yang di-assign ke user
+- **Reset password** user oleh admin (tanpa perlu password lama)
+- Lihat dan kelola daftar produk yang di-assign ke user
+- **Soft delete** (`is_active = false`) — user tidak bisa login tapi data tetap ada
+- **Permanent delete** — hapus user beserta seluruh data terkait dari database (tidak bisa dibatalkan)
 
 **Akses:** Super Admin, Manager
 
@@ -352,87 +354,125 @@ QA Engineer buat Test Case → link ke backlog item
 
 ### Auth
 ```
-POST /api/auth/login          Login, kembalikan JWT token
-GET  /api/auth/me             Data user yang sedang login
+POST /api/auth/login              Login, kembalikan JWT token
+GET  /api/auth/me                 Data user yang sedang login
+PUT  /api/auth/change-password    Ganti password sendiri (perlu currentPassword + newPassword)
 ```
 
 ### Backlog
 ```
-GET    /api/backlog           List item
-                              Params: product_id, sprint_id, type, status, priority,
-                                      assignee_id, parent_id, deadline_from, deadline_to,
-                                      search, page, limit, hide_done
-                              hide_done=true  → sembunyikan item status 'done' (default perilaku UI)
-POST   /api/backlog           Buat item baru (auto-cascade SP ke parent)
-PUT    /api/backlog/:id       Update item (auto-cascade SP; type/parent_id fallback ke nilai DB)
-PATCH  /api/backlog/:id/status Update status saja
-DELETE /api/backlog/:id       Hapus item (auto-cascade SP ke parent yang tersisa)
-GET    /api/backlog/:id/activities     Log + komentar item
-POST   /api/backlog/:id/activities     Tambah komentar (mendukung @[Nama] mention)
+GET    /api/backlog               List item
+                                  Params: product_id, sprint_id, type, status, priority,
+                                          assignee_id, parent_id, deadline_from, deadline_to,
+                                          search, page, limit, hide_done
+                                  hide_done=true → sembunyikan item status 'done' (default UI)
+GET    /api/backlog/:id           Detail satu item
+POST   /api/backlog               Buat item baru (auto-cascade SP ke parent)
+PUT    /api/backlog/:id           Update item (auto-cascade SP; type/parent_id fallback ke nilai DB)
+PATCH  /api/backlog/:id/status    Update status saja
+DELETE /api/backlog/:id           Hapus item (auto-cascade SP ke parent yang tersisa)
+
+GET    /api/backlog/:id/activities     Log perubahan + komentar
+POST   /api/backlog/:id/activities     Tambah komentar (mendukung @[Nama] mention format)
+POST   /api/backlog/:id/comments       Alias untuk endpoint activities di atas
 DELETE /api/activities/:id             Hapus komentar
-GET    /api/backlog/:id/attachments    Lampiran gambar
-POST   /api/backlog/:id/attachments    Upload lampiran (max 10MB, image only)
+
+GET    /api/backlog/:id/attachments    List lampiran
+POST   /api/backlog/:id/attachments    Upload lampiran (max 10MB, image only, multipart/form-data)
 DELETE /api/attachments/:id            Hapus lampiran
+GET    /api/attachments/file/:filename Serve file lampiran (akses langsung ke file)
 ```
 
-**Format mention:** `@[Nama Lengkap]` — disimpan sebagai teks, dirender sebagai badge di UI.
+**Format mention:** `@[Nama Lengkap]` — disimpan sebagai teks, dirender sebagai badge indigo di UI.
 
 **Field `estimated_hours`:** Wajib untuk tipe `independent`, diabaikan untuk tipe lain. Nilai disimpan sebagai `NUMERIC(6,1)`.
 
 ### Sprint
 ```
-GET  /api/sprints             List sprint per produk
-POST /api/sprints             Buat sprint baru
-PUT  /api/sprints/:id         Update sprint (termasuk ubah status: active/completed)
+GET  /api/sprints               List sprint (params: product_id)
+POST /api/sprints               Buat sprint baru (fields: name, start_date, end_date, capacity, status)
+GET  /api/sprints/:id           Detail sprint beserta items
+PUT  /api/sprints/:id           Update sprint (termasuk ubah status: active/completed)
+DELETE /api/sprints/:id         Hapus sprint (PO/Manager/Admin only)
 GET  /api/sprints/:id/burndown  Data burndown chart
+POST /api/sprints/:id/burndown  Catat titik burndown harian
 ```
 
 ### Standup
 ```
-GET    /api/standups          List standup (default: standup user sendiri)
-                              Params: date_from, date_to, user_id (Manager+ untuk filter user lain)
-POST   /api/standups          Buat standup (1 per user per hari)
-PUT    /api/standups/:id      Edit standup
-GET    /api/standups/today    Cek apakah sudah submit standup hari ini
-GET    /api/standups/achievement  Statistik konsistensi per user
-POST   /api/standups/import   Import bulk dari CSV atau Excel (Manager+ only)
-                              Accepts: multipart/form-data, file .csv / .xlsx / .xls
+GET    /api/standups              List standup (default: standup user sendiri)
+                                  Params: date_from, date_to, user_id (Manager+ untuk filter user lain)
+POST   /api/standups              Buat standup (1 per user per hari, duplikat ditolak)
+PUT    /api/standups/:id          Edit standup
+GET    /api/standups/today        Cek apakah user sudah submit standup hari ini
+GET    /api/standups/achievement  Statistik konsistensi standup per user (streak, persentase, dll.)
+POST   /api/standups/import       Import bulk dari CSV atau Excel (Manager+ only)
+                                  Accepts: multipart/form-data, file .csv / .xlsx / .xls
 ```
 
 ### Users
 ```
-GET    /api/users             List user (Admin/Manager only)
-POST   /api/users             Buat user baru
-PUT    /api/users/:id         Update user (Admin only)
-DELETE /api/users/:id         Hapus user
-PUT    /api/users/me          Update profil sendiri (nama, email, avatar_color)
-PUT    /api/users/me/password Ganti password sendiri (perlu current_password)
+GET    /api/users                 List user aktif (Admin/Manager only)
+GET    /api/users/roles           List semua role yang tersedia
+POST   /api/users                 Buat user baru
+GET    /api/users/:id/products    Lihat produk yang di-assign ke user
+PUT    /api/users/:id/products    Update product assignments untuk user
+PUT    /api/users/:id             Update user (role, is_active, dll.) — Admin only
+PUT    /api/users/:id/password    Reset password user oleh admin (tanpa perlu password lama)
+DELETE /api/users/:id             Soft delete (set is_active=false, data tetap ada)
+DELETE /api/users/:id/permanent   Permanent delete (hapus dari DB, tidak bisa dibatalkan)
+PUT    /api/users/me              Update profil sendiri (nama, email, avatar_color)
+PUT    /api/users/me/password     Ganti password sendiri (perlu current_password)
 ```
 
-### Products
+### Products, Epics & Roadmap
 ```
-CRUD /api/products            Manajemen produk
-CRUD /api/epics               Epic per produk
-CRUD /api/roadmap             Feature/roadmap per produk
+GET/POST          /api/products         List & buat produk
+GET/PUT/DELETE    /api/products/:id     Detail, update, hapus produk
+CRUD              /api/epics            Epic per produk (params: product_id)
+CRUD              /api/features         Feature / kategori per produk
+CRUD              /api/roadmap          Roadmap item (timeline feature per produk)
 ```
 
 ### QA
 ```
-CRUD /api/qa/test-cases       Test case
-CRUD /api/qa/test-runs        Test run
-POST /api/qa/test-runs/:id/execute  Eksekusi test case
-GET  /api/qa/dashboard        Statistik QA
+GET/POST          /api/qa/test-cases           List & buat test case
+PUT/DELETE        /api/qa/test-cases/:id       Update & hapus test case
+GET/POST          /api/qa/test-runs            List & buat test run
+PUT               /api/qa/test-runs/:id        Update test run (nama, status)
+GET               /api/qa/dashboard            Statistik QA (coverage, pass rate, dll.)
 ```
 
 ### Dashboard
 ```
-GET /api/dashboard/stats      Statistik keseluruhan per produk
-GET /api/dashboard/velocity   Sprint velocity per produk
-GET /api/dashboard/workload   Workload per developer (task & bug aktif; story & epic dikecualikan)
-GET /api/dashboard/occupation Okupasi per user dalam jam
-                              - Item sprint aktif: story_points * 6 = jam
-                              - Item independent: estimated_hours langsung
-GET /api/dashboard/delayed    Item yang melewati deadline
+GET /api/dashboard/stats       Statistik per produk (total items, status breakdown, delayed, active sprint)
+GET /api/dashboard/velocity    Sprint velocity (committed vs completed points, per produk)
+GET /api/dashboard/workload    Beban kerja per user — hanya task & bug aktif (story & epic dikecualikan)
+                               Kapasitas maks: 20 pts
+GET /api/dashboard/occupation  Okupasi per user dalam jam:
+                               - Item sprint aktif non-independent: story_points × 6 jam
+                               - Item tipe independent: estimated_hours langsung
+                               Kapasitas: 80 jam | Label: Ringan (<40) / Normal (40–64) / Padat (64–80) / Overload (>80)
+GET /api/dashboard/delayed     Item yang melewati deadline (maks 20 item, urut dari paling lama)
+```
+
+### Notifications
+```
+GET    /api/notifications              List notifikasi user yang login
+GET    /api/notifications/unread-count Jumlah notifikasi belum dibaca
+PATCH  /api/notifications/:id/read    Tandai satu notifikasi sebagai dibaca
+PATCH  /api/notifications/read-all   Tandai semua notifikasi sebagai dibaca
+```
+
+### Import
+```
+POST /api/jira    Import dari CSV export Jira (multipart/form-data)
+```
+
+### Roles (Admin only)
+```
+GET/POST          /api/roles        List & buat role
+PUT/DELETE        /api/roles/:id    Update & hapus role
 ```
 
 ---
@@ -522,3 +562,4 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | 26 Jun 2026 | 1.4 | Field `estimated_hours` untuk tipe independent, dipakai di Dashboard Occupation |
 | 26 Jun 2026 | 1.4 | Dashboard Occupation mendukung jam independent (langsung) + sprint item (SP×6) |
 | 26 Jun 2026 | 1.4 | migration_v8: kolom `estimated_hours` di tabel `backlog_items` |
+| 26 Jun 2026 | 1.5 | Perbaikan PRD: status sprint `planned` (bukan `planning`), kapasitas workload 20 pts & occupation 80 jam, level Ringan/Normal/Padat/Overload, soft vs permanent delete user, capacity field sprint, API reference dilengkapi (notifications, attachments, burndown POST, user roles, roadmap, import Jira) |
