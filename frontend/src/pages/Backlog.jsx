@@ -399,6 +399,21 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
           {form.type === 'story' && (
             <p className="text-xs text-slate-400 mt-1">Otomatis dijumlah dari task child yang memiliki SP</p>
           )}
+          <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 space-y-0.5">
+            {[
+              [1,  'Sangat kecil & sederhana (contoh: ubah teks pada halaman)'],
+              [2,  'Kecil, langkah jelas (contoh: tambah field form sederhana)'],
+              [3,  'Standar, tanpa ketidakpastian (contoh: buat endpoint API dasar)'],
+              [5,  'Kompleks, butuh implementasi & testing hati-hati (contoh: integrasi layanan pihak ketiga)'],
+              [8,  'Besar, banyak dependensi & ketidakpastian (contoh: rebuild halaman checkout)'],
+              [13, 'Epic terlalu besar — harus dipecah menjadi item lebih kecil sebelum dikerjakan'],
+            ].map(([pt, desc]) => (
+              <div key={pt} className="flex gap-2 text-xs">
+                <span className="shrink-0 font-semibold text-indigo-600 w-5">{pt}</span>
+                <span className="text-slate-500">{desc}</span>
+              </div>
+            ))}
+          </div>
         </F>
       )}
       <F label="Feature">
