@@ -188,7 +188,9 @@ function StandupImport({ onDone }) {
   const handleFiles = (files) => {
     const f = files[0];
     if (!f) return;
-    if (!f.name.endsWith('.csv')) { toast.error('Hanya file CSV yang diperbolehkan'); return; }
+    if (!f.name.endsWith('.csv') && !f.name.endsWith('.xlsx') && !f.name.endsWith('.xls')) {
+      toast.error('Hanya file CSV atau Excel (.xlsx) yang diperbolehkan'); return;
+    }
     setFile(f);
     setResult(null);
   };
@@ -264,7 +266,7 @@ function StandupImport({ onDone }) {
       {/* ── Upload area ── */}
       <div className="card p-5 space-y-4">
         <h3 className="font-semibold text-slate-700 flex items-center gap-2">
-          <Upload className="w-4 h-4 text-indigo-500" /> Upload File CSV
+          <Upload className="w-4 h-4 text-indigo-500" /> Upload File CSV / Excel
         </h3>
 
         {!file ? (
@@ -276,9 +278,9 @@ function StandupImport({ onDone }) {
             className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all
               ${dragOver ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50'}`}>
             <Upload className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-            <p className="text-sm font-medium text-slate-600">Drag & drop file CSV ke sini</p>
-            <p className="text-xs text-slate-400 mt-1">atau klik untuk pilih file</p>
-            <input ref={inputRef} type="file" accept=".csv" className="hidden"
+            <p className="text-sm font-medium text-slate-600">Drag & drop file CSV atau Excel ke sini</p>
+            <p className="text-xs text-slate-400 mt-1">atau klik untuk pilih file · .csv, .xlsx, .xls</p>
+            <input ref={inputRef} type="file" accept=".csv,.xlsx,.xls" className="hidden"
               onChange={e => handleFiles(e.target.files)} />
           </div>
         ) : (
