@@ -81,6 +81,7 @@ public class DashboardController {
             "  AND bi.type NOT IN ('story','epic') " +
             "LEFT JOIN roles r ON r.id = u.role_id " +
             "WHERE u.is_active = true " +
+            "  AND r.name IN ('po', 'developer') " +
             "GROUP BY u.id, u.name, u.avatar_color, r.display_name " +
             "ORDER BY total_assigned DESC");
         return ResponseEntity.ok(rows);
