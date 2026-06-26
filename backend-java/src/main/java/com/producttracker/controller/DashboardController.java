@@ -78,6 +78,7 @@ public class DashboardController {
             "FROM users u " +
             "LEFT JOIN backlog_items bi ON bi.assignee_id = u.id " +
             "  AND bi.status NOT IN ('done','backlog') " +
+            "  AND bi.type NOT IN ('story','epic') " +
             "LEFT JOIN roles r ON r.id = u.role_id " +
             "WHERE u.is_active = true " +
             "GROUP BY u.id, u.name, u.avatar_color, r.display_name " +
