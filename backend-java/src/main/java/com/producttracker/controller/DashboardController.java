@@ -92,18 +92,23 @@ public class DashboardController {
             "SELECT " +
             "  u.id, u.name, u.avatar_color, " +
             "  r.display_name AS role, " +
-            "  COALESCE(SUM(bi.story_points), 0)      AS total_sp, " +
-            "  COALESCE(SUM(bi.story_points), 0) * 6  AS total_hours, " +
+            "  COALESCE(SUM(CASE WHEN bi.type = 'independent' THEN 0 ELSE bi.story_points END), 0) AS total_sp, " +
+            "  COALESCE(SUM(CASE WHEN bi.type = 'independent' " +
+            "                    THEN COALESCE(bi.estimated_hours, 0) " +
+            "                    ELSE bi.story_points * 6 END), 0) AS total_hours, " +
             "  COUNT(bi.id)                            AS total_items, " +
             "  COUNT(CASE WHEN bi.status = 'done' THEN 1 END) AS done_items " +
             "FROM users u " +
             "LEFT JOIN backlog_items bi ON bi.assignee_id = u.id " +
-            "  AND bi.sprint_id IN (SELECT id FROM sprints WHERE status = 'active') " +
-            "  AND bi.status NOT IN ('backlog') " +
+            "  AND ( " +
+            "    bi.sprint_id IN (SELECT id FROM sprints WHERE status = 'active') " +
+            "    OR bi.type = 'independent' " +
+            "  ) " +
+            "  AND bi.status NOT IN ('backlog', 'done') " +
             "LEFT JOIN roles r ON r.id = u.role_id " +
             "WHERE u.is_active = true " +
             "GROUP BY u.id, u.name, u.avatar_color, r.display_name " +
-            "ORDER BY total_sp DESC");
+            "ORDER BY total_hours DESC");
         return ResponseEntity.ok(rows);
     }
 

@@ -22,7 +22,7 @@ public class BacklogController {
 
     private static final String ITEM_FIELDS =
         "bi.id, bi.product_id, bi.code, bi.title, bi.type, bi.priority, " +
-        "bi.story_points, bi.status, bi.acceptance_criteria, bi.notes, bi.deadline, " +
+        "bi.story_points, bi.estimated_hours, bi.status, bi.acceptance_criteria, bi.notes, bi.deadline, " +
         "bi.parent_id, bi.assignee_id, bi.sprint_id, bi.feature_id, bi.epic_id, " +
         "bi.created_at, bi.updated_at, " +
         "p.name AS product_name, p.color AS product_color, p.code AS product_code, " +
@@ -188,17 +188,19 @@ public class BacklogController {
         try {
             Map<String, Object> created = jdbc.queryForMap(
                 "INSERT INTO backlog_items " +
-                "(product_id, code, title, type, feature_id, epic_id, parent_id, priority, story_points, " +
+                "(product_id, code, title, type, feature_id, epic_id, parent_id, priority, story_points, estimated_hours, " +
                 "status, sprint_id, assignee_id, acceptance_criteria, notes, deadline, created_by) " +
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id, code",
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id, code",
                 toLong(body.get("product_id")), itemCode, body.get("title"),
                 type,
                 toLong(body.get("feature_id")), toLong(body.get("epic_id")),
                 parentId,
                 orDefault(body.get("priority"), "medium"),
-                orDefault(body.get("story_points"), 0),
+                "independent".equals(type) ? 0 : orDefault(body.get("story_points"), 0),
+                toDecimal(body.get("estimated_hours")),
                 orDefault(body.get("status"), "backlog"),
-                toLong(body.get("sprint_id")), toLong(body.get("assignee_id")),
+                "independent".equals(type) ? null : toLong(body.get("sprint_id")),
+                toLong(body.get("assignee_id")),
                 body.get("acceptance_criteria"), body.get("notes"), toSqlDate(body.get("deadline")),
                 actor != null ? actor.get("id") : null
             );
@@ -282,14 +284,16 @@ public class BacklogController {
 
         jdbc.update(
             "UPDATE backlog_items SET title=?,type=?,feature_id=?,epic_id=?,parent_id=?,priority=?," +
-            "story_points=?,status=?,sprint_id=?,assignee_id=?,acceptance_criteria=?,notes=?,deadline=? WHERE id=?",
+            "story_points=?,estimated_hours=?,status=?,sprint_id=?,assignee_id=?,acceptance_criteria=?,notes=?,deadline=? WHERE id=?",
             body.get("title"), type,
             toLong(body.get("feature_id")), toLong(body.get("epic_id")),
             parentId,
             body.get("priority"),
-            orDefault(body.get("story_points"), 0),
+            "independent".equals(type) ? 0 : orDefault(body.get("story_points"), 0),
+            toDecimal(body.get("estimated_hours")),
             body.get("status"),
-            toLong(body.get("sprint_id")), toLong(body.get("assignee_id")),
+            "independent".equals(type) ? null : toLong(body.get("sprint_id")),
+            toLong(body.get("assignee_id")),
             body.get("acceptance_criteria"), body.get("notes"), toSqlDate(body.get("deadline")),
             id
         );
@@ -533,6 +537,13 @@ public class BacklogController {
         if (v == null) return null;
         if (v instanceof Number) return ((Number) v).longValue();
         try { return Long.parseLong(v.toString()); } catch (Exception e) { return null; }
+    }
+
+    private Double toDecimal(Object v) {
+        if (v == null) return null;
+        if (v instanceof Number) return ((Number) v).doubleValue();
+        try { double d = Double.parseDouble(v.toString()); return d > 0 ? d : null; }
+        catch (Exception e) { return null; }
     }
 
     private java.sql.Date toSqlDate(Object v) {

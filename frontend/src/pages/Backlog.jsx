@@ -13,7 +13,7 @@ import { Link } from 'react-router-dom';
 
 const STATUSES   = ['backlog','todo','in_progress','in_review','done','blocked'];
 const PRIORITIES = ['critical','high','medium','low'];
-const TYPES      = ['story','bug','task','epic'];
+const TYPES      = ['story','bug','task','epic','independent'];
 
 function F({ label, children, required }) {
   return (
@@ -235,10 +235,11 @@ function ChildrenSection({ item, onOpenItem }) {
   const [loading,  setLoading]  = useState(true);
 
   const TYPE_COLORS_LOCAL = {
-    story: 'text-blue-600 bg-blue-50',
-    bug:   'text-red-600 bg-red-50',
-    task:  'text-slate-600 bg-slate-100',
-    epic:  'text-purple-600 bg-purple-50',
+    story:       'text-blue-600 bg-blue-50',
+    bug:         'text-red-600 bg-red-50',
+    task:        'text-slate-600 bg-slate-100',
+    epic:        'text-purple-600 bg-purple-50',
+    independent: 'text-orange-600 bg-orange-50',
   };
 
   const load = useCallback(async () => {
@@ -294,6 +295,7 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
     parent_id: item?.parent_id || '',
     priority: item?.priority || 'medium',
     story_points: item?.story_points || 0,
+    estimated_hours: item?.estimated_hours || '',
     status: item?.status || 'backlog',
     sprint_id: item?.sprint_id || '',
     assignee_id: item?.assignee_id || '',
@@ -369,7 +371,13 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
   };
 
   const handleTypeChange = (e) => {
-    setForm(f => ({ ...f, type: e.target.value, parent_id: '' }));
+    const t = e.target.value;
+    setForm(f => ({
+      ...f,
+      type: t,
+      parent_id: '',
+      sprint_id: t === 'independent' ? '' : f.sprint_id,
+    }));
   };
 
   const save = async (e) => {
@@ -378,10 +386,15 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
       toast.error(`${form.type === 'task' ? 'Task' : 'Bug'} harus memiliki 1 user story sebagai parent`);
       return;
     }
+    if (form.type === 'independent' && (!form.estimated_hours || +form.estimated_hours <= 0)) {
+      toast.error('Independent task harus memiliki estimasi jam pengerjaan');
+      return;
+    }
     setSaving(true);
     try {
       const payload = { ...form };
       if (payload.type === 'epic') payload.parent_id = null;
+      if (payload.type === 'independent') { payload.sprint_id = null; payload.parent_id = null; }
       if (item?.id) {
         await client.put(`/backlog/${item.id}`, payload);
         toast.success('Item diperbarui');
@@ -406,12 +419,21 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
           {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </F>
-      <F label="Sprint">
-        <select className="select" value={form.sprint_id} onChange={e => setForm(f => ({ ...f, sprint_id: e.target.value }))}>
-          <option value="">Backlog (no sprint)</option>
-          {filteredSprints.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-      </F>
+      {form.type !== 'independent' ? (
+        <F label="Sprint">
+          <select className="select" value={form.sprint_id} onChange={e => setForm(f => ({ ...f, sprint_id: e.target.value }))}>
+            <option value="">Backlog (no sprint)</option>
+            {filteredSprints.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </F>
+      ) : (
+        <div className="flex items-end">
+          <div className="rounded-lg bg-orange-50 border border-orange-200 px-3 py-2 text-xs text-orange-700 flex items-center gap-1.5 w-full">
+            <span>⚡</span>
+            <span><strong>Independent</strong> — tidak terikat sprint, epic, atau story</span>
+          </div>
+        </div>
+      )}
       <div className="col-span-2">
         <F label="Judul" required>
           <input className="input" value={form.title}
@@ -468,7 +490,33 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
           {STATUSES.map(s => <option key={s} value={s}>{s.replace('_',' ')}</option>)}
         </select>
       </F>
-      {form.type === 'epic' ? (
+      {form.type === 'independent' ? (
+        <F label="Estimasi Jam" required>
+          <div className="relative">
+            <input type="number" className="input pr-12" min="0.5" step="0.5" value={form.estimated_hours}
+              onChange={e => setForm(f => ({ ...f, estimated_hours: e.target.value }))}
+              placeholder="mis. 4, 8, 16" required />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none">jam</span>
+          </div>
+          <div className="mt-2 rounded-lg border border-orange-100 bg-orange-50 px-3 py-2 space-y-0.5">
+            {[
+              ['≤ 4 jam',   'Tugas kecil, bisa selesai setengah hari'],
+              ['8 jam',     'Satu hari kerja penuh'],
+              ['16 jam',    'Dua hari kerja'],
+              ['24–40 jam', 'Satu minggu kerja'],
+              ['> 40 jam',  'Pertimbangkan untuk dipecah menjadi beberapa task'],
+            ].map(([est, desc]) => (
+              <div key={est} className="flex gap-2 text-xs">
+                <span className="shrink-0 font-semibold text-orange-600 w-16">{est}</span>
+                <span className="text-slate-500">{desc}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-orange-600 mt-1.5 flex items-center gap-1">
+            <span>⚡</span> Estimasi ini langsung digunakan pada perhitungan Dashboard User Occupation
+          </p>
+        </F>
+      ) : form.type === 'epic' ? (
         <div>
           <label className="label">
             Story Points&nbsp;<span className="text-xs font-normal text-indigo-400">(otomatis)</span>
@@ -686,10 +734,11 @@ export default function Backlog() {
   };
 
   const TYPE_COLORS = {
-    story: 'text-blue-600 bg-blue-50',
-    bug:   'text-red-600 bg-red-50',
-    task:  'text-slate-600 bg-slate-100',
-    epic:  'text-purple-600 bg-purple-50',
+    story:       'text-blue-600 bg-blue-50',
+    bug:         'text-red-600 bg-red-50',
+    task:        'text-slate-600 bg-slate-100',
+    epic:        'text-purple-600 bg-purple-50',
+    independent: 'text-orange-600 bg-orange-50',
   };
 
   return (
@@ -882,11 +931,17 @@ export default function Backlog() {
                         {STATUSES.map(s => <option key={s} value={s}>{s.replace('_',' ')}</option>)}
                       </select>
                     </td>
-                    <td className="px-3 py-3 text-center font-semibold text-slate-600">{item.story_points}</td>
+                    <td className="px-3 py-3 text-center font-semibold text-slate-600">
+                      {item.type === 'independent'
+                        ? <span className="text-orange-600">{item.estimated_hours ? `${item.estimated_hours}h` : '—'}</span>
+                        : item.story_points}
+                    </td>
                     <td className="px-3 py-3">
                       <span className="text-xs font-medium" style={{ color: item.product_color }}>{item.product_code}</span>
                     </td>
-                    <td className="px-3 py-3 text-xs text-slate-500">{item.sprint_name || '—'}</td>
+                    <td className="px-3 py-3 text-xs text-slate-500">
+                      {item.type === 'independent' ? <span className="text-orange-500">⚡ independent</span> : (item.sprint_name || '—')}
+                    </td>
                     <td className="px-3 py-3">
                       {item.assignee_name ? (
                         <div className="flex items-center gap-1.5">
