@@ -26,12 +26,30 @@ function F({ label, children, required }) {
 
 // ─── Activity / Comments Section ──────────────────────────────────────────────
 
-function ActivitySection({ itemId }) {
+function renderComment(text) {
+  return text.split(/(@\[[^\]]+\])/g).map((part, i) => {
+    if (part.startsWith('@[') && part.endsWith(']')) {
+      return (
+        <span key={i} className="inline-flex items-center gap-0.5 text-indigo-600 font-medium bg-indigo-50 rounded px-1">
+          @{part.slice(2, -1)}
+        </span>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
+function ActivitySection({ itemId, users = [] }) {
   const { user } = useAuth();
-  const [activities, setActivities] = useState([]);
-  const [comment,    setComment]    = useState('');
-  const [sending,    setSending]    = useState(false);
-  const endRef = useRef(null);
+  const [activities,   setActivities]  = useState([]);
+  const [comment,      setComment]     = useState('');
+  const [sending,      setSending]     = useState(false);
+  const [mentionOpen,  setMentionOpen] = useState(false);
+  const [mentionQuery, setMentionQuery]= useState('');
+  const [mentionStart, setMentionStart]= useState(-1);
+  const [mentionIdx,   setMentionIdx]  = useState(0);
+  const endRef   = useRef(null);
+  const inputRef = useRef(null);
 
   const load = useCallback(async () => {
     if (!itemId) return;
@@ -50,17 +68,63 @@ function ActivitySection({ itemId }) {
     try {
       await client.post(`/backlog/${itemId}/activities`, { content: comment.trim() });
       setComment('');
+      setMentionOpen(false);
       load();
     } catch (err) {
       toast.error(err?.response?.data?.error || 'Gagal mengirim komentar');
     } finally { setSending(false); }
   };
 
+  const mentionSuggestions = users
+    .filter(u => u.name.toLowerCase().includes(mentionQuery.toLowerCase()))
+    .slice(0, 6);
+
+  const selectMention = (name) => {
+    const before = comment.slice(0, mentionStart);
+    const after  = comment.slice(mentionStart + 1 + mentionQuery.length);
+    const next   = before + `@[${name}]` + after;
+    setComment(next);
+    setMentionOpen(false);
+    setMentionQuery('');
+    setTimeout(() => {
+      const pos = (before + `@[${name}]`).length;
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(pos, pos);
+    }, 0);
+  };
+
+  const handleCommentChange = (e) => {
+    const val    = e.target.value;
+    const cursor = e.target.selectionStart;
+    const before = val.slice(0, cursor);
+    const atIdx  = before.lastIndexOf('@');
+    const query  = atIdx !== -1 ? before.slice(atIdx + 1) : '';
+
+    if (atIdx !== -1 && !query.includes(' ') && !query.includes('\n')) {
+      setMentionStart(atIdx);
+      setMentionQuery(query);
+      setMentionOpen(true);
+      setMentionIdx(0);
+    } else {
+      setMentionOpen(false);
+    }
+    setComment(val);
+  };
+
   const handleKeyDown = (e) => {
-    // Ctrl+Enter or Shift+Enter submits; plain Enter submits and stops propagation
+    if (mentionOpen && mentionSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIdx(i => Math.min(i + 1, mentionSuggestions.length - 1)); return; }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setMentionIdx(i => Math.max(i - 1, 0)); return; }
+      if (e.key === 'Tab' || (e.key === 'Enter' && mentionOpen)) {
+        e.preventDefault();
+        selectMention(mentionSuggestions[mentionIdx].name);
+        return;
+      }
+      if (e.key === 'Escape') { setMentionOpen(false); return; }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      e.stopPropagation();  // prevent outer form submit
+      e.stopPropagation();
       submit();
     }
   };
@@ -112,20 +176,42 @@ function ActivitySection({ itemId }) {
                 )}
               </div>
               <p className={`text-xs leading-relaxed ${act.type === 'change_log' ? 'text-slate-500 italic' : 'text-slate-700 bg-slate-50 rounded-lg px-2.5 py-1.5'}`}>
-                {act.content}
+                {act.type === 'change_log' ? act.content : renderComment(act.content)}
               </p>
             </div>
           </div>
         ))}
         <div ref={endRef} />
       </div>
-      <div className="flex gap-2">
+
+      {/* Input area */}
+      <div className="relative flex gap-2">
+        {/* Mention dropdown */}
+        {mentionOpen && mentionSuggestions.length > 0 && (
+          <div className="absolute bottom-full left-0 mb-1.5 w-52 bg-white border border-slate-200 rounded-lg shadow-lg z-50 overflow-hidden">
+            <p className="text-[10px] text-slate-400 px-3 pt-2 pb-1 font-medium uppercase tracking-wide">Mention pengguna</p>
+            {mentionSuggestions.map((u, i) => (
+              <button key={u.id} type="button"
+                className={`w-full text-left flex items-center gap-2 px-3 py-1.5 text-xs transition-colors ${i === mentionIdx ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'}`}
+                onMouseDown={e => { e.preventDefault(); selectMention(u.name); }}>
+                <span className="w-5 h-5 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0"
+                  style={{ backgroundColor: u.avatar_color || '#6366f1' }}>
+                  {u.name.charAt(0).toUpperCase()}
+                </span>
+                <span className="truncate">{u.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         <input
+          ref={inputRef}
           className="input text-xs flex-1 py-1.5"
-          placeholder="Tulis komentar... (Enter untuk kirim)"
+          placeholder="Tulis komentar... ketik @ untuk mention (Enter kirim)"
           value={comment}
-          onChange={e => setComment(e.target.value)}
+          onChange={handleCommentChange}
           onKeyDown={handleKeyDown}
+          onBlur={() => setTimeout(() => setMentionOpen(false), 150)}
         />
         <button
           type="button"
@@ -517,7 +603,7 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
       {/* Activity + Comments — only when editing */}
       {item?.id && (
         <div className="col-span-2">
-          <ActivitySection itemId={item.id} />
+          <ActivitySection itemId={item.id} users={users} />
         </div>
       )}
 
