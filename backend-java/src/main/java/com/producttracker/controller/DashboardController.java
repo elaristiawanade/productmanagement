@@ -85,6 +85,27 @@ public class DashboardController {
         return ResponseEntity.ok(rows);
     }
 
+    @GetMapping("/occupation")
+    public ResponseEntity<?> occupation() {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+            "SELECT " +
+            "  u.id, u.name, u.avatar_color, " +
+            "  r.display_name AS role, " +
+            "  COALESCE(SUM(bi.story_points), 0)      AS total_sp, " +
+            "  COALESCE(SUM(bi.story_points), 0) * 6  AS total_hours, " +
+            "  COUNT(bi.id)                            AS total_items, " +
+            "  COUNT(CASE WHEN bi.status = 'done' THEN 1 END) AS done_items " +
+            "FROM users u " +
+            "LEFT JOIN backlog_items bi ON bi.assignee_id = u.id " +
+            "  AND bi.sprint_id IN (SELECT id FROM sprints WHERE status = 'active') " +
+            "  AND bi.status NOT IN ('backlog') " +
+            "LEFT JOIN roles r ON r.id = u.role_id " +
+            "WHERE u.is_active = true " +
+            "GROUP BY u.id, u.name, u.avatar_color, r.display_name " +
+            "ORDER BY total_sp DESC");
+        return ResponseEntity.ok(rows);
+    }
+
     @GetMapping("/delayed")
     public ResponseEntity<?> delayed() {
         List<Map<String, Object>> rows = jdbc.queryForList(

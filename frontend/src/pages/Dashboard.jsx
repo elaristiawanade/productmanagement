@@ -158,12 +158,13 @@ function StatCard({ label, value, icon: Icon, color, sub, onClick }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const [stats,    setStats]    = useState(null);
-  const [velocity, setVelocity] = useState([]);
-  const [workload, setWorkload] = useState([]);
-  const [delayed,  setDelayed]  = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [drill,    setDrill]    = useState({ open: false, title: '', params: null, preloaded: null });
+  const [stats,      setStats]      = useState(null);
+  const [velocity,   setVelocity]   = useState([]);
+  const [workload,   setWorkload]   = useState([]);
+  const [delayed,    setDelayed]    = useState([]);
+  const [occupation, setOccupation] = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [drill,      setDrill]      = useState({ open: false, title: '', params: null, preloaded: null });
 
   useEffect(() => {
     Promise.all([
@@ -171,11 +172,13 @@ export default function Dashboard() {
       client.get('/dashboard/velocity'),
       client.get('/dashboard/workload'),
       client.get('/dashboard/delayed'),
-    ]).then(([s, v, w, d]) => {
+      client.get('/dashboard/occupation'),
+    ]).then(([s, v, w, d, o]) => {
       setStats(s.data);
       setVelocity(v.data);
       setWorkload(w.data);
       setDelayed(d.data);
+      setOccupation(o.data);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -453,6 +456,69 @@ export default function Dashboard() {
               }
             </div>
           </div>
+        </div>
+
+        {/* User Occupation */}
+        <div className="card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="font-semibold text-slate-700">User Occupation</h2>
+              <p className="text-xs text-slate-400">Berdasarkan sprint aktif · 1 SP = 6 jam</p>
+            </div>
+            <span className="text-xs text-slate-400">Kapasitas <strong className="text-slate-600">80 jam</strong> / sprint</span>
+          </div>
+          {occupation.filter(u => +u.total_sp > 0).length === 0 ? (
+            <p className="text-center py-8 text-slate-400 text-sm">Tidak ada sprint aktif atau belum ada assignment</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {occupation.filter(u => +u.total_sp > 0).map(u => {
+                const sp      = +u.total_sp   || 0;
+                const hours   = +u.total_hours || 0;
+                const CAPACITY = 80;
+                const pct     = Math.min(hours / CAPACITY * 100, 100);
+                const over    = hours > CAPACITY;
+                const label   = over        ? 'Overload'
+                              : hours >= 64 ? 'Padat'
+                              : hours >= 40 ? 'Normal'
+                              :               'Ringan';
+                const barColor  = over        ? 'bg-red-500'
+                                : hours >= 64 ? 'bg-amber-400'
+                                : hours >= 40 ? 'bg-indigo-500'
+                                :               'bg-emerald-500';
+                const badgeClass = over        ? 'bg-red-100 text-red-700'
+                                 : hours >= 64 ? 'bg-amber-100 text-amber-700'
+                                 : hours >= 40 ? 'bg-indigo-100 text-indigo-700'
+                                 :               'bg-emerald-100 text-emerald-700';
+                return (
+                  <div key={u.id}
+                    className="rounded-xl border border-slate-100 bg-slate-50/60 p-3 space-y-2 hover:shadow-sm transition-shadow cursor-pointer"
+                    onClick={() => openDrill(`Occupation: ${u.name}`, { assignee_id: u.id })}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                          style={{ backgroundColor: u.avatar_color || '#6366f1' }}>
+                          {u.name?.charAt(0)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-700 truncate leading-tight">{u.name}</p>
+                          <p className="text-[10px] text-slate-400 truncate">{u.role}</p>
+                        </div>
+                      </div>
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${badgeClass}`}>{label}</span>
+                    </div>
+                    <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-500">{sp} SP</span>
+                      <span className="font-semibold text-slate-700">{hours} jam</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">{u.total_items} item · {u.done_items} selesai</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </>
