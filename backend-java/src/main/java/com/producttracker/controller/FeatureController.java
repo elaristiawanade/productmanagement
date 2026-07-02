@@ -57,9 +57,10 @@ public class FeatureController {
             return ResponseEntity.badRequest().body(Map.of("error", "product_id, code, name wajib"));
         }
         try {
+            boolean isRoadmapItem = Boolean.TRUE.equals(body.get("is_roadmap_item"));
             Map<String, Object> row = jdbc.queryForMap(
-                "INSERT INTO features (product_id, epic_id, code, name, owner_id, status, priority, target_release) " +
-                "VALUES (?,?,?,?,?,?,?,?) RETURNING *",
+                "INSERT INTO features (product_id, epic_id, code, name, owner_id, status, priority, target_release, is_roadmap_item) " +
+                "VALUES (?,?,?,?,?,?,?,?,?) RETURNING *",
                 toLong(body.get("product_id")),
                 toLong(body.get("epic_id")),
                 body.get("code"),
@@ -67,8 +68,10 @@ public class FeatureController {
                 toLong(body.get("owner_id")),
                 orDefault(body.get("status"), "not_started"),
                 orDefault(body.get("priority"), "medium"),
-                body.get("target_release")
+                body.get("target_release"),
+                isRoadmapItem
             );
+            if (isRoadmapItem) syncRoadmapFromFeature(row);
             return ResponseEntity.status(201).body(row);
         } catch (Exception e) {
             String msg = e.getMessage() != null ? e.getMessage() : "";
@@ -81,14 +84,42 @@ public class FeatureController {
 
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        boolean isRoadmapItem = Boolean.TRUE.equals(body.get("is_roadmap_item"));
         int updated = jdbc.update(
-            "UPDATE features SET name=?, epic_id=?, owner_id=?, status=?, priority=?, target_release=? WHERE id=?",
+            "UPDATE features SET name=?, epic_id=?, owner_id=?, status=?, priority=?, target_release=?, is_roadmap_item=? WHERE id=?",
             body.get("name"), toLong(body.get("epic_id")), toLong(body.get("owner_id")),
-            body.get("status"), body.get("priority"), body.get("target_release"), id
+            body.get("status"), body.get("priority"), body.get("target_release"), isRoadmapItem, id
         );
         if (updated == 0) return ResponseEntity.status(404).body(Map.of("error", "Feature tidak ditemukan"));
         Map<String, Object> row = jdbc.queryForMap("SELECT * FROM features WHERE id=?", id);
+        if (isRoadmapItem) {
+            syncRoadmapFromFeature(row);
+        } else {
+            jdbc.update("DELETE FROM product_roadmap WHERE source_feature_id=?", id);
+        }
         return ResponseEntity.ok(row);
+    }
+
+    // Keeps the linked product_roadmap row (created from a feature flagged as
+    // "is_roadmap_item") in sync with the feature's name/version. Other roadmap
+    // fields (status, description, sort_order, month_release_target) are owned
+    // by the Roadmap tab and left untouched on subsequent syncs.
+    private void syncRoadmapFromFeature(Map<String, Object> feature) {
+        Long featureId = toLong(feature.get("id"));
+        List<Map<String, Object>> existing = jdbc.queryForList(
+            "SELECT id FROM product_roadmap WHERE source_feature_id=?", featureId);
+        if (existing.isEmpty()) {
+            jdbc.update(
+                "INSERT INTO product_roadmap (product_id, feature_name, status, product_version, sort_order, source_feature_id) " +
+                "VALUES (?,?,?,?,0,?)",
+                feature.get("product_id"), feature.get("name"), "planned", feature.get("target_release"), featureId
+            );
+        } else {
+            jdbc.update(
+                "UPDATE product_roadmap SET feature_name=?, product_version=? WHERE source_feature_id=?",
+                feature.get("name"), feature.get("target_release"), featureId
+            );
+        }
     }
 
     @DeleteMapping("/{id}")

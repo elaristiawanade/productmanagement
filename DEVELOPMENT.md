@@ -137,6 +137,10 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v3.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v4.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v5.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v6.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v7.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v8.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v9.sql"
 ```
 
 ---
@@ -152,7 +156,11 @@ product-tracker/
 │       ├── migration_v2.sql
 │       ├── migration_v3.sql
 │       ├── migration_v4.sql
-│       └── migration_v5.sql
+│       ├── migration_v5.sql
+│       ├── migration_v6.sql
+│       ├── migration_v7.sql
+│       ├── migration_v8.sql
+│       └── migration_v9.sql
 ├── backend-java/          # Spring Boot API (port 4000)
 │   ├── src/
 │   ├── pom.xml

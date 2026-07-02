@@ -64,15 +64,16 @@ public class RoadmapController {
         try {
             Map<String, Object> row = jdbc.queryForMap(
                 "INSERT INTO product_roadmap " +
-                "  (product_id, feature_name, description, status, product_version, sort_order, created_by) " +
-                "VALUES (?,?,?,?,?,?,?) RETURNING *",
+                "  (product_id, feature_name, description, status, product_version, sort_order, created_by, month_release_target) " +
+                "VALUES (?,?,?,?,?,?,?,?) RETURNING *",
                 toLong(body.get("product_id")),
                 body.get("feature_name"),
                 body.get("description"),
                 orDefault(body.get("status"), "planned"),
                 body.get("product_version"),
                 body.get("sort_order") != null ? toLong(body.get("sort_order")) : 0L,
-                actorId
+                actorId,
+                toSqlDate(body.get("month_release_target"))
             );
             return ResponseEntity.status(201).body(row);
         } catch (Exception e) {
@@ -93,13 +94,14 @@ public class RoadmapController {
         }
         int updated = jdbc.update(
             "UPDATE product_roadmap " +
-            "SET feature_name=?, description=?, status=?, product_version=?, sort_order=? " +
+            "SET feature_name=?, description=?, status=?, product_version=?, sort_order=?, month_release_target=? " +
             "WHERE id=?",
             body.get("feature_name"),
             body.get("description"),
             body.get("status"),
             body.get("product_version"),
             body.get("sort_order") != null ? toLong(body.get("sort_order")) : 0L,
+            toSqlDate(body.get("month_release_target")),
             id
         );
         if (updated == 0) return ResponseEntity.status(404).body(Map.of("error", "Item tidak ditemukan"));
@@ -147,5 +149,16 @@ public class RoadmapController {
 
     private Object orDefault(Object value, Object defaultValue) {
         return value != null ? value : defaultValue;
+    }
+
+    private java.sql.Date toSqlDate(Object v) {
+        if (v == null) return null;
+        if (v instanceof String) {
+            String s = (String) v;
+            if (s.isBlank()) return null;
+            try { return java.sql.Date.valueOf(s.length() > 10 ? s.substring(0, 10) : s); }
+            catch (Exception e) { return null; }
+        }
+        return null;
     }
 }

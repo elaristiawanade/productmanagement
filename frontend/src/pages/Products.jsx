@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Plus, Pencil, Trash2, Package, ExternalLink, ChevronDown, ChevronUp, Map } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
 import client from '../api/client';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
@@ -32,12 +33,13 @@ function RoadmapStatusBadge({ status }) {
 // ─── RoadmapForm ──────────────────────────────────────────────────────────────
 function RoadmapForm({ item, products, defaultProductId, onSave, onClose }) {
   const [form, setForm] = useState({
-    product_id:      item?.product_id      || defaultProductId || '',
-    feature_name:    item?.feature_name    || '',
-    description:     item?.description     || '',
-    status:          item?.status          || 'planned',
-    product_version: item?.product_version || '',
-    sort_order:      item?.sort_order      || 0,
+    product_id:            item?.product_id            || defaultProductId || '',
+    feature_name:          item?.feature_name          || '',
+    description:           item?.description           || '',
+    status:                item?.status                || 'planned',
+    product_version:       item?.product_version        || '',
+    sort_order:            item?.sort_order            || 0,
+    month_release_target:  item?.month_release_target  ? item.month_release_target.split('T')[0].slice(0, 7) : '',
   });
   const [saving, setSaving] = useState(false);
 
@@ -46,11 +48,12 @@ function RoadmapForm({ item, products, defaultProductId, onSave, onClose }) {
     if (!form.feature_name.trim()) { toast.error('Nama fitur wajib diisi'); return; }
     setSaving(true);
     try {
+      const payload = { ...form, month_release_target: form.month_release_target ? `${form.month_release_target}-01` : null };
       if (item?.id) {
-        await client.put(`/roadmap/${item.id}`, form);
+        await client.put(`/roadmap/${item.id}`, payload);
         toast.success('Feature diperbarui');
       } else {
-        await client.post('/roadmap', form);
+        await client.post('/roadmap', payload);
         toast.success('Feature ditambahkan ke roadmap');
       }
       onSave();
@@ -95,6 +98,11 @@ function RoadmapForm({ item, products, defaultProductId, onSave, onClose }) {
             onChange={e => setForm(f => ({ ...f, product_version: e.target.value }))}
             placeholder="contoh: v1.0, v2.3" />
         </div>
+      </div>
+      <div>
+        <label className="label">Month Release Target</label>
+        <input type="month" className="input" value={form.month_release_target}
+          onChange={e => setForm(f => ({ ...f, month_release_target: e.target.value }))} />
       </div>
       <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
         <button type="button" className="btn-secondary" onClick={onClose}>Batal</button>
@@ -384,6 +392,11 @@ export default function Products() {
                                 <div key={f.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 rounded-lg text-sm">
                                   <span className="font-mono text-xs text-slate-400 w-14 shrink-0">{f.code}</span>
                                   <span className="flex-1 font-medium text-slate-700 truncate">{f.name}</span>
+                                  {f.is_roadmap_item && (
+                                    <span className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border bg-indigo-50 text-indigo-600 border-indigo-200" title="Tampil di Roadmap">
+                                      <Map className="w-3 h-3" /> Roadmap
+                                    </span>
+                                  )}
                                   <StatusBadge status={f.status} size="xs" />
                                   <PriorityBadge priority={f.priority} />
                                   <span className="text-xs text-slate-400">{f.target_release || '—'}</span>
@@ -467,6 +480,7 @@ export default function Products() {
                     <th className="text-left px-4 py-3">Produk</th>
                     <th className="text-center px-4 py-3">Status</th>
                     <th className="text-center px-4 py-3">Versi</th>
+                    <th className="text-center px-4 py-3">Target Rilis</th>
                     <th className="text-left px-4 py-3">Deskripsi</th>
                     <th className="text-center px-4 py-3">Aksi</th>
                   </tr>
@@ -474,7 +488,7 @@ export default function Products() {
                 <tbody>
                   {filteredRoadmap.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="text-center py-12 text-slate-400">
+                      <td colSpan={7} className="text-center py-12 text-slate-400">
                         <Map className="w-8 h-8 mx-auto mb-2 opacity-40" />
                         <p>Belum ada feature di roadmap</p>
                       </td>
@@ -502,6 +516,11 @@ export default function Products() {
                       <td className="px-4 py-3 text-center">
                         {item.product_version
                           ? <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">{item.product_version}</span>
+                          : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {item.month_release_target
+                          ? <span className="text-xs text-slate-600">{format(parseISO(item.month_release_target), 'MMMM yyyy')}</span>
                           : <span className="text-slate-300">—</span>}
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-500 max-w-[260px] truncate">
@@ -590,7 +609,7 @@ function EpicForm({ epic, productId, onSave, onClose }) {
 
 // ─── FeatureForm ──────────────────────────────────────────────────────────────
 function FeatureForm({ feature, productId, users, epics, onSave, onClose }) {
-  const [form, setForm] = useState({ product_id: feature?.product_id || productId, epic_id: feature?.epic_id || '', code: feature?.code || '', name: feature?.name || '', owner_id: feature?.owner_id || '', status: feature?.status || 'not_started', priority: feature?.priority || 'medium', target_release: feature?.target_release || '' });
+  const [form, setForm] = useState({ product_id: feature?.product_id || productId, epic_id: feature?.epic_id || '', code: feature?.code || '', name: feature?.name || '', owner_id: feature?.owner_id || '', status: feature?.status || 'not_started', priority: feature?.priority || 'medium', target_release: feature?.target_release || '', is_roadmap_item: feature?.is_roadmap_item || false });
   const [saving, setSaving] = useState(false);
   const save = async (e) => {
     e.preventDefault(); setSaving(true);
@@ -609,6 +628,11 @@ function FeatureForm({ feature, productId, users, epics, onSave, onClose }) {
       <div><label className="label">Status</label><select className="select" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>{['not_started','in_development','testing','released','on_hold'].map(s => <option key={s} value={s}>{s.replace('_',' ')}</option>)}</select></div>
       <div><label className="label">Prioritas</label><select className="select" value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>{['critical','high','medium','low'].map(p => <option key={p} value={p}>{p}</option>)}</select></div>
       <div><label className="label">Target Release</label><input className="input" value={form.target_release} onChange={e => setForm(f => ({ ...f, target_release: e.target.value }))} placeholder="v1.0" /></div>
+      <div className="col-span-2 flex items-center gap-2 pt-1">
+        <input id="is_roadmap_item" type="checkbox" className="w-4 h-4 rounded accent-indigo-600" checked={form.is_roadmap_item}
+          onChange={e => setForm(f => ({ ...f, is_roadmap_item: e.target.checked }))} />
+        <label htmlFor="is_roadmap_item" className="text-sm text-slate-600 cursor-pointer">Tampilkan feature ini di Roadmap</label>
+      </div>
       <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-slate-100"><button type="button" className="btn-secondary" onClick={onClose}>Batal</button><button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Menyimpan...' : (feature?.id ? 'Perbarui' : 'Buat')}</button></div>
     </form>
   );
