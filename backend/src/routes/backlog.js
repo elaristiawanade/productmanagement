@@ -35,12 +35,12 @@ router.get('/', async (req, res) => {
   const params  = [];
   let i = 1;
 
-  if (product_id)  { filters.push(`bi.product_id  = $${i++}`);       params.push(product_id); }
-  if (sprint_id)   { filters.push(`bi.sprint_id   = $${i++}`);       params.push(sprint_id); }
-  if (status)      { filters.push(`bi.status       = ANY($${i++})`); params.push(status.split(',')); }
-  if (priority)    { filters.push(`bi.priority     = ANY($${i++})`); params.push(priority.split(',')); }
-  if (type)        { filters.push(`bi.type         = ANY($${i++})`); params.push(type.split(',')); }
-  if (assignee_id) { filters.push(`bi.assignee_id  = $${i++}`);       params.push(assignee_id); }
+  if (product_id)  { filters.push(`bi.product_id  = ANY($${i++}::int[])`); params.push(String(product_id).split(',')); }
+  if (sprint_id)   { filters.push(`bi.sprint_id   = $${i++}`);             params.push(sprint_id); }
+  if (status)      { filters.push(`bi.status       = ANY($${i++})`);       params.push(status.split(',')); }
+  if (priority)    { filters.push(`bi.priority     = ANY($${i++})`);       params.push(priority.split(',')); }
+  if (type)        { filters.push(`bi.type         = ANY($${i++})`);       params.push(type.split(',')); }
+  if (assignee_id) { filters.push(`bi.assignee_id  = ANY($${i++}::int[])`); params.push(String(assignee_id).split(',')); }
   if (search)      { filters.push(`(bi.title ILIKE $${i++} OR bi.code ILIKE $${i-1})`); params.push(`%${search}%`); }
 
   const where  = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
