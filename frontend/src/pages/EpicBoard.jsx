@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { ChevronRight, ChevronDown, Search, ExternalLink, AlertCircle, Plus, Layers, X } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { ChevronRight, ChevronDown, Search, ExternalLink, AlertCircle, Plus, Layers, Package, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import client from '../api/client';
@@ -277,6 +277,82 @@ function EpicRow({ epic }) {
   );
 }
 
+// ─── Product row (top level, groups epics) ────────────────────────────────────
+
+function ProductRow({ product, epics: providedEpics }) {
+  const controlled = Array.isArray(providedEpics);
+  const [open,    setOpen]    = useState(controlled);
+  const [epics,   setEpics]   = useState(providedEpics || []);
+  const [loading, setLoading] = useState(false);
+  const [loaded,  setLoaded]  = useState(controlled);
+
+  // Filtered mode: parent already fetched & grouped matching epics — keep in sync and force open.
+  useEffect(() => {
+    if (controlled) {
+      setEpics(providedEpics);
+      setLoaded(true);
+      setOpen(true);
+    }
+  }, [controlled, providedEpics]);
+
+  const toggle = async () => {
+    if (controlled) { setOpen(v => !v); return; }
+    if (!loaded && !open) {
+      setLoading(true);
+      try {
+        const res = await client.get('/backlog', { params: { type: 'epic', product_id: product.id, limit: 200 } });
+        setEpics(res.data.items || []);
+      } catch { setEpics([]); }
+      finally { setLoading(false); setLoaded(true); }
+    }
+    setOpen(v => !v);
+  };
+
+  const color = product.color || '#6366f1';
+
+  return (
+    <div className="card overflow-hidden shadow-sm">
+      {/* Product header */}
+      <div
+        className={`flex items-center gap-3 px-4 py-3.5 cursor-pointer hover:bg-slate-50 transition-colors
+          ${open ? 'border-b border-slate-100' : ''}`}
+        onClick={toggle}>
+        <div className="w-5 h-5 flex items-center justify-center shrink-0" style={{ color }}>
+          {loading
+            ? <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: color, borderTopColor: 'transparent' }} />
+            : open
+              ? <ChevronDown className="w-4 h-4" />
+              : <ChevronRight className="w-4 h-4" />}
+        </div>
+        <Package className="w-4 h-4 shrink-0" style={{ color }} />
+        <span className="text-base font-bold text-slate-800 flex-1 truncate">{product.name}</span>
+        {product.code && <span className="font-mono text-xs text-slate-400 shrink-0">{product.code}</span>}
+        {loaded && (
+          <span className="text-xs px-2 py-0.5 rounded-full shrink-0 font-medium"
+            style={{ backgroundColor: color + '20', color }}>
+            {epics.length} epic{epics.length !== 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+
+      {/* Product expanded body — Epics */}
+      {open && (
+        <div className="px-4 py-4 bg-slate-50/30">
+          {epics.length === 0 ? (
+            <div className="py-8 text-center border-2 border-dashed border-slate-200 rounded-xl">
+              <p className="text-sm text-slate-400">Belum ada epic untuk produk ini</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {epics.map(epic => <EpicRow key={epic.id} epic={epic} />)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Add Epic Modal ───────────────────────────────────────────────────────────
 
 const EMPTY_FORM = { product_id: '', title: '', priority: 'medium' };
@@ -362,32 +438,54 @@ function AddEpicModal({ products, onClose, onSaved }) {
 
 export default function EpicBoard() {
   const { hasRole } = useAuth();
-  const [products,       setProducts]       = useState([]);
-  const [epics,          setEpics]          = useState([]);
-  const [loading,        setLoading]        = useState(true);
-  const [filterProduct,  setFilterProduct]  = useState('');
-  const [filterStatus,   setFilterStatus]   = useState('');
-  const [search,         setSearch]         = useState('');
-  const [showAddModal,   setShowAddModal]   = useState(false);
+  const [products,        setProducts]        = useState([]);
+  const [loadingProducts, setLoadingProducts]  = useState(true);
+  const [filterStatus,    setFilterStatus]     = useState('');
+  const [search,          setSearch]           = useState('');
+  const [showAddModal,    setShowAddModal]     = useState(false);
+  const [filteredEpics,   setFilteredEpics]    = useState(null); // non-null while search/status filter is active
+  const [filteredLoading, setFilteredLoading]  = useState(false);
 
-  useEffect(() => {
-    client.get('/products').then(r => setProducts(r.data || [])).catch(() => {});
+  const loadProducts = useCallback(async () => {
+    setLoadingProducts(true);
+    try {
+      const res = await client.get('/products');
+      setProducts(res.data || []);
+    } catch { setProducts([]); }
+    finally { setLoadingProducts(false); }
   }, []);
 
-  const loadEpics = useCallback(async () => {
-    setLoading(true);
+  useEffect(() => { loadProducts(); }, [loadProducts]);
+
+  const filtersActive = !!(search.trim() || filterStatus);
+
+  // When a search/status filter is active, fetch matching epics across all products up front
+  // (instead of relying on the user expanding every product) and group them for display below.
+  const loadFilteredEpics = useCallback(async () => {
+    if (!filtersActive) { setFilteredEpics(null); return; }
+    setFilteredLoading(true);
     try {
       const params = { type: 'epic', limit: 200 };
-      if (filterProduct) params.product_id = filterProduct;
-      if (filterStatus)  params.status     = filterStatus;
-      if (search.trim()) params.search     = search.trim();
+      if (filterStatus)  params.status = filterStatus;
+      if (search.trim()) params.search = search.trim();
       const res = await client.get('/backlog', { params });
-      setEpics(res.data.items || []);
-    } catch { setEpics([]); }
-    finally { setLoading(false); }
-  }, [filterProduct, filterStatus, search]);
+      setFilteredEpics(res.data.items || []);
+    } catch { setFilteredEpics([]); }
+    finally { setFilteredLoading(false); }
+  }, [filtersActive, filterStatus, search]);
 
-  useEffect(() => { loadEpics(); }, [loadEpics]);
+  useEffect(() => { loadFilteredEpics(); }, [loadFilteredEpics]);
+
+  const reload = () => { loadProducts(); loadFilteredEpics(); };
+
+  const groupedFiltered = useMemo(() => {
+    if (!filteredEpics) return null;
+    return products
+      .map(product => ({ product, epics: filteredEpics.filter(e => e.product_id === product.id) }))
+      .filter(g => g.epics.length > 0);
+  }, [filteredEpics, products]);
+
+  const loading = filtersActive ? (filteredLoading || filteredEpics === null) : loadingProducts;
 
   return (
     <div className="space-y-4">
@@ -398,7 +496,7 @@ export default function EpicBoard() {
             <Layers className="w-5 h-5 text-purple-500" />
             Epic Board
           </h1>
-          <p className="text-sm text-slate-500 mt-0.5">Hierarki Epic → Story → Task &amp; Bug</p>
+          <p className="text-sm text-slate-500 mt-0.5">Hierarki Produk → Epic → Story → Task &amp; Bug</p>
         </div>
         {hasRole('super_admin', 'manager', 'po', 'developer') && (
           <button onClick={() => setShowAddModal(true)} className="btn-primary flex items-center gap-1.5">
@@ -415,37 +513,42 @@ export default function EpicBoard() {
             className="input pl-9" placeholder="Cari epic..."
             value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        <select className="select w-auto min-w-[140px]"
-          value={filterProduct} onChange={e => setFilterProduct(e.target.value)}>
-          <option value="">Semua Produk</option>
-          {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
         <select className="select w-auto min-w-[130px]"
           value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
           <option value="">Semua Status</option>
           {STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
         </select>
-        <span className="text-xs text-slate-400 ml-auto">{epics.length} epic</span>
+        <span className="text-xs text-slate-400 ml-auto">
+          {filtersActive ? `${filteredEpics?.length || 0} epic ditemukan` : `${products.length} produk`}
+        </span>
       </div>
 
-      {/* Epic list */}
+      {/* Product / Epic tree */}
       {loading ? (
         <div className="flex items-center justify-center py-16">
           <div className="w-8 h-8 border-3 border-purple-500 border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : epics.length === 0 ? (
+      ) : filtersActive ? (
+        groupedFiltered.length === 0 ? (
+          <div className="card py-16 text-center">
+            <Layers className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+            <p className="text-slate-400 font-medium">Tidak ada epic ditemukan</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {groupedFiltered.map(({ product, epics }) => (
+              <ProductRow key={product.id} product={product} epics={epics} />
+            ))}
+          </div>
+        )
+      ) : products.length === 0 ? (
         <div className="card py-16 text-center">
-          <Layers className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-          <p className="text-slate-400 font-medium">Tidak ada epic ditemukan</p>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="mt-3 text-sm text-indigo-600 hover:underline">
-            + Tambah epic baru
-          </button>
+          <Package className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+          <p className="text-slate-400 font-medium">Belum ada produk</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {epics.map(epic => <EpicRow key={epic.id} epic={epic} />)}
+          {products.map(product => <ProductRow key={product.id} product={product} />)}
         </div>
       )}
 
@@ -453,7 +556,7 @@ export default function EpicBoard() {
         <AddEpicModal
           products={products}
           onClose={() => setShowAddModal(false)}
-          onSaved={loadEpics}
+          onSaved={reload}
         />
       )}
     </div>

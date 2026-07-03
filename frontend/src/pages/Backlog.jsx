@@ -870,6 +870,7 @@ export default function Backlog() {
           {[
             { label: 'Backlog',  icon: '📋', filterKey: 'status', filterVal: 'backlog' },
             { label: 'Story',    icon: '📖', filterKey: 'type',   filterVal: 'story'   },
+            { label: 'Task',     icon: '🔧', filterKey: 'type',   filterVal: 'task'    },
             { label: 'Epic',     icon: '🗂️', filterKey: 'type',   filterVal: 'epic'    },
             { label: 'Selesai',  icon: '✅', filterKey: 'status', filterVal: 'done'    },
           ].map(({ label, icon, filterKey, filterVal }) => {
