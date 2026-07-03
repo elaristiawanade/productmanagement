@@ -84,16 +84,10 @@ function SprintForm({ sprint, productId, onSave, onClose }) {
         </select>
       </div>
       {sprint?.id && (
-        <>
-          <div>
-            <label className="label">Committed Points</label>
-            <input type="number" className="input" min="0" value={form.committed_points} onChange={e => setForm(f => ({ ...f, committed_points: +e.target.value }))} />
-          </div>
-          <div>
-            <label className="label">Completed Points</label>
-            <input type="number" className="input" min="0" value={form.completed_points} onChange={e => setForm(f => ({ ...f, completed_points: +e.target.value }))} />
-          </div>
-        </>
+        <div>
+          <label className="label">Committed Points</label>
+          <input type="number" className="input" min="0" value={form.committed_points} onChange={e => setForm(f => ({ ...f, committed_points: +e.target.value }))} />
+        </div>
       )}
       <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-slate-100">
         <button type="button" className="btn-secondary" onClick={onClose}>Batal</button>
@@ -164,7 +158,10 @@ export default function Sprints() {
     }
   };
 
-  const pct = selSprint ? Math.round((selSprint.completed_points / (selSprint.committed_points || 1)) * 100) : 0;
+  const sprintItems = sprintDetail?.items || [];
+  const totalPoints = sprintItems.reduce((sum, i) => sum + (i.story_points || 0), 0);
+  const donePoints  = sprintItems.filter(i => i.status === 'done').reduce((sum, i) => sum + (i.story_points || 0), 0);
+  const pct = totalPoints > 0 ? Math.round((donePoints / totalPoints) * 100) : 0;
 
   const TYPE_COLORS = { story: 'bg-blue-50 text-blue-700', bug: 'bg-red-50 text-red-700', task: 'bg-slate-50 text-slate-600', epic: 'bg-purple-50 text-purple-700' };
 
@@ -226,7 +223,7 @@ export default function Sprints() {
                 )}
                 <div className="flex items-center gap-2 text-slate-600">
                   <Target className="w-4 h-4 text-slate-400" />
-                  <span>{selSprint.committed_points} pts committed · {selSprint.completed_points} done</span>
+                  <span>{selSprint.committed_points} pts committed · {donePoints}/{totalPoints} done</span>
                 </div>
                 <div className="flex items-center gap-2 text-slate-600">
                   <Layers className="w-4 h-4 text-slate-400" />
