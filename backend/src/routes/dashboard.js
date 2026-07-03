@@ -79,10 +79,45 @@ router.get('/workload', async (req, res) => {
       FROM users u
       LEFT JOIN backlog_items bi ON bi.assignee_id = u.id
         AND bi.status NOT IN ('done','backlog')
+        AND bi.type NOT IN ('story','epic')
+      LEFT JOIN roles r ON r.id = u.role_id
+      WHERE u.is_active = true
+        AND r.name IN ('po', 'developer')
+      GROUP BY u.id, u.name, u.avatar_color, r.display_name
+      ORDER BY total_assigned DESC
+    `);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/dashboard/occupation — capacity (hours) per user, active sprint + independent work
+router.get('/occupation', async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT
+        u.id, u.name, u.avatar_color,
+        r.display_name AS role,
+        COALESCE(SUM(CASE WHEN bi.type = 'independent' THEN 0 ELSE bi.story_points END), 0) AS total_sp,
+        COALESCE(SUM(CASE WHEN bi.type = 'independent'
+                          THEN COALESCE(bi.estimated_hours, 0)
+                          ELSE bi.story_points * 6 END), 0) AS total_hours,
+        COUNT(bi.id)                                    AS total_items,
+        COUNT(CASE WHEN bi.status = 'done' THEN 1 END) AS done_items
+      FROM users u
+      LEFT JOIN backlog_items bi ON bi.assignee_id = u.id
+        AND (
+          bi.sprint_id IN (SELECT id FROM sprints WHERE status = 'active')
+          OR bi.type = 'independent'
+        )
+        AND bi.status NOT IN ('backlog', 'done')
+        AND bi.type NOT IN ('story','epic')
       LEFT JOIN roles r ON r.id = u.role_id
       WHERE u.is_active = true
       GROUP BY u.id, u.name, u.avatar_color, r.display_name
-      ORDER BY total_assigned DESC
+      ORDER BY total_hours DESC
     `);
     res.json(rows);
   } catch (err) {

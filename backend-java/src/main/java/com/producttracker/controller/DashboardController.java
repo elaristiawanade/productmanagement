@@ -106,6 +106,7 @@ public class DashboardController {
             "    OR bi.type = 'independent' " +
             "  ) " +
             "  AND bi.status NOT IN ('backlog', 'done') " +
+            "  AND bi.type NOT IN ('story','epic') " +
             "LEFT JOIN roles r ON r.id = u.role_id " +
             "WHERE u.is_active = true " +
             "GROUP BY u.id, u.name, u.avatar_color, r.display_name " +
