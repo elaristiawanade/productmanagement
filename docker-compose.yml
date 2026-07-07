@@ -47,18 +47,6 @@ services:
       db:
         condition: service_healthy
 
-  office-server:
-    build:
-      context: ./office-server
-      dockerfile: Dockerfile
-    container_name: pt_office_server
-    restart: unless-stopped
-    volumes:
-      - office_uploads_data:/app/uploads
-    environment:
-      SERVER_PORT: 4100
-      UPLOAD_DIR: /app/uploads
-
   frontend:
     build:
       context: ./frontend
@@ -75,4 +63,3 @@ services:
 volumes:
   pg_data:
   uploads_data:
-  office_uploads_data:
