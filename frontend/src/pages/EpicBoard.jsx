@@ -6,6 +6,7 @@ import client from '../api/client';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import { useAuth } from '../context/AuthContext';
+import { renderWithLinks } from '../utils/linkify';
 
 const STATUSES = ['backlog','todo','in_progress','in_review','done','blocked'];
 
@@ -141,7 +142,7 @@ function StoryRow({ story }) {
               {story.notes && (
                 <div>
                   <p className="font-semibold text-slate-500 mb-1">Notes</p>
-                  <p className="text-slate-600 whitespace-pre-line leading-relaxed">{story.notes}</p>
+                  <p className="text-slate-600 whitespace-pre-line leading-relaxed">{renderWithLinks(story.notes)}</p>
                 </div>
               )}
             </div>
@@ -251,7 +252,7 @@ function EpicRow({ epic }) {
               {epic.notes && (
                 <div>
                   <p className="font-semibold text-purple-700 mb-1.5">Notes</p>
-                  <p className="text-slate-600 whitespace-pre-line leading-relaxed">{epic.notes}</p>
+                  <p className="text-slate-600 whitespace-pre-line leading-relaxed">{renderWithLinks(epic.notes)}</p>
                 </div>
               )}
             </div>

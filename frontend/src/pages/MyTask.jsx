@@ -10,6 +10,7 @@ import client from '../api/client';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import { useAuth } from '../context/AuthContext';
+import { renderWithLinks } from '../utils/linkify';
 import toast from 'react-hot-toast';
 
 const STATUSES   = ['backlog','todo','in_progress','in_review','done','blocked'];
@@ -151,7 +152,7 @@ function TaskPanel({ item, onClose, onStatusChange, onMarkDone }) {
             <div>
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Catatan</p>
               <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed bg-slate-50 rounded-xl p-3 border border-slate-100">
-                {item.notes}
+                {renderWithLinks(item.notes)}
               </p>
             </div>
           )}

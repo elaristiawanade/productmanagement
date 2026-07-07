@@ -5,6 +5,8 @@ import client from '../api/client';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
+import LinkInsertButton from '../components/LinkInsertButton';
+import { renderWithLinks } from '../utils/linkify';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { format, parseISO, formatDistanceToNow } from 'date-fns';
@@ -93,7 +95,7 @@ function renderComment(text) {
         </span>
       );
     }
-    return <span key={i}>{part}</span>;
+    return <span key={i}>{renderWithLinks(part, `c${i}`)}</span>;
   });
 }
 
@@ -197,6 +199,20 @@ function ActivitySection({ itemId, users = [] }) {
     }
   };
 
+  const insertLink = (snippet) => {
+    const el  = inputRef.current;
+    const pos = el ? (el.selectionStart ?? comment.length) : comment.length;
+    const before = comment.slice(0, pos);
+    const after  = comment.slice(pos);
+    const next = `${before}${snippet}${after}`;
+    setComment(next);
+    setTimeout(() => {
+      const newPos = (before + snippet).length;
+      el?.focus();
+      el?.setSelectionRange(newPos, newPos);
+    }, 0);
+  };
+
   return (
     <div className="border-t border-slate-100 pt-4">
       <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
@@ -271,6 +287,7 @@ function ActivitySection({ itemId, users = [] }) {
           onKeyDown={handleKeyDown}
           onBlur={() => setTimeout(() => setMentionOpen(false), 150)}
         />
+        <LinkInsertButton onInsert={insertLink} />
         <button
           type="button"
           className="btn-primary py-1.5 px-3"
@@ -367,6 +384,21 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
   const [attachments, setAttachments] = useState([]);
   const [uploading,   setUploading]   = useState(false);
   const fileInputRef = useRef(null);
+  const notesRef     = useRef(null);
+
+  const insertNotesLink = (snippet) => {
+    const el  = notesRef.current;
+    const pos = el ? (el.selectionStart ?? form.notes.length) : form.notes.length;
+    const before = form.notes.slice(0, pos);
+    const after  = form.notes.slice(pos);
+    const next = `${before}${snippet}${after}`;
+    setForm(f => ({ ...f, notes: next }));
+    setTimeout(() => {
+      const newPos = (before + snippet).length;
+      el?.focus();
+      el?.setSelectionRange(newPos, newPos);
+    }, 0);
+  };
 
   const filteredSprints  = sprints.filter(s => s.product_id === +form.product_id);
   const filteredFeatures = features.filter(f => +f.product_id === +form.product_id);
@@ -635,8 +667,13 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
         </F>
       </div>
       <div className="col-span-2">
-        <F label="Catatan">
-          <textarea className="input h-16 resize-none" value={form.notes}
+        <F label={
+          <span className="flex items-center justify-between w-full">
+            Catatan
+            <LinkInsertButton onInsert={insertNotesLink} />
+          </span>
+        }>
+          <textarea ref={notesRef} className="input h-16 resize-none" value={form.notes}
             onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
         </F>
       </div>
