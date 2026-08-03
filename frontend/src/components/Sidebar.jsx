@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, ListTodo, Zap, Package, Users, TestTube2, FileDown, ClipboardList, Layers, CheckSquare, Settings
+  LayoutDashboard, ListTodo, Zap, Package, Users, TestTube2, FileDown, ClipboardList, Layers, CheckSquare, Settings, Crown
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -13,6 +13,10 @@ const NAV_MAIN = [
   { to: '/products', icon: Package,         label: 'Products'     },
   { to: '/standup',  icon: ClipboardList,   label: 'Standup'      },
   { to: '/qa',       icon: TestTube2,       label: 'QA Module'    },
+  // Visible to anyone with a department assigned (view or write) or Super Admin —
+  // not a plain `roles` check, since access here is department-scoped, not role-scoped.
+  { to: '/c-level',  icon: Crown,           label: 'C-Level Dashboard',
+    show: (user, hasRole) => !!user?.department || hasRole('super_admin') },
   { to: '/users',    icon: Users,           label: 'Users & Roles', roles: ['super_admin','manager'] },
 ];
 
@@ -41,8 +45,9 @@ export default function Sidebar({ collapsed, onToggle }) {
 
       {/* Main Nav */}
       <nav className="flex-1 py-4 space-y-0.5 px-2 overflow-y-auto overflow-x-hidden">
-        {NAV_MAIN.map(({ to, icon: Icon, label, roles }) => {
+        {NAV_MAIN.map(({ to, icon: Icon, label, roles, show }) => {
           if (roles && !hasRole(...roles)) return null;
+          if (show && !show(user, hasRole)) return null;
           return (
             <NavLink key={to} to={to} end={to === '/'}
               className={({ isActive }) =>

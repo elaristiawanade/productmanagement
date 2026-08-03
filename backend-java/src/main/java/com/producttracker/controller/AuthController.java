@@ -64,6 +64,7 @@ public class AuthController {
         userDto.put("roleDisplay", user.get("role_display"));
         userDto.put("permissions", user.get("permissions"));
         userDto.put("avatarColor", user.get("avatar_color"));
+        userDto.put("department", user.get("department"));
 
         return ResponseEntity.ok(Map.of("token", token, "user", userDto));
     }
@@ -79,6 +80,7 @@ public class AuthController {
         dto.put("role", u.get("role_name"));
         dto.put("permissions", u.get("permissions"));
         dto.put("avatarColor", u.get("avatar_color"));
+        dto.put("department", u.get("department"));
         return ResponseEntity.ok(dto);
     }
 

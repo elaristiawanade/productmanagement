@@ -7,14 +7,18 @@ import toast from 'react-hot-toast';
 import { format, parseISO } from 'date-fns';
 
 const ROLE_COLORS = {
-  super_admin: 'bg-purple-100 text-purple-700',
-  manager:     'bg-blue-100 text-blue-700',
-  po:          'bg-indigo-100 text-indigo-700',
-  developer:   'bg-emerald-100 text-emerald-700',
-  qa:          'bg-amber-100 text-amber-700',
+  super_admin:  'bg-purple-100 text-purple-700',
+  manager:      'bg-blue-100 text-blue-700',
+  po:           'bg-indigo-100 text-indigo-700',
+  developer:    'bg-emerald-100 text-emerald-700',
+  qa:           'bg-amber-100 text-amber-700',
+  sme:          'bg-cyan-100 text-cyan-700',
+  commissioner: 'bg-rose-100 text-rose-700',
 };
 
 const AVATAR_COLORS = ['#4F46E5','#0EA5E9','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899'];
+
+const DEPARTMENTS = ['HC', 'Sales', 'PMG', 'IT', 'Finance', 'Product'];
 
 // ─── UserForm ─────────────────────────────────────────────────────────────────
 function UserForm({ user, roles, products, onSave, onClose }) {
@@ -23,6 +27,7 @@ function UserForm({ user, roles, products, onSave, onClose }) {
     password: '', role_id: user?.role_id || '',
     avatar_color: user?.avatar_color || '#4F46E5',
     is_active: user?.is_active ?? true,
+    department: user?.department || '',
   });
   const [selectedProducts, setSelectedProducts] = useState(
     () => new Set((user?.products || []).map(p => p.id))
@@ -90,6 +95,17 @@ function UserForm({ user, roles, products, onSave, onClose }) {
           onChange={e => setForm(f => ({ ...f, is_active: e.target.value === 'true' }))}>
           <option value="true">Aktif</option>
           <option value="false">Nonaktif</option>
+        </select>
+      </div>
+      <div className="col-span-2">
+        <label className="label">
+          Departemen (C-Level Dashboard)
+          <span className="text-xs font-normal text-slate-400 ml-1 normal-case">— menentukan scope Leader Notes/Task yang bisa dilihat user ini</span>
+        </label>
+        <select className="select" value={form.department}
+          onChange={e => setForm(f => ({ ...f, department: e.target.value }))}>
+          <option value="">— Tidak ada —</option>
+          {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
       </div>
       <div className="col-span-2">
@@ -445,6 +461,7 @@ export default function Users() {
                     <th className="text-left px-4 py-3">Email</th>
                     <th className="text-center px-4 py-3">Role</th>
                     <th className="text-left px-4 py-3">Produk</th>
+                    <th className="text-center px-4 py-3">Departemen</th>
                     <th className="text-center px-4 py-3">Status</th>
                     <th className="text-center px-4 py-3">Items Aktif</th>
                     <th className="text-left px-4 py-3">Bergabung</th>
@@ -483,6 +500,11 @@ export default function Users() {
                             ))
                           )}
                         </div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {u.department
+                          ? <span className="text-xs font-semibold px-2 py-0.5 rounded border border-slate-300 text-slate-600">{u.department}</span>
+                          : <span className="text-xs text-slate-300">—</span>}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${u.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>

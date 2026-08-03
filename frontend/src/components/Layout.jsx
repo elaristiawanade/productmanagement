@@ -13,6 +13,7 @@ const PAGE_TITLES = {
   '/users':        'Users & Roles',
   '/qa':           'QA Module',
   '/standup':      'Daily Standup',
+  '/c-level':      'C-Level Dashboard',
   '/import/jira':  'Import dari Jira',
   '/profile':      'Profile Saya',
 };
