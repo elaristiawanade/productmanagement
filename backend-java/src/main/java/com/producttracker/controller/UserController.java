@@ -29,7 +29,7 @@ public class UserController {
     @GetMapping
     public ResponseEntity<?> list() {
         List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT u.id, u.name, u.email, u.avatar_color, u.is_active, u.created_at, " +
+            "SELECT u.id, u.name, u.email, u.avatar_color, u.is_active, u.created_at, u.department, " +
             "       r.id AS role_id, r.name AS role_name, r.display_name AS role_display, " +
             "       COUNT(bi.id) AS assigned_items " +
             "FROM users u " +
@@ -95,13 +95,14 @@ public class UserController {
         try {
             String hash = passwordEncoder.encode(password);
             Map<String, Object> row = jdbc.queryForMap(
-                "INSERT INTO users (name, email, password_hash, role_id, avatar_color) " +
-                "VALUES (?,?,?,?,?) RETURNING id, name, email, avatar_color, is_active, created_at",
+                "INSERT INTO users (name, email, password_hash, role_id, avatar_color, department) " +
+                "VALUES (?,?,?,?,?,?) RETURNING id, name, email, avatar_color, is_active, created_at, department",
                 name,
                 email.toLowerCase().trim(),
                 hash,
                 toLong(body.get("role_id")),
-                orDefault(body.get("avatar_color"), "#4F46E5")
+                orDefault(body.get("avatar_color"), "#4F46E5"),
+                body.get("department")
             );
             return ResponseEntity.status(201).body(row);
         } catch (Exception e) {
@@ -118,17 +119,18 @@ public class UserController {
         String email = (String) body.get("email");
         try {
             int updated = jdbc.update(
-                "UPDATE users SET name=?, email=?, role_id=?, avatar_color=?, is_active=? WHERE id=?",
+                "UPDATE users SET name=?, email=?, role_id=?, avatar_color=?, is_active=?, department=? WHERE id=?",
                 body.get("name"),
                 email != null ? email.toLowerCase().trim() : null,
                 toLong(body.get("role_id")),
                 body.get("avatar_color"),
                 orDefault(body.get("is_active"), true),
+                body.get("department"),
                 id
             );
             if (updated == 0) return ResponseEntity.status(404).body(Map.of("error", "User tidak ditemukan"));
             List<Map<String, Object>> rows = jdbc.queryForList(
-                "SELECT id, name, email, avatar_color, is_active FROM users WHERE id=?", id
+                "SELECT id, name, email, avatar_color, is_active, department FROM users WHERE id=?", id
             );
             return ResponseEntity.ok(rows.get(0));
         } catch (Exception e) {

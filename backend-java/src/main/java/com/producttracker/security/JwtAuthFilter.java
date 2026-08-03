@@ -37,7 +37,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     String email = jwtUtil.extractSubject(token);
                     if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                         List<Map<String, Object>> rows = jdbc.queryForList(
-                            "SELECT u.id, u.email, u.name, u.role_id, u.avatar_color, " +
+                            "SELECT u.id, u.email, u.name, u.role_id, u.avatar_color, u.department, " +
                             "r.name AS role_name, r.display_name AS role_display, r.permissions " +
                             "FROM users u JOIN roles r ON u.role_id = r.id " +
                             "WHERE u.email = ? AND u.is_active = true",
