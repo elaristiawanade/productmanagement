@@ -141,7 +141,21 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v7.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v8.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v9.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v10.sql"
 ```
+
+> **Penting:** `migration_v10.sql` menambahkan kolom `users.department`, yang di-query
+> langsung oleh `JwtAuthFilter` pada setiap request terautentikasi. Jika migrasi ini
+> belum dijalankan setelah `git pull`, filter tersebut akan gagal secara diam-diam
+> (exception ditangkap tanpa log) dan request akan diperlakukan seolah tidak login —
+> gejalanya berupa tombol/menu yang hilang tanpa pesan error yang jelas.
+>
+> Untuk stack Docker: `docker-entrypoint-initdb.d` hanya jalan sekali saat volume
+> Postgres pertama kali dibuat, jadi `docker compose up --build` pada volume yang
+> sudah ada TIDAK otomatis menjalankan migrasi baru. Jalankan manual:
+> ```bash
+> docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v10.sql
+> ```
 
 ---
 
@@ -160,7 +174,8 @@ product-tracker/
 │       ├── migration_v6.sql
 │       ├── migration_v7.sql
 │       ├── migration_v8.sql
-│       └── migration_v9.sql
+│       ├── migration_v9.sql
+│       └── migration_v10.sql
 ├── backend-java/          # Spring Boot API (port 4000)
 │   ├── src/
 │   ├── pom.xml
