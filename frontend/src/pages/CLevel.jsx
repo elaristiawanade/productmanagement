@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef, useContext, createContext } from 'react';
 import { format, parseISO, startOfWeek, endOfWeek, isWithinInterval } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 import {
@@ -12,50 +12,43 @@ import PriorityBadge from '../components/PriorityBadge';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
-const DEPARTMENTS = ['HC', 'Sales', 'PMG', 'IT', 'Finance', 'Product'];
 const STATUSES    = ['backlog', 'todo', 'in_progress', 'in_review', 'done', 'blocked'];
 const PRIORITIES  = ['critical', 'high', 'medium', 'low'];
 
-// Outline chips for department — deliberately a different palette family and treatment
-// (border only, not filled) from the status/priority pills so the two dimensions never blur.
-const DEPT_CLS = {
-  HC:      'text-rose-600 border-rose-300',
-  Sales:   'text-orange-600 border-orange-300',
-  PMG:     'text-fuchsia-600 border-fuchsia-300',
-  IT:      'text-sky-600 border-sky-300',
-  Finance: 'text-teal-600 border-teal-300',
-  Product: 'text-lime-700 border-lime-300',
-};
-
-// Solid bar-fill counterparts of DEPT_CLS / STATUSES — same hue family per entity,
-// reused across the dashboard's bar charts so color keeps meaning identity everywhere.
-const DEPT_BAR_CLS = {
-  HC: 'bg-rose-500', Sales: 'bg-orange-500', PMG: 'bg-fuchsia-500',
-  IT: 'bg-sky-500', Finance: 'bg-teal-500', Product: 'bg-lime-500',
-};
 const STATUS_BAR_CLS = {
   backlog: 'bg-purple-500', todo: 'bg-slate-400', in_progress: 'bg-blue-500',
   in_review: 'bg-amber-500', done: 'bg-emerald-500', blocked: 'bg-red-500',
 };
 
+// Department list (code/name/color) lives in the `departments` table, not hardcoded here —
+// fetched once by the top-level CLevel component and made available to every nested tab/card
+// via context, since DeptTag is used many levels deep (notes, tasks, dashboard rows).
+const DepartmentsContext = createContext([]);
+
 function DeptTag({ dept }) {
+  const departments = useContext(DepartmentsContext);
   if (!dept) return <span className="text-slate-300 text-xs">—</span>;
+  const d = departments.find(x => x.code === dept);
+  const color = d?.color || '#64748B';
   return (
-    <span className={`inline-flex items-center text-xs font-bold px-2 py-0.5 rounded border ${DEPT_CLS[dept] || 'text-slate-500 border-slate-300'}`}>
+    <span className="inline-flex items-center text-xs font-bold px-2 py-0.5 rounded border"
+      style={{ color, borderColor: color + '80' }}>
       {dept}
     </span>
   );
 }
 
-function defaultDepartment(user) {
-  return user?.department && DEPARTMENTS.includes(user.department) ? user.department : DEPARTMENTS[0];
+function defaultDepartment(user, departments) {
+  const codes = departments.map(d => d.code);
+  const assigned = (user?.departments || []).find(c => codes.includes(c));
+  return assigned || codes[0] || '';
 }
 
 // ─── Leader Notes: form ───────────────────────────────────────────────────────
 
-function LeaderNoteForm({ user, onSaved }) {
+function LeaderNoteForm({ user, departments, onSaved }) {
   const today = new Date().toISOString().slice(0, 10);
-  const [department, setDepartment] = useState(defaultDepartment(user));
+  const [department, setDepartment] = useState(defaultDepartment(user, departments));
   const [noteDate, setNoteDate]     = useState(today);
   const [goals, setGoals]           = useState('');
   const [tasks, setTasks]           = useState([]);
@@ -94,7 +87,7 @@ function LeaderNoteForm({ user, onSaved }) {
       <div>
         <label className="label">Departemen</label>
         <select className="select" value={department} onChange={e => setDepartment(e.target.value)}>
-          {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+          {departments.map(d => <option key={d.code} value={d.code}>{d.name}</option>)}
         </select>
       </div>
       <div className="col-span-2">
@@ -177,7 +170,7 @@ function NoteCard({ note }) {
 
 // ─── Tab: Leader Notes ─────────────────────────────────────────────────────────
 
-function NotesTab({ user, canWrite, filterRequest, onFilterRequestHandled }) {
+function NotesTab({ user, canWrite, departments, filterRequest, onFilterRequestHandled }) {
   const [notes, setNotes]     = useState([]);
   const [users, setUsers]     = useState([]);
   const [loading, setLoading] = useState(true);
@@ -242,12 +235,12 @@ function NotesTab({ user, canWrite, filterRequest, onFilterRequestHandled }) {
             <Calendar className="w-5 h-5 text-indigo-600" />
             <h2 className="font-semibold text-slate-800">Catatan Minggu Ini</h2>
           </div>
-          <LeaderNoteForm user={user} onSaved={load} />
+          <LeaderNoteForm user={user} departments={departments} onSaved={load} />
         </div>
       ) : (
         <div className="card p-4 bg-slate-50 text-sm text-slate-500 flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
-          Kamu hanya bisa melihat Leader Notes departemen {user?.department || '—'}. Hanya Manager/PO/SME/Commissioner yang bisa menulis catatan.
+          Kamu hanya bisa melihat Leader Notes departemen {(user?.departments || []).join(', ') || '—'}. Hanya Manager/PO/SME/Commissioner yang bisa menulis catatan.
         </div>
       )}
 
@@ -260,7 +253,7 @@ function NotesTab({ user, canWrite, filterRequest, onFilterRequestHandled }) {
                   <label className="label">Departemen</label>
                   <select className="select w-40" value={filters.department} onChange={e => setFilter('department', e.target.value)}>
                     <option value="">Semua Departemen</option>
-                    {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                    {departments.map(d => <option key={d.code} value={d.code}>{d.name}</option>)}
                   </select>
                 </div>
                 <div>
@@ -325,9 +318,9 @@ function NotesTab({ user, canWrite, filterRequest, onFilterRequestHandled }) {
 
 // ─── Leader Task: create/edit modal ───────────────────────────────────────────
 
-function TaskForm({ task, user, users, onSaved, onClose }) {
+function TaskForm({ task, user, users, departments, onSaved, onClose }) {
   const [form, setForm] = useState({
-    department: task?.department || defaultDepartment(user),
+    department: task?.department || defaultDepartment(user, departments),
     title:      task?.title || '',
     priority:   task?.priority || 'medium',
     status:     task?.status || 'backlog',
@@ -359,7 +352,7 @@ function TaskForm({ task, user, users, onSaved, onClose }) {
       <div>
         <label className="label">Departemen</label>
         <select className="select" value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))}>
-          {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+          {departments.map(d => <option key={d.code} value={d.code}>{d.name}</option>)}
         </select>
       </div>
       <div>
@@ -633,7 +626,7 @@ function MultiSelect({ label, options, selected, onChange, minWidth = 130 }) {
 
 // ─── Tab: Leader Task ──────────────────────────────────────────────────────────
 
-function TasksTab({ user, canWrite, detailId, setDetailId, filterRequest, onFilterRequestHandled }) {
+function TasksTab({ user, canWrite, departments, detailId, setDetailId, filterRequest, onFilterRequestHandled }) {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [users, setUsers] = useState([]);
@@ -720,7 +713,7 @@ function TasksTab({ user, canWrite, detailId, setDetailId, filterRequest, onFilt
           {canWrite && (
             <select className="select w-auto min-w-[150px]" value={filters.department} onChange={e => setFilter('department', e.target.value)}>
               <option value="">Semua Departemen</option>
-              {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+              {departments.map(d => <option key={d.code} value={d.code}>{d.name}</option>)}
             </select>
           )}
           <MultiSelect label="Status" minWidth={150}
@@ -832,7 +825,7 @@ function TasksTab({ user, canWrite, detailId, setDetailId, filterRequest, onFilt
       </div>
 
       <Modal open={modal.open} onClose={closeModal} title={modal.task ? 'Edit Leader Task' : 'Tambah Leader Task'} size="md">
-        <TaskForm task={modal.task} user={user} users={users}
+        <TaskForm task={modal.task} user={user} users={users} departments={departments}
           onSaved={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
 
@@ -1002,14 +995,15 @@ function MineTab({ user, detailId, setDetailId }) {
 
 // ─── Bar row: shared by the status/department breakdowns ─────────────────────
 
-function BarRow({ label, count, max, barClass, onClick }) {
+function BarRow({ label, count, max, barClass, barColor, onClick }) {
   const pct = max > 0 ? Math.max((count / max) * 100, count > 0 ? 4 : 0) : 0;
   return (
     <button type="button" onClick={onClick} disabled={!onClick}
       className="flex items-center gap-3 w-full text-left group disabled:cursor-default">
       <span className="text-xs text-slate-500 w-24 shrink-0 truncate group-hover:text-indigo-600 transition-colors" title={label}>{label}</span>
       <div className="flex-1 h-2.5 rounded-full bg-slate-100 overflow-hidden">
-        <div className={`h-full rounded-full ${barClass} ${onClick ? 'group-hover:opacity-80 transition-opacity' : ''}`} style={{ width: `${pct}%` }} />
+        <div className={`h-full rounded-full ${barClass || ''} ${onClick ? 'group-hover:opacity-80 transition-opacity' : ''}`}
+          style={{ width: `${pct}%`, backgroundColor: barColor }} />
       </div>
       <span className="text-xs font-semibold text-slate-600 w-6 text-right shrink-0">{count}</span>
     </button>
@@ -1018,7 +1012,7 @@ function BarRow({ label, count, max, barClass, onClick }) {
 
 // ─── Tab: Dashboard ────────────────────────────────────────────────────────────
 
-function DashboardTab({ user, canWrite, onGoToTasks, onGoToNotes, onOpenTask }) {
+function DashboardTab({ user, canWrite, departments, onGoToTasks, onGoToNotes, onOpenTask }) {
   const [tasks, setTasks]     = useState([]);
   const [notes, setNotes]     = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1057,7 +1051,9 @@ function DashboardTab({ user, canWrite, onGoToTasks, onGoToNotes, onOpenTask }) 
   }, [tasks]);
   const maxStatus = Math.max(1, ...Object.values(statusCounts));
 
-  const deptDepartments = canWrite ? DEPARTMENTS : (user?.department ? [user.department] : []);
+  const deptCodes = departments.map(d => d.code);
+  const deptDepartments = canWrite ? deptCodes : (user?.departments || []).filter(c => deptCodes.includes(c));
+  const deptColor = code => departments.find(d => d.code === code)?.color || '#64748B';
   const deptCounts = useMemo(() => {
     const counts = Object.fromEntries(deptDepartments.map(d => [d, 0]));
     tasks.forEach(t => { if (counts[t.department] != null) counts[t.department]++; });
@@ -1129,7 +1125,7 @@ function DashboardTab({ user, canWrite, onGoToTasks, onGoToNotes, onOpenTask }) 
           ) : (
             <div className="space-y-2.5">
               {deptDepartments.map(d => (
-                <BarRow key={d} label={d} count={deptCounts[d]} max={maxDept} barClass={DEPT_BAR_CLS[d]}
+                <BarRow key={d} label={d} count={deptCounts[d]} max={maxDept} barColor={deptColor(d)}
                   onClick={() => onGoToTasks?.({ department: d })} />
               ))}
             </div>
@@ -1241,6 +1237,9 @@ export default function CLevel() {
   const [detailId, setDetailId] = useState(null);
   const [taskFilterRequest, setTaskFilterRequest] = useState(null);
   const [noteFilterRequest, setNoteFilterRequest] = useState(null);
+  const [departments, setDepartments] = useState([]);
+
+  useEffect(() => { client.get('/departments').then(r => setDepartments(r.data)).catch(() => {}); }, []);
 
   // Dashboard cards/rows deep-link into the other tabs — pre-applying a
   // filter (or opening a task's detail panel directly) instead of just
@@ -1250,26 +1249,28 @@ export default function CLevel() {
   const openTask  = (id) => { setDetailId(id); setTab('tasks'); };
 
   return (
-    <div className="space-y-5">
-      <div className="flex gap-2 border-b border-slate-200 pb-0">
-        {[
-          ['dashboard', 'Dashboard'],
-          ['notes', 'Leader Notes'],
-          ['tasks', 'Leader Task'],
-          ['mine',  'My Task'],
-        ].map(([id, label]) => (
-          <button key={id} onClick={() => { setTab(id); setDetailId(null); }}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors
-              ${tab === id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-            {label}
-          </button>
-        ))}
-      </div>
+    <DepartmentsContext.Provider value={departments}>
+      <div className="space-y-5">
+        <div className="flex gap-2 border-b border-slate-200 pb-0">
+          {[
+            ['dashboard', 'Dashboard'],
+            ['notes', 'Leader Notes'],
+            ['tasks', 'Leader Task'],
+            ['mine',  'My Task'],
+          ].map(([id, label]) => (
+            <button key={id} onClick={() => { setTab(id); setDetailId(null); }}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors
+                ${tab === id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
 
-      {tab === 'dashboard' && <DashboardTab user={user} canWrite={canWrite} onGoToTasks={goToTasks} onGoToNotes={goToNotes} onOpenTask={openTask} />}
-      {tab === 'notes' && <NotesTab user={user} canWrite={canWrite} filterRequest={noteFilterRequest} onFilterRequestHandled={() => setNoteFilterRequest(null)} />}
-      {tab === 'tasks' && <TasksTab user={user} canWrite={canWrite} detailId={detailId} setDetailId={setDetailId} filterRequest={taskFilterRequest} onFilterRequestHandled={() => setTaskFilterRequest(null)} />}
-      {tab === 'mine'  && <MineTab  user={user} detailId={detailId} setDetailId={setDetailId} />}
-    </div>
+        {tab === 'dashboard' && <DashboardTab user={user} canWrite={canWrite} departments={departments} onGoToTasks={goToTasks} onGoToNotes={goToNotes} onOpenTask={openTask} />}
+        {tab === 'notes' && <NotesTab user={user} canWrite={canWrite} departments={departments} filterRequest={noteFilterRequest} onFilterRequestHandled={() => setNoteFilterRequest(null)} />}
+        {tab === 'tasks' && <TasksTab user={user} canWrite={canWrite} departments={departments} detailId={detailId} setDetailId={setDetailId} filterRequest={taskFilterRequest} onFilterRequestHandled={() => setTaskFilterRequest(null)} />}
+        {tab === 'mine'  && <MineTab  user={user} detailId={detailId} setDetailId={setDetailId} />}
+      </div>
+    </DepartmentsContext.Provider>
   );
 }

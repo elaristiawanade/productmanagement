@@ -13,10 +13,10 @@ const NAV_MAIN = [
   { to: '/products', icon: Package,         label: 'Products'     },
   { to: '/standup',  icon: ClipboardList,   label: 'Standup'      },
   { to: '/qa',       icon: TestTube2,       label: 'QA Module'    },
-  // Visible to anyone with a department assigned (view or write) or Super Admin —
+  // Visible to anyone with at least one department assigned (view or write) or Super Admin —
   // not a plain `roles` check, since access here is department-scoped, not role-scoped.
   { to: '/c-level',  icon: Crown,           label: 'C-Level Dashboard',
-    show: (user, hasRole) => !!user?.department || hasRole('super_admin') },
+    show: (user, hasRole) => !!user?.departments?.length || hasRole('super_admin') },
   { to: '/users',    icon: Users,           label: 'Users & Roles', roles: ['super_admin','manager'] },
 ];
 

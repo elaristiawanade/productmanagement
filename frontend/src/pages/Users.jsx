@@ -18,24 +18,32 @@ const ROLE_COLORS = {
 
 const AVATAR_COLORS = ['#4F46E5','#0EA5E9','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899'];
 
-const DEPARTMENTS = ['HC', 'Sales', 'PMG', 'IT', 'Finance', 'Product'];
-
 // ─── UserForm ─────────────────────────────────────────────────────────────────
-function UserForm({ user, roles, products, onSave, onClose }) {
+function UserForm({ user, roles, products, departments, onSave, onClose }) {
   const [form, setForm] = useState({
     name: user?.name || '', email: user?.email || '',
     password: '', role_id: user?.role_id || '',
     avatar_color: user?.avatar_color || '#4F46E5',
     is_active: user?.is_active ?? true,
-    department: user?.department || '',
   });
   const [selectedProducts, setSelectedProducts] = useState(
     () => new Set((user?.products || []).map(p => p.id))
+  );
+  const [selectedDepartments, setSelectedDepartments] = useState(
+    () => new Set((user?.departments || []).map(d => d.id))
   );
   const [saving, setSaving] = useState(false);
 
   const toggleProduct = (id) => {
     setSelectedProducts(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleDepartment = (id) => {
+    setSelectedDepartments(prev => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
@@ -56,6 +64,7 @@ function UserForm({ user, roles, products, onSave, onClose }) {
         userId = res.data.id;
       }
       await client.put(`/users/${userId}/products`, { product_ids: [...selectedProducts] });
+      await client.put(`/users/${userId}/departments`, { department_ids: [...selectedDepartments] });
       toast.success(user?.id ? 'User diperbarui' : 'User dibuat');
       onSave();
     } catch {} finally { setSaving(false); }
@@ -100,13 +109,23 @@ function UserForm({ user, roles, products, onSave, onClose }) {
       <div className="col-span-2">
         <label className="label">
           Departemen (C-Level Dashboard)
-          <span className="text-xs font-normal text-slate-400 ml-1 normal-case">— menentukan scope Leader Notes/Task yang bisa dilihat user ini</span>
+          <span className="text-xs font-normal text-slate-400 ml-1 normal-case">— menentukan scope Leader Notes/Task yang bisa dilihat user ini; bisa lebih dari satu</span>
         </label>
-        <select className="select" value={form.department}
-          onChange={e => setForm(f => ({ ...f, department: e.target.value }))}>
-          <option value="">— Tidak ada —</option>
-          {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-        </select>
+        {departments.length === 0 ? (
+          <p className="text-xs text-slate-400">Belum ada departemen.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-2 mt-1 border border-slate-200 rounded-lg p-3 bg-slate-50">
+            {departments.map(d => (
+              <label key={d.id}
+                className="flex items-center gap-3 cursor-pointer hover:bg-white rounded-md px-2 py-1.5 transition-colors">
+                <input type="checkbox" className="w-4 h-4 rounded accent-indigo-600"
+                  checked={selectedDepartments.has(d.id)} onChange={() => toggleDepartment(d.id)} />
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: d.color || '#64748B' }} />
+                <span className="text-sm text-slate-700">{d.name}</span>
+              </label>
+            ))}
+          </div>
+        )}
       </div>
       <div className="col-span-2">
         <label className="label">Warna Avatar</label>
@@ -352,6 +371,7 @@ export default function Users() {
   const [users,    setUsers]    = useState([]);
   const [roles,    setRoles]    = useState([]);
   const [products, setProducts] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [modal,    setModal]    = useState({ open: false, type: '', data: null });
   const [loading,  setLoading]  = useState(true);
   const [tab,      setTab]      = useState('users');
@@ -362,14 +382,16 @@ export default function Users() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [us, rl, pr] = await Promise.all([
+      const [us, rl, pr, dp] = await Promise.all([
         client.get('/users'),
         client.get('/users/roles'),
         client.get('/products'),
+        client.get('/departments'),
       ]);
       setUsers(us.data);
       setRoles(rl.data);
       setProducts(pr.data);
+      setDepartments(dp.data);
     } finally { setLoading(false); }
   }, []);
 
@@ -501,10 +523,20 @@ export default function Users() {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        {u.department
-                          ? <span className="text-xs font-semibold px-2 py-0.5 rounded border border-slate-300 text-slate-600">{u.department}</span>
-                          : <span className="text-xs text-slate-300">—</span>}
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1 justify-center">
+                          {(u.departments || []).length === 0 ? (
+                            <span className="text-xs text-slate-300">—</span>
+                          ) : (
+                            (u.departments || []).map(d => (
+                              <span key={d.id}
+                                className="text-xs font-semibold px-2 py-0.5 rounded border"
+                                style={{ color: d.color, borderColor: d.color + '55', backgroundColor: d.color + '15' }}>
+                                {d.name}
+                              </span>
+                            ))
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${u.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
@@ -657,7 +689,7 @@ export default function Users() {
       {/* ── Modals ── */}
       <Modal open={modal.open && modal.type === 'user'} onClose={closeModal}
         title={modal.data ? 'Edit User' : 'Tambah User'} size="md">
-        <UserForm user={modal.data} roles={roles} products={products}
+        <UserForm user={modal.data} roles={roles} products={products} departments={departments}
           onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
 

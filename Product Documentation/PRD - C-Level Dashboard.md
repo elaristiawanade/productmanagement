@@ -209,3 +209,45 @@ Sidebar: satu section baru "C-Level" — muncul untuk **siapa pun dengan `users.
 |---|---|---|
 | 3 Agustus 2026 | 0.1 | Draft awal PRD C-Level Dashboard — belum diimplementasikan, menunggu konfirmasi bagian 5 |
 | 3 Agustus 2026 | 0.2 | Revisi model akses: department jadi atribut `users` (bukan role baru tunggal); IT↔Developer/QA (view-only), PMG↔PO/Manager; hak tulis dibatasi ke role Manager/PO/SME/Commissioner/Super Admin (SME & Commissioner adalah role baru); HC/Sales/Finance/Product di-assign manual oleh admin |
+| 4 Agustus 2026 | 0.3 | **Diimplementasikan** (lihat Bagian 8): daftar departemen dipindah dari hardcode ke tabel `departments` yang bisa dikelola tanpa deploy kode; `users.department` (1 user = 1 departemen) diganti model many-to-many `user_departments` (1 user bisa lebih dari 1 departemen) — request tambahan dari mentor setelah draft 0.2 ditulis |
+
+---
+
+## 8. Update Implementasi — Departemen Sebagai Config, Bukan Hardcode (4 Agustus 2026)
+
+**Status: Diimplementasikan & sudah ditest lokal.** Bagian ini adalah addendum di atas draft 0.1/0.2 di Bagian 1–7 di atas (dipertahankan apa adanya sebagai riwayat) — bukan pengganti. Dua permintaan tambahan dari mentor setelah draft 0.2 selesai:
+
+1. *"buat config khusus untuk divisi nya, jadi ga hardcoded"* — daftar 6 departemen (HC, Sales, PMG, IT, Finance, Product) yang di draft 0.2 diasumsikan sebagai konstanta tetap, sebetulnya perlu bisa dikelola sebagai data.
+2. *"user bisa di assign ke divisi, jadi c-level hanya bisa liat yang dia masuk divisinya, mau di buat global juga gapapa"* — `users.department` di skema 0.2 (kolom tunggal, 1 user = 1 departemen) diperluas jadi bisa lebih dari satu departemen per user. Skema akses "global" (lihat semua departemen) tetap dipertahankan **by-role** seperti draft 0.2 (Manager/PO/SME/Commissioner/Super Admin) — dikonfirmasi tidak perlu mekanisme flag baru.
+
+### 8.1 Perubahan skema DB (`migration_v11.sql`, setelah `migration_v10.sql`)
+
+| Perubahan | Mengganti | Keterangan |
+|---|---|---|
+| Tabel `departments` baru | Konstanta hardcode di `DepartmentHelper.java` / `CLevel.jsx` / `Users.jsx` | `id, code, name, code_prefix, color, sort_order`. Diseed dengan 6 departemen existing agar behavior tidak berubah saat migrasi. `code_prefix` menggantikan `CODE_PREFIX` map (untuk auto-generate kode task `HC-001`, dst), `color` menggantikan mapping warna Tailwind hardcode di frontend. |
+| Tabel `user_departments` baru | Kolom `users.department` (VARCHAR tunggal) | Many-to-many, pola identik dengan `user_products` yang sudah ada — `user_id, department_id`. Satu user bisa masuk lebih dari satu departemen. |
+| `leader_notes.department` / `leader_tasks.department` | Divalidasi hardcode di kode Java | Tetap kolom VARCHAR (bukan FK id) supaya kode existing yang membandingkan by-code tidak perlu berubah, tapi sekarang punya **FK constraint** ke `departments(code)` — validitas dijamin di level DB, bukan cuma di app. |
+| Kolom `users.department` | — | Di-drop setelah data lama dimigrasikan ke `user_departments`. |
+
+### 8.2 Perubahan API (`backend-java`)
+
+| Endpoint | Keterangan |
+|---|---|
+| `GET /api/departments` | List semua departemen (semua user login) |
+| `POST/PUT/DELETE /api/departments` | CRUD departemen, dibatasi `super_admin` — pola identik `RoleController`. Delete ditolak kalau departemen masih dipakai `leader_notes`/`leader_tasks`. |
+| `GET/PUT /users/{id}/departments` | Assign departemen ke user (`department_ids: [...]`) — pola identik `GET/PUT /users/{id}/products` yang sudah ada. |
+
+`DepartmentHelper` (dipakai `LeaderTaskController`/`LeaderNotesController` untuk validasi & scoping) diubah dari static utility hardcode jadi Spring bean yang query tabel `departments`/`user_departments`. `visibleDepartments()` sekarang balikin **list** departemen (bisa lebih dari satu) untuk user view-only, bukan satu nilai — filter query juga diubah dari `department = ?` jadi `department IN (...)` supaya user dengan >1 departemen benar-benar melihat semuanya (bug laten di draft 0.2 kalau langsung dipakai untuk multi-departemen: hanya elemen pertama yang kepakai).
+
+Login (`/api/auth/login`, `/api/auth/me`) sekarang mengirim field `departments` (array of code) menggantikan `department` (string tunggal) di response user.
+
+### 8.3 Perubahan UI (`frontend`)
+
+- **Users & Roles** (`Users.jsx`): field "Departemen" di form edit user — yang sudah ada dari draft 0.2 sebagai dropdown 1 pilihan — diupgrade jadi checkbox multi-select, pola identik section "Akses Produk" yang sudah ada di form yang sama. Ini satu-satunya tempat assignment user→departemen dilakukan.
+- **C-Level Dashboard** (`CLevel.jsx`): daftar & warna departemen (dulu `const DEPARTMENTS` dan `DEPT_CLS` hardcode di file) sekarang di-fetch dari `/api/departments` sekali di komponen atas dan dibagikan ke semua tab lewat React Context (dipakai di banyak tempat: Leader Notes card, Leader Task table, Dashboard bar chart, dsb).
+- **Sidebar**: visibility menu "C-Level Dashboard" (Bagian 6 draft asli) diubah dari `!!user?.department` jadi `!!user?.departments?.length`.
+
+### 8.4 Yang sengaja TIDAK berubah dari draft 0.1/0.2
+
+- Model akses **view vs write** di Bagian 2 tetap seperti draft asli: `department` (sekarang jamak) menentukan scope lihat, role (`WRITE_ROLES`: Manager/PO/SME/Commissioner/Super Admin) menentukan siapa yang boleh menulis lintas-departemen. Tidak ada flag "global" baru per-user.
+- Pertanyaan terbuka di Bagian 5 (scope tulis lintas vs per-departemen, periode Leader Task, siapa boleh assign ke siapa, Achievement tab, department kosong untuk SME/Commissioner) **masih belum dijawab** — di luar cakupan update ini.

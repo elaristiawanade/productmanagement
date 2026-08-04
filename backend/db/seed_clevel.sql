@@ -16,31 +16,51 @@
 -- IT), rafi@company.com (QA, IT) — all password: password (see DEVELOPMENT.md).
 
 -- ─── DUMMY USERS (HC / Sales / Finance / Product — no auto-mapped role) ─────
+-- Department is assigned below via user_departments (many-to-many, see migration_v11),
+-- not a column on `users` — a user can belong to more than one division.
 
-INSERT INTO users (name, email, password_hash, role_id, avatar_color, department)
+INSERT INTO users (name, email, password_hash, role_id, avatar_color)
 SELECT 'Sarah Amelia', 'sarah@company.com', '$2a$10$GPxEqwfOQeP.5yxu0gqVyufQy23s4ti/DNiRx9rIUaPdVe6y/k66K',
-       (SELECT id FROM roles WHERE name = 'commissioner'), '#e11d48', 'HC'
+       (SELECT id FROM roles WHERE name = 'commissioner'), '#e11d48'
 WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'sarah@company.com');
 
-INSERT INTO users (name, email, password_hash, role_id, avatar_color, department)
+INSERT INTO users (name, email, password_hash, role_id, avatar_color)
 SELECT 'Rian Saputra', 'rian@company.com', '$2a$10$GPxEqwfOQeP.5yxu0gqVyufQy23s4ti/DNiRx9rIUaPdVe6y/k66K',
-       (SELECT id FROM roles WHERE name = 'manager'), '#c2410c', 'Sales'
+       (SELECT id FROM roles WHERE name = 'manager'), '#c2410c'
 WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'rian@company.com');
 
-INSERT INTO users (name, email, password_hash, role_id, avatar_color, department)
+INSERT INTO users (name, email, password_hash, role_id, avatar_color)
 SELECT 'Wulan Sari', 'wulan@company.com', '$2a$10$GPxEqwfOQeP.5yxu0gqVyufQy23s4ti/DNiRx9rIUaPdVe6y/k66K',
-       (SELECT id FROM roles WHERE name = 'sme'), '#0d9488', 'Finance'
+       (SELECT id FROM roles WHERE name = 'sme'), '#0d9488'
 WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'wulan@company.com');
 
-INSERT INTO users (name, email, password_hash, role_id, avatar_color, department)
+INSERT INTO users (name, email, password_hash, role_id, avatar_color)
 SELECT 'Fajar Nugroho', 'fajar@company.com', '$2a$10$GPxEqwfOQeP.5yxu0gqVyufQy23s4ti/DNiRx9rIUaPdVe6y/k66K',
-       (SELECT id FROM roles WHERE name = 'commissioner'), '#65a30d', 'Product'
+       (SELECT id FROM roles WHERE name = 'commissioner'), '#65a30d'
 WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'fajar@company.com');
 
-INSERT INTO users (name, email, password_hash, role_id, avatar_color, department)
+INSERT INTO users (name, email, password_hash, role_id, avatar_color)
 SELECT 'Dewi Lestari', 'dewi@company.com', '$2a$10$GPxEqwfOQeP.5yxu0gqVyufQy23s4ti/DNiRx9rIUaPdVe6y/k66K',
-       (SELECT id FROM roles WHERE name = 'sme'), '#7c3aed', NULL
+       (SELECT id FROM roles WHERE name = 'sme'), '#7c3aed'
 WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'dewi@company.com');
+
+-- Dewi intentionally has no department row — cross-functional SME, sees via canWrite() instead.
+INSERT INTO user_departments (user_id, department_id)
+SELECT u.id, d.id FROM users u, departments d
+WHERE u.email = 'sarah@company.com' AND d.code = 'HC'
+ON CONFLICT DO NOTHING;
+INSERT INTO user_departments (user_id, department_id)
+SELECT u.id, d.id FROM users u, departments d
+WHERE u.email = 'rian@company.com' AND d.code = 'Sales'
+ON CONFLICT DO NOTHING;
+INSERT INTO user_departments (user_id, department_id)
+SELECT u.id, d.id FROM users u, departments d
+WHERE u.email = 'wulan@company.com' AND d.code = 'Finance'
+ON CONFLICT DO NOTHING;
+INSERT INTO user_departments (user_id, department_id)
+SELECT u.id, d.id FROM users u, departments d
+WHERE u.email = 'fajar@company.com' AND d.code = 'Product'
+ON CONFLICT DO NOTHING;
 
 -- ─── DUMMY LEADER NOTES (today, spread across all 6 departments) ───────────
 
