@@ -210,6 +210,7 @@ Sidebar: satu section baru "C-Level" — muncul untuk **siapa pun dengan `users.
 | 3 Agustus 2026 | 0.1 | Draft awal PRD C-Level Dashboard — belum diimplementasikan, menunggu konfirmasi bagian 5 |
 | 3 Agustus 2026 | 0.2 | Revisi model akses: department jadi atribut `users` (bukan role baru tunggal); IT↔Developer/QA (view-only), PMG↔PO/Manager; hak tulis dibatasi ke role Manager/PO/SME/Commissioner/Super Admin (SME & Commissioner adalah role baru); HC/Sales/Finance/Product di-assign manual oleh admin |
 | 4 Agustus 2026 | 0.3 | **Diimplementasikan** (lihat Bagian 8): daftar departemen dipindah dari hardcode ke tabel `departments` yang bisa dikelola tanpa deploy kode; `users.department` (1 user = 1 departemen) diganti model many-to-many `user_departments` (1 user bisa lebih dari 1 departemen) — request tambahan dari mentor setelah draft 0.2 ditulis |
+| 6 Agustus 2026 | 0.4 | **Diimplementasikan** (lihat Bagian 9): tab "Departemen" baru di Users & Roles untuk Tambah/Edit/Hapus departemen dari UI (sebelumnya endpoint backend saja, belum ada UI); assignment user→departemen dipindah dari form Tambah/Edit User ke form Edit Departemen, supaya semua pengaturan departemen terpusat di satu tab |
 
 ---
 
@@ -251,3 +252,39 @@ Login (`/api/auth/login`, `/api/auth/me`) sekarang mengirim field `departments` 
 
 - Model akses **view vs write** di Bagian 2 tetap seperti draft asli: `department` (sekarang jamak) menentukan scope lihat, role (`WRITE_ROLES`: Manager/PO/SME/Commissioner/Super Admin) menentukan siapa yang boleh menulis lintas-departemen. Tidak ada flag "global" baru per-user.
 - Pertanyaan terbuka di Bagian 5 (scope tulis lintas vs per-departemen, periode Leader Task, siapa boleh assign ke siapa, Achievement tab, department kosong untuk SME/Commissioner) **masih belum dijawab** — di luar cakupan update ini.
+
+> **⚠️ Koreksi (lihat Bagian 9):** Poin pertama di 8.3 — *"field Departemen di form Tambah/Edit User... satu-satunya tempat assignment user→departemen dilakukan"* — sudah tidak berlaku sejak update 6 Agustus 2026. Assignment sekarang dilakukan dari tab Departemen, bukan form User. Sisa Bagian 8.1–8.2 (skema DB, endpoint API) tetap berlaku apa adanya.
+
+---
+
+## 9. Update Implementasi — Manajemen Departemen Terpusat di Tab Departemen (6 Agustus 2026)
+
+**Status: Diimplementasikan & sudah ditest lokal.** Addendum di atas Bagian 8 (dipertahankan apa adanya sebagai riwayat) — dua permintaan lanjutan setelah update 0.3:
+
+1. *"bisa add department dan edit department-nya... dipindah ke tab department jadi semua settingannya di tab, dan tetap jangan hardcode"* — CRUD departemen (create/update/delete) sebelumnya baru ada sebagai endpoint backend (Bagian 8.2), belum ada UI-nya sama sekali. Sekarang ada tab "Departemen" baru di halaman Users & Roles.
+2. *"di form Tambah User ada department checkbox, itu dipindah ke tab department"* — checkbox assignment user→departemen yang didokumentasikan di 8.3 sebagai bagian dari form Tambah/Edit User dipindah ke form Edit Departemen, supaya satu tab menampung seluruh pengaturan departemen: buat/edit/hapus departemen **dan** kelola anggotanya.
+
+### 9.1 UI baru: Tab "Departemen" (`Users.jsx`)
+
+| Aksi | Detail |
+|---|---|
+| Tambah Departemen | Form: kode (immutable setelah dibuat), nama, prefix kode task, warna, urutan tampil. Memakai `POST /api/departments` (Bagian 8.2), tidak ada endpoint baru |
+| Edit Departemen | Form sama minus kode (kode tidak bisa diubah setelah dibuat). Memakai `PUT /api/departments/:id` |
+| Hapus Departemen | Ditolak (409) jika masih dipakai `leader_notes`/`leader_tasks` — behavior ini sudah ada sejak 8.2, baru sekarang ada tombolnya di UI |
+| Kartu departemen | Grid card menampilkan nama, kode, prefix kode task, dan jumlah user anggota — dihitung client-side dari data `users` yang sudah di-load di halaman yang sama, tidak ada query count terpisah |
+
+Tombol Tambah/Edit/Hapus dibatasi `super_admin` (disembunyikan untuk role lain) — pola sama seperti tab Roles & Permissions yang sudah ada di halaman yang sama.
+
+### 9.2 Assignment user→departemen dipindah ke tab Departemen
+
+Checkbox departemen di form Tambah/Edit User **dihapus**. Sebagai gantinya, form Edit Departemen (tab Departemen) punya section baru "Anggota Departemen" — daftar semua user dengan checkbox, tercentang jika user tsb sudah masuk departemen yang sedang diedit.
+
+- **Endpoint tidak berubah** — tetap `PUT /users/{id}/departments` (Bagian 8.2), hanya dipanggil dari sisi form yang berbeda: tiap checkbox langsung memanggil API saat diklik (bukan menunggu tombol submit form seperti pola lama di form User), supaya keanggotaan banyak user bisa diatur satu per satu dari satu layar tanpa bolak-balik buka form tiap user.
+- User baru yang dibuat lewat form Tambah User sekarang otomatis tidak masuk departemen manapun — admin assign departemen belakangan lewat tab Departemen.
+- Section "Anggota Departemen" hanya muncul saat **edit** departemen (sudah punya `id`). Saat membuat departemen baru, section ini disembunyikan dengan pesan "Simpan departemen dulu untuk mengatur anggota" — karena endpoint assignment butuh `department_id` yang valid.
+
+### 9.3 Yang sengaja TIDAK berubah
+
+- **Tidak ada endpoint API baru** — seluruhnya reuse `GET/POST/PUT/DELETE /api/departments` dan `GET/PUT /users/{id}/departments` yang sudah didokumentasikan di 8.2.
+- Skema DB (Bagian 8.1) — tidak tersentuh.
+- Model akses view/write di Bagian 2 — tidak tersentuh.
