@@ -20,7 +20,7 @@ const AVATAR_COLORS = ['#4F46E5','#0EA5E9','#10B981','#F59E0B','#EF4444','#8B5CF
 const SWATCH_COLORS = ['#4F46E5','#0EA5E9','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#64748B'];
 
 // ─── UserForm ─────────────────────────────────────────────────────────────────
-function UserForm({ user, roles, products, departments, onSave, onClose }) {
+function UserForm({ user, roles, products, onSave, onClose }) {
   const [form, setForm] = useState({
     name: user?.name || '', email: user?.email || '',
     password: '', role_id: user?.role_id || '',
@@ -30,21 +30,10 @@ function UserForm({ user, roles, products, departments, onSave, onClose }) {
   const [selectedProducts, setSelectedProducts] = useState(
     () => new Set((user?.products || []).map(p => p.id))
   );
-  const [selectedDepartments, setSelectedDepartments] = useState(
-    () => new Set((user?.departments || []).map(d => d.id))
-  );
   const [saving, setSaving] = useState(false);
 
   const toggleProduct = (id) => {
     setSelectedProducts(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
-
-  const toggleDepartment = (id) => {
-    setSelectedDepartments(prev => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
@@ -65,7 +54,6 @@ function UserForm({ user, roles, products, departments, onSave, onClose }) {
         userId = res.data.id;
       }
       await client.put(`/users/${userId}/products`, { product_ids: [...selectedProducts] });
-      await client.put(`/users/${userId}/departments`, { department_ids: [...selectedDepartments] });
       toast.success(user?.id ? 'User diperbarui' : 'User dibuat');
       onSave();
     } catch {} finally { setSaving(false); }
@@ -106,27 +94,6 @@ function UserForm({ user, roles, products, departments, onSave, onClose }) {
           <option value="true">Aktif</option>
           <option value="false">Nonaktif</option>
         </select>
-      </div>
-      <div className="col-span-2">
-        <label className="label">
-          Departemen (C-Level Dashboard)
-          <span className="text-xs font-normal text-slate-400 ml-1 normal-case">— menentukan scope Leader Notes/Task yang bisa dilihat user ini; bisa lebih dari satu</span>
-        </label>
-        {departments.length === 0 ? (
-          <p className="text-xs text-slate-400">Belum ada departemen.</p>
-        ) : (
-          <div className="grid grid-cols-1 gap-2 mt-1 border border-slate-200 rounded-lg p-3 bg-slate-50">
-            {departments.map(d => (
-              <label key={d.id}
-                className="flex items-center gap-3 cursor-pointer hover:bg-white rounded-md px-2 py-1.5 transition-colors">
-                <input type="checkbox" className="w-4 h-4 rounded accent-indigo-600"
-                  checked={selectedDepartments.has(d.id)} onChange={() => toggleDepartment(d.id)} />
-                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: d.color || '#64748B' }} />
-                <span className="text-sm text-slate-700">{d.name}</span>
-              </label>
-            ))}
-          </div>
-        )}
       </div>
       <div className="col-span-2">
         <label className="label">Warna Avatar</label>
@@ -367,13 +334,29 @@ function RoleForm({ role, onSave, onClose }) {
 }
 
 // ─── DepartmentForm ───────────────────────────────────────────────────────────
-function DepartmentForm({ department, onSave, onClose }) {
+function DepartmentForm({ department, users, onSave, onClose, onMembersChanged }) {
   const [code, setCode]             = useState(department?.code || '');
   const [name, setName]             = useState(department?.name || '');
   const [codePrefix, setCodePrefix] = useState(department?.code_prefix || '');
   const [color, setColor]           = useState(department?.color || SWATCH_COLORS[0]);
   const [sortOrder, setSortOrder]   = useState(department?.sort_order ?? 0);
   const [saving, setSaving]         = useState(false);
+  const [pendingMembers, setPendingMembers] = useState(() => new Set());
+
+  const toggleMember = async (u) => {
+    const currentIds = (u.departments || []).map(d => d.id);
+    const isMember = currentIds.includes(department.id);
+    const nextIds = isMember ? currentIds.filter(id => id !== department.id) : [...currentIds, department.id];
+    setPendingMembers(prev => new Set(prev).add(u.id));
+    try {
+      await client.put(`/users/${u.id}/departments`, { department_ids: nextIds });
+      onMembersChanged?.();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Gagal memperbarui anggota');
+    } finally {
+      setPendingMembers(prev => { const next = new Set(prev); next.delete(u.id); return next; });
+    }
+  };
 
   const save = async () => {
     if (!name.trim()) { toast.error('Nama wajib'); return; }
@@ -436,6 +419,31 @@ function DepartmentForm({ department, onSave, onClose }) {
         <label className="label">Urutan Tampil</label>
         <input type="number" className="input" value={sortOrder}
           onChange={e => setSortOrder(e.target.value)} />
+      </div>
+      <div>
+        <label className="label">
+          Anggota Departemen
+          <span className="text-xs font-normal text-slate-400 ml-1 normal-case">— menentukan scope Leader Notes/Task yang bisa dilihat user; bisa lebih dari satu departemen</span>
+        </label>
+        {!department?.id ? (
+          <p className="text-xs text-slate-400">Simpan departemen dulu untuk mengatur anggota.</p>
+        ) : (users || []).length === 0 ? (
+          <p className="text-xs text-slate-400">Belum ada user.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-2 mt-1 border border-slate-200 rounded-lg p-3 bg-slate-50 max-h-56 overflow-y-auto">
+            {users.map(u => (
+              <label key={u.id}
+                className="flex items-center gap-3 cursor-pointer hover:bg-white rounded-md px-2 py-1.5 transition-colors">
+                <input type="checkbox" className="w-4 h-4 rounded accent-indigo-600"
+                  checked={(u.departments || []).some(d => d.id === department.id)}
+                  disabled={pendingMembers.has(u.id)}
+                  onChange={() => toggleMember(u)} />
+                <span className="text-sm text-slate-700 truncate">{u.name}</span>
+                <span className="text-xs text-slate-400 ml-auto shrink-0">{u.email}</span>
+              </label>
+            ))}
+          </div>
+        )}
       </div>
       <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
         <button type="button" className="btn-secondary" onClick={onClose}>Batal</button>
@@ -831,7 +839,7 @@ export default function Users() {
       {/* ── Modals ── */}
       <Modal open={modal.open && modal.type === 'user'} onClose={closeModal}
         title={modal.data ? 'Edit User' : 'Tambah User'} size="md">
-        <UserForm user={modal.data} roles={roles} products={products} departments={departments}
+        <UserForm user={modal.data} roles={roles} products={products}
           onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
 
@@ -849,7 +857,8 @@ export default function Users() {
 
       <Modal open={modal.open && modal.type === 'department'} onClose={closeModal}
         title={modal.data ? 'Edit Departemen' : 'Tambah Departemen'} size="sm">
-        <DepartmentForm department={modal.data} onSave={() => { closeModal(); load(); }} onClose={closeModal} />
+        <DepartmentForm department={modal.data} users={users} onMembersChanged={load}
+          onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
 
       {/* ── Delete User Permanent Confirm ── */}
