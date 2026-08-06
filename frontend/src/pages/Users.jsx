@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Pencil, UserX, UserCheck, Key, Shield, Package, Trash2, AlertTriangle } from 'lucide-react';
+import { Plus, Pencil, UserX, UserCheck, Key, Shield, Package, Trash2, AlertTriangle, Building2 } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
 import { useAuth } from '../context/AuthContext';
@@ -17,6 +17,7 @@ const ROLE_COLORS = {
 };
 
 const AVATAR_COLORS = ['#4F46E5','#0EA5E9','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899'];
+const SWATCH_COLORS = ['#4F46E5','#0EA5E9','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#64748B'];
 
 // ─── UserForm ─────────────────────────────────────────────────────────────────
 function UserForm({ user, roles, products, departments, onSave, onClose }) {
@@ -365,6 +366,87 @@ function RoleForm({ role, onSave, onClose }) {
   );
 }
 
+// ─── DepartmentForm ───────────────────────────────────────────────────────────
+function DepartmentForm({ department, onSave, onClose }) {
+  const [code, setCode]             = useState(department?.code || '');
+  const [name, setName]             = useState(department?.name || '');
+  const [codePrefix, setCodePrefix] = useState(department?.code_prefix || '');
+  const [color, setColor]           = useState(department?.color || SWATCH_COLORS[0]);
+  const [sortOrder, setSortOrder]   = useState(department?.sort_order ?? 0);
+  const [saving, setSaving]         = useState(false);
+
+  const save = async () => {
+    if (!name.trim()) { toast.error('Nama wajib'); return; }
+    if (!department?.id && !code.trim()) { toast.error('Kode wajib'); return; }
+    setSaving(true);
+    try {
+      if (department?.id) {
+        await client.put(`/departments/${department.id}`, {
+          name, code_prefix: codePrefix, color, sort_order: +sortOrder,
+        });
+        toast.success('Departemen diperbarui');
+      } else {
+        await client.post('/departments', {
+          code, name, code_prefix: codePrefix, color, sort_order: +sortOrder,
+        });
+        toast.success('Departemen dibuat');
+      }
+      onSave();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Terjadi kesalahan');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="space-y-4">
+      {!department?.id && (
+        <div>
+          <label className="label">Kode *</label>
+          <input className="input" value={code}
+            onChange={e => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
+            placeholder="contoh: LEGAL" />
+          <p className="text-xs text-slate-400 mt-1">Identifier unik, huruf besar/angka/underscore. Tidak bisa diubah setelah dibuat.</p>
+        </div>
+      )}
+      <div>
+        <label className="label">Nama *</label>
+        <input className="input" value={name}
+          onChange={e => setName(e.target.value)} placeholder="contoh: Legal" />
+      </div>
+      <div>
+        <label className="label">
+          Prefix Kode Task
+          <span className="text-xs font-normal text-slate-400 ml-1 normal-case">— dipakai untuk auto-generate kode Leader Task, mis. LGL-001</span>
+        </label>
+        <input className="input" value={codePrefix}
+          onChange={e => setCodePrefix(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+          placeholder="kosongkan untuk pakai kode departemen" maxLength={10} />
+      </div>
+      <div>
+        <label className="label">Warna</label>
+        <div className="flex gap-2 flex-wrap">
+          {SWATCH_COLORS.map(c => (
+            <button type="button" key={c} onClick={() => setColor(c)}
+              className={`w-7 h-7 rounded-full border-2 transition-all ${color === c ? 'border-slate-800 scale-110' : 'border-transparent'}`}
+              style={{ backgroundColor: c }} />
+          ))}
+        </div>
+      </div>
+      <div>
+        <label className="label">Urutan Tampil</label>
+        <input type="number" className="input" value={sortOrder}
+          onChange={e => setSortOrder(e.target.value)} />
+      </div>
+      <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        <button type="button" className="btn-secondary" onClick={onClose}>Batal</button>
+        <button type="button" className="btn-primary" disabled={saving} onClick={save}>
+          {saving ? 'Menyimpan...' : (department?.id ? 'Perbarui Departemen' : 'Buat Departemen')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function Users() {
   const { hasRole, user: currentUser } = useAuth();
@@ -425,6 +507,17 @@ export default function Users() {
     }
   };
 
+  const deleteDepartment = async (dept) => {
+    if (!confirm(`Hapus departemen "${dept.name}"?`)) return;
+    try {
+      await client.delete(`/departments/${dept.id}`);
+      toast.success('Departemen dihapus');
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Gagal menghapus departemen');
+    }
+  };
+
   const totalPages  = Math.max(1, Math.ceil(users.length / perPage));
   const pagedUsers  = users.slice((page - 1) * perPage, page * perPage);
 
@@ -442,7 +535,7 @@ export default function Users() {
     <div className="space-y-5">
       {/* Tabs */}
       <div className="flex gap-2 border-b border-slate-200 pb-0">
-        {[['users','Users'], ['roles','Roles & Permissions']].map(([id, label]) => (
+        {[['users','Users'], ['roles','Roles & Permissions'], ['departments','Departemen']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors
               ${tab === id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
@@ -686,6 +779,55 @@ export default function Users() {
         </div>
       )}
 
+      {/* ── DEPARTEMEN TAB ── */}
+      {tab === 'departments' && (
+        <div className="space-y-4">
+          {hasRole('super_admin') && (
+            <div className="flex justify-end">
+              <button className="btn-primary"
+                onClick={() => setModal({ open: true, type: 'department', data: null })}>
+                <Plus className="w-4 h-4" /> Tambah Departemen
+              </button>
+            </div>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {departments.map(dept => {
+              const userCount = users.filter(u => (u.departments || []).some(d => d.id === dept.id)).length;
+              return (
+                <div key={dept.id} className="card p-5 flex flex-col">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: (dept.color || '#64748B') + '20' }}>
+                      <Building2 className="w-4 h-4" style={{ color: dept.color || '#64748B' }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-800 truncate">{dept.name}</p>
+                      <p className="text-xs text-slate-400 font-mono">{dept.code} · prefix {dept.code_prefix}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{userCount} user</p>
+                    </div>
+                    {hasRole('super_admin') && (
+                      <div className="flex gap-1 shrink-0">
+                        <button className="btn-ghost btn-sm p-1.5 rounded-lg" title="Edit departemen"
+                          onClick={() => setModal({ open: true, type: 'department', data: dept })}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button className="btn-ghost btn-sm p-1.5 rounded-lg text-red-500 hover:bg-red-50"
+                          title="Hapus departemen" onClick={() => deleteDepartment(dept)}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {departments.length === 0 && (
+              <p className="text-sm text-slate-400 italic col-span-full">Belum ada departemen.</p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Modals ── */}
       <Modal open={modal.open && modal.type === 'user'} onClose={closeModal}
         title={modal.data ? 'Edit User' : 'Tambah User'} size="md">
@@ -703,6 +845,11 @@ export default function Users() {
       <Modal open={modal.open && modal.type === 'role'} onClose={closeModal}
         title={modal.data ? 'Edit Role' : 'Tambah Role'} size="md">
         <RoleForm role={modal.data} onSave={() => { closeModal(); load(); }} onClose={closeModal} />
+      </Modal>
+
+      <Modal open={modal.open && modal.type === 'department'} onClose={closeModal}
+        title={modal.data ? 'Edit Departemen' : 'Tambah Departemen'} size="sm">
+        <DepartmentForm department={modal.data} onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
 
       {/* ── Delete User Permanent Confirm ── */}
