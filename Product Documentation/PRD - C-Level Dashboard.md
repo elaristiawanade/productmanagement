@@ -211,6 +211,7 @@ Sidebar: satu section baru "C-Level" — muncul untuk **siapa pun dengan `users.
 | 3 Agustus 2026 | 0.2 | Revisi model akses: department jadi atribut `users` (bukan role baru tunggal); IT↔Developer/QA (view-only), PMG↔PO/Manager; hak tulis dibatasi ke role Manager/PO/SME/Commissioner/Super Admin (SME & Commissioner adalah role baru); HC/Sales/Finance/Product di-assign manual oleh admin |
 | 4 Agustus 2026 | 0.3 | **Diimplementasikan** (lihat Bagian 8): daftar departemen dipindah dari hardcode ke tabel `departments` yang bisa dikelola tanpa deploy kode; `users.department` (1 user = 1 departemen) diganti model many-to-many `user_departments` (1 user bisa lebih dari 1 departemen) — request tambahan dari mentor setelah draft 0.2 ditulis |
 | 6 Agustus 2026 | 0.4 | **Diimplementasikan** (lihat Bagian 9): tab "Departemen" baru di Users & Roles untuk Tambah/Edit/Hapus departemen dari UI (sebelumnya endpoint backend saja, belum ada UI); assignment user→departemen dipindah dari form Tambah/Edit User ke form Edit Departemen, supaya semua pengaturan departemen terpusat di satu tab |
+| 28 Agustus 2026 | 0.5 | **Diimplementasikan** (lihat Bagian 10): default akses C-Level Dashboard dipersempit ke role Super Admin & Commissioner saja — tier akses lihat-saja berbasis departemen (Bagian 2, 8) dihapus; permission baru `access_c_level`, bisa diberikan ke role apa pun lewat tab Roles & Permissions, memberi akses setara Commissioner |
 
 ---
 
@@ -288,3 +289,45 @@ Checkbox departemen di form Tambah/Edit User **dihapus**. Sebagai gantinya, form
 - **Tidak ada endpoint API baru** — seluruhnya reuse `GET/POST/PUT/DELETE /api/departments` dan `GET/PUT /users/{id}/departments` yang sudah didokumentasikan di 8.2.
 - Skema DB (Bagian 8.1) — tidak tersentuh.
 - Model akses view/write di Bagian 2 — tidak tersentuh.
+
+> **⚠️ Koreksi (lihat Bagian 10):** Poin terakhir di atas — *"Model akses view/write di Bagian 2 — tidak tersentuh"* — sudah tidak berlaku sejak update 28 Agustus 2026. Tier akses lihat-saja berbasis departemen (Bagian 2.1, 8.4) dihapus; default akses sekarang dipersempit ke Super Admin & Commissioner saja. Bagian 8.1–8.2 dan 9.1–9.2 (skema DB, endpoint API, UI tab Departemen) tetap berlaku apa adanya — perubahan Bagian 10 murni pada lapisan otorisasi, bukan data departemen itu sendiri.
+
+---
+
+## 10. Update Implementasi — Default Akses Dibatasi ke Super Admin & Commissioner (28 Agustus 2026)
+
+**Status: Diimplementasikan & sudah ditest lokal.** Addendum di atas Bagian 8–9 (dipertahankan apa adanya sebagai riwayat) — permintaan tambahan setelah update 9:
+
+1. Secara default, hanya user dengan role **Super Admin** dan **Commissioner** yang boleh melihat dan mengakses seluruh fitur & inputan C-Level Dashboard — bukan lagi siapa pun yang kebetulan punya departemen ter-assign (perilaku Bagian 2.1/8 sebelumnya).
+2. Role lain (Manager, PO, SME, atau role kustom apa pun) bisa diberi akses kembali lewat permission baru di tab Roles & Permissions, dengan level akses **setara Commissioner** (lintas departemen, lihat + tulis) — bukan tier lihat-saja per-departemen seperti model lama.
+
+### 10.1 Perubahan kebijakan akses
+
+| | Sebelum (Bagian 2, 8) | Sesudah (Bagian 10) |
+|---|---|---|
+| **Default write** (`WRITE_ROLES`) | `super_admin, manager, po, sme, commissioner` | `super_admin, commissioner` |
+| **Default view** | Siapa pun dengan departemen ter-assign (`user_departments`) melihat departemennya sendiri, read-only | Tidak ada tier lihat-saja — role di luar Super Admin/Commissioner tidak melihat apa pun secara default |
+| **Cara mendapat akses tambahan** | Otomatis lewat role sistem (Manager/PO/SME) atau assignment departemen | Eksplisit lewat permission `access_c_level` per role, di tab Roles & Permissions |
+| **Level akses saat diberikan** | Bertingkat — tulis (5 role) vs lihat-saja per-departemen (sisanya) | Tunggal — setara Commissioner sepenuhnya (lintas departemen, lihat + tulis), tidak ada tier parsial |
+| **Sidebar "C-Level Dashboard"** | Tampil untuk siapa pun dengan departemen ter-assign, atau Super Admin | Tampil untuk Super Admin/Commissioner, atau role dengan `access_c_level` |
+
+Permission baru mengikuti pola JSONB `roles.permissions` yang sudah ada (lihat Bagian 2.2 untuk pola serupa `manage_leader_notes`/`manage_leader_tasks` yang sebelumnya didefinisikan di kode tapi tidak pernah punya UI toggle — sekarang digantikan satu key `access_c_level`):
+```json
+{ "access_c_level": true }
+```
+
+### 10.2 Perubahan kode
+
+| File | Perubahan |
+|---|---|
+| `DepartmentHelper.java` | `WRITE_ROLES` dipersempit ke `{super_admin, commissioner}`; `canWrite()` cek `access_c_level` (menggantikan `manage_leader_notes`/`manage_leader_tasks` yang tidak pernah punya UI); `visibleDepartments()` disederhanakan jadi biner — `null` (semua departemen) jika `canWrite()`, `[]` (tidak ada) jika tidak, tanpa tier parsial |
+| `CLevel.jsx` | `canWrite` di komponen utama memakai kondisi yang sama: `hasRole('super_admin','commissioner') \|\| hasPermission('access_c_level')` |
+| `Sidebar.jsx` | Kondisi tampil menu "C-Level Dashboard" diubah dari `!!user?.departments?.length \|\| hasRole('super_admin')` menjadi kondisi yang sama seperti di atas; `show()` sekarang menerima `hasPermission` sebagai parameter tambahan |
+| `Users.jsx` | Grup permission baru "C-Level Dashboard" ditambahkan di tab Roles & Permissions, ditempatkan setelah grup QA — satu item: `access_c_level` ("Akses C-Level Dashboard") |
+
+### 10.3 Yang sengaja TIDAK berubah
+
+- **Tidak ada migrasi/skema DB baru** — permission disimpan di kolom `roles.permissions` (JSONB) yang sudah ada sejak awal, sama seperti permission lain (`manage_backlog`, `manage_qa`, dst).
+- **Tidak ada endpoint API baru** — otorisasi tetap lewat `DepartmentHelper.canWrite()`/`visibleDepartments()` yang sudah dipakai `LeaderNotesController`/`LeaderTaskController` sejak Bagian 8.
+- Data departemen itu sendiri (tabel `departments`, `user_departments`, tab Departemen di Bagian 9) — tidak tersentuh. Perubahan ini murni di lapisan otorisasi C-Level, bukan pengelolaan departemen.
+- My Task (Bagian 3.3) tetap bypass filter departemen untuk task yang di-assign ke user — tidak terpengaruh oleh perubahan ini.

@@ -13,10 +13,10 @@ const NAV_MAIN = [
   { to: '/products', icon: Package,         label: 'Products'     },
   { to: '/standup',  icon: ClipboardList,   label: 'Standup'      },
   { to: '/qa',       icon: TestTube2,       label: 'QA Module'    },
-  // Visible to anyone with at least one department assigned (view or write) or Super Admin —
-  // not a plain `roles` check, since access here is department-scoped, not role-scoped.
+  // Locked to Super Admin / Commissioner by default; other roles only see it once granted
+  // the `access_c_level` permission (Users & Roles → Roles & Permissions).
   { to: '/c-level',  icon: Crown,           label: 'C-Level Dashboard',
-    show: (user, hasRole) => !!user?.departments?.length || hasRole('super_admin') },
+    show: (user, hasRole, hasPermission) => hasRole('super_admin', 'commissioner') || hasPermission('access_c_level') },
   { to: '/users',    icon: Users,           label: 'Users & Roles', roles: ['super_admin','manager'] },
 ];
 
@@ -25,7 +25,7 @@ const NAV_BOTTOM = [
 ];
 
 export default function Sidebar({ collapsed, onToggle }) {
-  const { user, hasRole } = useAuth();
+  const { user, hasRole, hasPermission } = useAuth();
 
   return (
     <aside
@@ -47,7 +47,7 @@ export default function Sidebar({ collapsed, onToggle }) {
       <nav className="flex-1 py-4 space-y-0.5 px-2 overflow-y-auto overflow-x-hidden">
         {NAV_MAIN.map(({ to, icon: Icon, label, roles, show }) => {
           if (roles && !hasRole(...roles)) return null;
-          if (show && !show(user, hasRole)) return null;
+          if (show && !show(user, hasRole, hasPermission)) return null;
           return (
             <NavLink key={to} to={to} end={to === '/'}
               className={({ isActive }) =>

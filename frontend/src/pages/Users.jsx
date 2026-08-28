@@ -223,6 +223,14 @@ const PERMISSION_GROUPS = [
     ],
   },
   {
+    group: 'C-Level Dashboard',
+    color: 'violet',
+    items: [
+      { key: 'access_c_level', label: 'Akses C-Level Dashboard',
+        desc: 'Lihat dan kelola Leader Notes, Leader Task, dan My Task di semua departemen (setara Commissioner)' },
+    ],
+  },
+  {
     group: 'Lainnya',
     color: 'slate',
     items: [

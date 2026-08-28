@@ -1231,8 +1231,7 @@ function DashboardTab({ user, canWrite, departments, onGoToTasks, onGoToNotes, o
 
 export default function CLevel() {
   const { user, hasRole, hasPermission } = useAuth();
-  const canWrite = hasRole('super_admin', 'manager', 'po', 'sme', 'commissioner')
-    || hasPermission('manage_leader_notes') || hasPermission('manage_leader_tasks');
+  const canWrite = hasRole('super_admin', 'commissioner') || hasPermission('access_c_level');
   const [tab, setTab] = useState('dashboard');
   const [detailId, setDetailId] = useState(null);
   const [taskFilterRequest, setTaskFilterRequest] = useState(null);
