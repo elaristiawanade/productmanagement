@@ -465,7 +465,7 @@ function DepartmentForm({ department, users, onSave, onClose, onMembersChanged }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function Users() {
-  const { hasRole, user: currentUser } = useAuth();
+  const { hasRole, hasPermission, user: currentUser } = useAuth();
   const [users,    setUsers]    = useState([]);
   const [roles,    setRoles]    = useState([]);
   const [products, setProducts] = useState([]);
@@ -564,7 +564,7 @@ export default function Users() {
       {tab === 'users' && (
         <>
           <div className="flex justify-end">
-            {hasRole('super_admin','manager') && (
+            {hasPermission('manage_users') && (
               <button className="btn-primary"
                 onClick={() => setModal({ open: true, type: 'user', data: null })}>
                 <Plus className="w-4 h-4" /> Tambah User
@@ -658,7 +658,7 @@ export default function Users() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1 justify-center">
-                          {hasRole('super_admin','manager') && (
+                          {hasPermission('manage_users') && (
                             <>
                               <button className="btn-ghost btn-sm p-1.5 rounded-lg" title="Edit"
                                 onClick={() => setModal({ open: true, type: 'user', data: u })}>

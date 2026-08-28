@@ -17,7 +17,11 @@ const NAV_MAIN = [
   // the `access_c_level` permission (Users & Roles → Roles & Permissions).
   { to: '/c-level',  icon: Crown,           label: 'C-Level Dashboard',
     show: (user, hasRole, hasPermission) => hasRole('super_admin', 'commissioner') || hasPermission('access_c_level') },
-  { to: '/users',    icon: Users,           label: 'Users & Roles', roles: ['super_admin','manager'] },
+  // Not a plain `roles` check — Users & Roles is gated by the `manage_users` permission
+  // (Users & Roles → Roles & Permissions) so unchecking it for a role actually takes effect.
+  // `hasPermission` already grants Super Admin via its `permissions.all` bypass.
+  { to: '/users',    icon: Users,           label: 'Users & Roles',
+    show: (user, hasRole, hasPermission) => hasPermission('manage_users') },
 ];
 
 const NAV_BOTTOM = [
