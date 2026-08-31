@@ -1,5 +1,6 @@
 package com.producttracker.controller;
 
+import com.producttracker.config.BugHelper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
@@ -27,6 +28,9 @@ public class AttachmentController {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private BugHelper bugHelper;
 
     @Value("${app.upload.dir:./uploads}")
     private String uploadDir;
@@ -82,23 +86,90 @@ public class AttachmentController {
         }
     }
 
+    @GetMapping("/bugs/{id}/attachments")
+    public ResponseEntity<?> listBugAttachments(@PathVariable Long id, @AuthenticationPrincipal Object principal) {
+        if (!bugHelper.canAccess(principal)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses ke modul Bugs Incident"));
+        }
+        List<Map<String, Object>> rows = jdbc.queryForList(
+            "SELECT a.*, u.name AS uploaded_by_name " +
+            "FROM bug_attachments a " +
+            "LEFT JOIN users u ON u.id = a.uploaded_by " +
+            "WHERE a.bug_id = ? ORDER BY a.created_at",
+            id
+        );
+        rows.forEach(r -> r.put("url", "/api/attachments/file/" + r.get("filename")));
+        return ResponseEntity.ok(rows);
+    }
+
+    @PostMapping("/bugs/{id}/attachments")
+    public ResponseEntity<?> uploadBugAttachment(@PathVariable Long id,
+                                    @RequestParam("file") MultipartFile file,
+                                    @AuthenticationPrincipal Object principal) {
+        if (!bugHelper.canAccess(principal)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses ke modul Bugs Incident"));
+        }
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Hanya file gambar yang diperbolehkan (JPEG, PNG, GIF, WebP)"));
+        }
+        if (file.getSize() > 10L * 1024 * 1024) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Ukuran file maksimal 10MB"));
+        }
+
+        try {
+            Path uploadPath = Paths.get(uploadDir).toAbsolutePath();
+            Files.createDirectories(uploadPath);
+
+            String original = file.getOriginalFilename() != null ? file.getOriginalFilename() : "upload";
+            String ext = original.contains(".") ? original.substring(original.lastIndexOf(".")) : "";
+            String filename = UUID.randomUUID().toString() + ext;
+
+            Files.copy(file.getInputStream(), uploadPath.resolve(filename), StandardCopyOption.REPLACE_EXISTING);
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> user = principal instanceof Map ? (Map<String, Object>) principal : null;
+            Map<String, Object> row = jdbc.queryForMap(
+                "INSERT INTO bug_attachments (bug_id, filename, original_name, file_size, mime_type, uploaded_by) " +
+                "VALUES (?,?,?,?,?,?) RETURNING *",
+                id, filename, original, file.getSize(), contentType,
+                user != null ? user.get("id") : null
+            );
+            row.put("url", "/api/attachments/file/" + filename);
+            return ResponseEntity.status(201).body(row);
+        } catch (IOException e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Gagal menyimpan file"));
+        }
+    }
+
     @DeleteMapping("/attachments/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         List<Map<String, Object>> rows = jdbc.queryForList(
             "SELECT filename FROM backlog_attachments WHERE id = ?", id
         );
-        if (rows.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "Lampiran tidak ditemukan"));
+        if (!rows.isEmpty()) {
+            String filename = (String) rows.get(0).get("filename");
+            jdbc.update("DELETE FROM backlog_attachments WHERE id = ?", id);
+            deleteFileQuietly(filename);
+            return ResponseEntity.ok(Map.of("message", "Lampiran dihapus"));
+        }
 
-        String filename = (String) rows.get(0).get("filename");
-        jdbc.update("DELETE FROM backlog_attachments WHERE id = ?", id);
+        rows = jdbc.queryForList("SELECT filename FROM bug_attachments WHERE id = ?", id);
+        if (!rows.isEmpty()) {
+            String filename = (String) rows.get(0).get("filename");
+            jdbc.update("DELETE FROM bug_attachments WHERE id = ?", id);
+            deleteFileQuietly(filename);
+            return ResponseEntity.ok(Map.of("message", "Lampiran dihapus"));
+        }
 
-        // Delete file from disk (best-effort)
+        return ResponseEntity.status(404).body(Map.of("error", "Lampiran tidak ditemukan"));
+    }
+
+    private void deleteFileQuietly(String filename) {
         try {
             Path filePath = Paths.get(uploadDir).toAbsolutePath().resolve(filename);
             Files.deleteIfExists(filePath);
         } catch (IOException ignored) {}
-
-        return ResponseEntity.ok(Map.of("message", "Lampiran dihapus"));
     }
 
     @GetMapping("/attachments/file/{filename:.+}")

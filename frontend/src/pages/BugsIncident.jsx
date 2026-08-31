@@ -1,9 +1,9 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts';
-import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, ShieldCheck, XCircle, AlertCircle } from 'lucide-react';
+import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, ShieldCheck, XCircle, AlertCircle, Paperclip, Upload, Image as ImageIcon, X } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
@@ -29,7 +29,57 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
     assigned_to: bug?.assigned_to || '',
   });
   const [saving, setSaving] = useState(false);
+  const [attachments, setAttachments] = useState([]);
+  const [uploading,   setUploading]   = useState(false);
+  const [previewImage, setPreviewImage] = useState(null);
+  const fileInputRef = useRef(null);
   const filteredItems = backlogItems.filter(b => !form.product_id || b.product_id === +form.product_id);
+
+  useEffect(() => {
+    if (!previewImage) return;
+    const handler = (e) => { if (e.key === 'Escape') setPreviewImage(null); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [previewImage]);
+
+  const loadAttachments = useCallback(async () => {
+    if (!bug?.id) return;
+    try {
+      const res = await client.get(`/bugs/${bug.id}/attachments`);
+      setAttachments(res.data || []);
+    } catch { setAttachments([]); }
+  }, [bug?.id]);
+
+  useEffect(() => { loadAttachments(); }, [loadAttachments]);
+
+  const handleUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast.error('Hanya file gambar yang diizinkan'); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error('Ukuran file maks 10MB'); return; }
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      await client.post(`/bugs/${bug.id}/attachments`, fd);
+      toast.success('Gambar berhasil diunggah');
+      loadAttachments();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Gagal mengunggah gambar');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const deleteAttachment = async (id) => {
+    if (!confirm('Hapus lampiran ini?')) return;
+    try {
+      await client.delete(`/attachments/${id}`);
+      toast.success('Lampiran dihapus');
+      loadAttachments();
+    } catch { toast.error('Gagal menghapus'); }
+  };
 
   const save = async (e) => {
     e.preventDefault(); setSaving(true);
@@ -87,10 +137,81 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
           {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
       </div>
+      {/* Attachments — only when editing existing bug */}
+      {bug?.id && (
+        <div className="col-span-2">
+          <div className="border-t border-slate-100 pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <label className="label mb-0 flex items-center gap-1.5">
+                <Paperclip className="w-3.5 h-3.5 text-slate-400" />
+                Lampiran Gambar
+                {attachments.length > 0 && (
+                  <span className="text-xs font-normal text-slate-400 ml-1">({attachments.length})</span>
+                )}
+              </label>
+              <button type="button"
+                className="btn-secondary text-xs py-1 px-2 flex items-center gap-1.5"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}>
+                {uploading
+                  ? <span className="w-3.5 h-3.5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                  : <Upload className="w-3.5 h-3.5" />}
+                {uploading ? 'Mengunggah...' : 'Unggah Gambar'}
+              </button>
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
+            </div>
+            {attachments.length === 0 ? (
+              <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors"
+                onClick={() => fileInputRef.current?.click()}>
+                <ImageIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs text-slate-400">Klik untuk unggah gambar</p>
+                <p className="text-xs text-slate-300 mt-0.5">JPG, PNG, GIF, WEBP • Maks 10MB</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-2">
+                {attachments.map(att => (
+                  <div key={att.id} className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-50 aspect-video cursor-pointer"
+                    onClick={() => setPreviewImage(att)}>
+                    <img src={`/api/attachments/file/${att.filename}`} alt={att.original_name}
+                      className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                      <button type="button" onClick={(e) => { e.stopPropagation(); deleteAttachment(att.id); }}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <p className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs px-1.5 py-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
+                      {att.original_name}
+                    </p>
+                  </div>
+                ))}
+                <button type="button" onClick={() => fileInputRef.current?.click()}
+                  className="aspect-video rounded-lg border-2 border-dashed border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors flex flex-col items-center justify-center gap-1">
+                  <Upload className="w-4 h-4 text-slate-400" />
+                  <span className="text-xs text-slate-400">Tambah</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-slate-100">
         <button type="button" className="btn-secondary" onClick={onClose}>Batal</button>
         <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Menyimpan...' : (bug?.id ? 'Perbarui' : 'Buat Bug')}</button>
       </div>
+
+      {previewImage && (
+        <div className="fixed inset-0 z-[60] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-6"
+          onClick={() => setPreviewImage(null)}>
+          <button type="button" onClick={() => setPreviewImage(null)}
+            className="absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2">
+            <X className="w-5 h-5" />
+          </button>
+          <img src={`/api/attachments/file/${previewImage.filename}`} alt={previewImage.original_name}
+            className="max-w-full max-h-full rounded-lg shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
     </form>
   );
 }

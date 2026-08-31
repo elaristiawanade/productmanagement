@@ -222,6 +222,7 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 - **Bugs** — CRUD data bug: judul, deskripsi, langkah reproduksi, severity & prioritas (`critical/high/medium/low`), assignee. **Tidak wajib** terhubung ke Backlog Item (beda dari Test Case QA yang wajib) — bug bisa berdiri sendiri untuk insiden yang belum tentu jadi backlog item
 - **Progress** — riwayat progres perbaikan bug, dicatat sebagai log/histori (bukan satu angka yang ditimpa) setiap kali statusnya diupdate, lengkap dengan catatan dan siapa yang mengupdate
 - **Bugs Dashboard** — statistik total bug, jumlah open, jumlah fixed, resolution rate, breakdown per produk dan per stage
+- **Lampiran Gambar** — unggah screenshot/bukti visual pada bug (multi-gambar, max 10MB per file, JPEG/PNG/GIF/WebP), muncul setelah bug pertama kali disimpan (pola sama seperti lampiran Backlog Item, 3.2). Klik thumbnail untuk membuka preview gambar penuh layar
 
 **Stage bug** (dicatat sebagai histori di Progress, nilai stage terkini disimpan juga di data Bug untuk filter/tampilan cepat):
 
@@ -486,8 +487,9 @@ GET/POST          /api/bugs                List & buat bug (params: product_id, 
 PUT/DELETE        /api/bugs/:id            Update (tanpa field stage) & hapus bug (cascade ke progress)
 GET/POST          /api/bugs/progress       List & buat entry progress (params: bug_id, product_id)
 GET               /api/bugs/dashboard      Statistik bug (total, open, fixed, resolution rate, breakdown)
+GET/POST          /api/bugs/:id/attachments List & upload lampiran gambar bug (max 10MB, image only, multipart/form-data)
 ```
-**Akses:** Semua endpoint di atas membalas `403` untuk role selain Super Admin/QA Engineer, kecuali role tsb diberi permission `access_bugs`.
+**Akses:** Semua endpoint di atas membalas `403` untuk role selain Super Admin/QA Engineer, kecuali role tsb diberi permission `access_bugs`. Lampiran gambar bug memakai endpoint `DELETE /api/attachments/:id` dan `GET /api/attachments/file/:filename` yang sama dengan lampiran Backlog Item.
 
 ### Dashboard
 ```
@@ -579,6 +581,7 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | `migration_v7.sql` | Perbaikan FK `backlog_items.feature_id` → `product_roadmap(id)` |
 | `migration_v8.sql` | Tambah kolom `estimated_hours NUMERIC(6,1)` di `backlog_items` |
 | `migration_v12.sql` | Modul Bugs Incident: tabel `bugs` & `bug_progress_updates`, permission `access_bugs` di-seed ke role `qa` |
+| `migration_v13.sql` | Tabel `bug_attachments` (lampiran gambar bug), mirror `backlog_attachments` |
 
 ---
 
@@ -611,3 +614,4 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | 26 Jun 2026 | 1.4 | migration_v8: kolom `estimated_hours` di tabel `backlog_items` |
 | 26 Jun 2026 | 1.5 | Perbaikan PRD: status sprint `planned` (bukan `planning`), kapasitas workload 20 pts & occupation 80 jam, level Ringan/Normal/Padat/Overload, soft vs permanent delete user, capacity field sprint, API reference dilengkapi (notifications, attachments, burndown POST, user roles, roadmap, import Jira) |
 | 31 Agu 2026 | 1.6 | Tambah modul **Bugs Incident** (3.9): pelacakan bug terpisah dari QA Test Case, dengan histori progres perbaikan bertahap (`open → in_progress → fixed → verified → closed`). Akses default dibatasi Super Admin & QA Engineer, bisa diperluas lewat permission `access_bugs` (pola sama seperti `access_c_level`). Backlog item bersifat opsional (beda dari Test Case yang wajib). `migration_v12.sql`: tabel `bugs`, `bug_progress_updates` |
+| 31 Agu 2026 | 1.7 | Bugs Incident (3.9): tambah **Lampiran Gambar** pada bug — unggah screenshot/bukti visual, klik thumbnail untuk preview penuh layar. Pola sama dengan lampiran Backlog Item (3.2), muncul setelah bug pertama kali disimpan. `migration_v13.sql`: tabel `bug_attachments` |
