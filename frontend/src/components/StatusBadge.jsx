@@ -22,6 +22,11 @@ const STATUS_MAP = {
   skip:    { label: 'Skip',    cls: 'bg-slate-100 text-slate-500' },
   // Product
   archived: { label: 'Archived', cls: 'bg-slate-100 text-slate-400' },
+  // Bugs
+  open:     { label: 'Open',     cls: 'bg-red-100 text-red-700' },
+  fixed:    { label: 'Fixed',    cls: 'bg-teal-100 text-teal-700' },
+  verified: { label: 'Verified', cls: 'bg-cyan-100 text-cyan-700' },
+  closed:   { label: 'Closed',   cls: 'bg-slate-200 text-slate-500' },
 };
 
 export default function StatusBadge({ status, size = 'sm' }) {

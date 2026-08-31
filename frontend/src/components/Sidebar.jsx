@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, ListTodo, Zap, Package, Users, TestTube2, FileDown, ClipboardList, Layers, CheckSquare, Settings, Crown
+  LayoutDashboard, ListTodo, Zap, Package, Users, TestTube2, FileDown, ClipboardList, Layers, CheckSquare, Settings, Crown, Bug
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -13,6 +13,10 @@ const NAV_MAIN = [
   { to: '/products', icon: Package,         label: 'Products'     },
   { to: '/standup',  icon: ClipboardList,   label: 'Standup'      },
   { to: '/qa',       icon: TestTube2,       label: 'QA Module'    },
+  // Locked to Super Admin / QA Engineer by default; other roles only see it once granted
+  // the `access_bugs` permission (Users & Roles → Roles & Permissions).
+  { to: '/bugs',     icon: Bug,             label: 'Bugs Incident',
+    show: (user, hasRole, hasPermission) => hasRole('super_admin') || hasPermission('access_bugs') },
   // Locked to Super Admin / Commissioner by default; other roles only see it once granted
   // the `access_c_level` permission (Users & Roles → Roles & Permissions).
   { to: '/c-level',  icon: Crown,           label: 'C-Level Dashboard',

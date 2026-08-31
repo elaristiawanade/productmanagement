@@ -223,6 +223,14 @@ const PERMISSION_GROUPS = [
     ],
   },
   {
+    group: 'Bugs Incident',
+    color: 'red',
+    items: [
+      { key: 'access_bugs', label: 'Akses Bugs Incident',
+        desc: 'Lihat dan kelola modul Bugs Incident (dashboard, daftar bug, progress perbaikan) — default hanya QA Engineer' },
+    ],
+  },
+  {
     group: 'C-Level Dashboard',
     color: 'violet',
     items: [
