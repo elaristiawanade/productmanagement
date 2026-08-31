@@ -64,7 +64,7 @@ public class AuthController {
         userDto.put("roleDisplay", user.get("role_display"));
         userDto.put("permissions", user.get("permissions"));
         userDto.put("avatarColor", user.get("avatar_color"));
-        userDto.put("department", user.get("department"));
+        userDto.put("departments", departmentCodes(toLong(user.get("id"))));
 
         return ResponseEntity.ok(Map.of("token", token, "user", userDto));
     }
@@ -80,7 +80,7 @@ public class AuthController {
         dto.put("role", u.get("role_name"));
         dto.put("permissions", u.get("permissions"));
         dto.put("avatarColor", u.get("avatar_color"));
-        dto.put("department", u.get("department"));
+        dto.put("departments", departmentCodes(toLong(u.get("id"))));
         return ResponseEntity.ok(dto);
     }
 
@@ -115,5 +115,19 @@ public class AuthController {
     private Map<String, Object> currentUser(Object principal) {
         if (principal instanceof Map) return (Map<String, Object>) principal;
         return null;
+    }
+
+    private List<String> departmentCodes(Long userId) {
+        if (userId == null) return List.of();
+        return jdbc.queryForList(
+            "SELECT d.code FROM departments d JOIN user_departments ud ON ud.department_id = d.id " +
+            "WHERE ud.user_id = ? ORDER BY d.sort_order, d.name", String.class, userId
+        );
+    }
+
+    private Long toLong(Object v) {
+        if (v == null) return null;
+        if (v instanceof Number) return ((Number) v).longValue();
+        try { return Long.parseLong(v.toString()); } catch (Exception e) { return null; }
     }
 }

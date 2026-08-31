@@ -22,7 +22,8 @@ services:
       - ./backend/db/migration_v8.sql:/docker-entrypoint-initdb.d/09_migration_v8.sql
       - ./backend/db/migration_v9.sql:/docker-entrypoint-initdb.d/10_migration_v9.sql
       - ./backend/db/migration_v10.sql:/docker-entrypoint-initdb.d/11_migration_v10.sql
-      - ./backend/db/seed_clevel.sql:/docker-entrypoint-initdb.d/12_seed_clevel.sql
+      - ./backend/db/migration_v11.sql:/docker-entrypoint-initdb.d/12_migration_v11.sql
+      - ./backend/db/seed_clevel.sql:/docker-entrypoint-initdb.d/13_seed_clevel.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d product_tracker"]
       interval: 10s

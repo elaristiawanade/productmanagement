@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/leader-notes")
@@ -20,6 +21,9 @@ public class LeaderNotesController {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private DepartmentHelper departmentHelper;
 
     private static final String NOTE_FIELDS =
         "n.id, n.department, n.note_date, n.goals_this_week, n.created_at, n.updated_at, " +
@@ -38,15 +42,16 @@ public class LeaderNotesController {
         Map<String, Object> actor = toMap(principal);
         if (actor == null) return ResponseEntity.status(401).build();
 
-        List<String> visible = DepartmentHelper.visibleDepartments(principal);
+        List<String> visible = departmentHelper.visibleDepartments(principal);
         if (visible != null && visible.isEmpty()) return ResponseEntity.ok(List.of());
 
         List<String> filters = new ArrayList<>();
         List<Object> params = new ArrayList<>();
 
         if (visible != null) {
-            filters.add("n.department = ?");
-            params.add(visible.get(0));
+            String ph = visible.stream().map(x -> "?").collect(Collectors.joining(","));
+            filters.add("n.department IN (" + ph + ")");
+            params.addAll(visible);
         } else if (department != null && !department.isBlank()) {
             filters.add("n.department = ?");
             params.add(department);
@@ -95,12 +100,12 @@ public class LeaderNotesController {
                                      @RequestBody Map<String, Object> body) {
         Map<String, Object> actor = toMap(principal);
         if (actor == null) return ResponseEntity.status(401).build();
-        if (!DepartmentHelper.canWrite(principal)) {
+        if (!departmentHelper.canWrite(principal)) {
             return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki izin untuk membuat Leader Notes"));
         }
 
         String department = (String) body.get("department");
-        if (!DepartmentHelper.isValidDepartment(department)) {
+        if (!departmentHelper.isValidDepartment(department)) {
             return ResponseEntity.badRequest().body(Map.of("error", "Departemen tidak valid"));
         }
         Object goals = body.get("goals_this_week");
@@ -154,12 +159,12 @@ public class LeaderNotesController {
                                      @RequestBody Map<String, Object> body) {
         Map<String, Object> actor = toMap(principal);
         if (actor == null) return ResponseEntity.status(401).build();
-        if (!DepartmentHelper.canWrite(principal)) {
+        if (!departmentHelper.canWrite(principal)) {
             return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki izin untuk mengubah Leader Notes"));
         }
 
         String department = (String) body.get("department");
-        if (!DepartmentHelper.isValidDepartment(department)) {
+        if (!departmentHelper.isValidDepartment(department)) {
             return ResponseEntity.badRequest().body(Map.of("error", "Departemen tidak valid"));
         }
         Object goals = body.get("goals_this_week");
@@ -207,7 +212,7 @@ public class LeaderNotesController {
 
     /** Mirrors LeaderTaskController's code auto-generation (kept local to avoid a cross-controller call). */
     private void createLinkedTask(String department, String title, Long createdBy, Long sourceNoteId) {
-        String prefix = DepartmentHelper.codePrefix(department);
+        String prefix = departmentHelper.codePrefix(department);
         List<Map<String, Object>> lastRows = jdbc.queryForList(
             "SELECT code FROM leader_tasks WHERE code LIKE ? ORDER BY code DESC LIMIT 1", prefix + "-%"
         );

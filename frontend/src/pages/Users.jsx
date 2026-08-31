@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Pencil, UserX, UserCheck, Key, Shield, Package, Trash2, AlertTriangle } from 'lucide-react';
+import { Plus, Pencil, UserX, UserCheck, Key, Shield, Package, Trash2, AlertTriangle, Building2 } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
 import { useAuth } from '../context/AuthContext';
@@ -17,8 +17,7 @@ const ROLE_COLORS = {
 };
 
 const AVATAR_COLORS = ['#4F46E5','#0EA5E9','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899'];
-
-const DEPARTMENTS = ['HC', 'Sales', 'PMG', 'IT', 'Finance', 'Product'];
+const SWATCH_COLORS = ['#4F46E5','#0EA5E9','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#64748B'];
 
 // ─── UserForm ─────────────────────────────────────────────────────────────────
 function UserForm({ user, roles, products, onSave, onClose }) {
@@ -27,7 +26,6 @@ function UserForm({ user, roles, products, onSave, onClose }) {
     password: '', role_id: user?.role_id || '',
     avatar_color: user?.avatar_color || '#4F46E5',
     is_active: user?.is_active ?? true,
-    department: user?.department || '',
   });
   const [selectedProducts, setSelectedProducts] = useState(
     () => new Set((user?.products || []).map(p => p.id))
@@ -95,17 +93,6 @@ function UserForm({ user, roles, products, onSave, onClose }) {
           onChange={e => setForm(f => ({ ...f, is_active: e.target.value === 'true' }))}>
           <option value="true">Aktif</option>
           <option value="false">Nonaktif</option>
-        </select>
-      </div>
-      <div className="col-span-2">
-        <label className="label">
-          Departemen (C-Level Dashboard)
-          <span className="text-xs font-normal text-slate-400 ml-1 normal-case">— menentukan scope Leader Notes/Task yang bisa dilihat user ini</span>
-        </label>
-        <select className="select" value={form.department}
-          onChange={e => setForm(f => ({ ...f, department: e.target.value }))}>
-          <option value="">— Tidak ada —</option>
-          {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
       </div>
       <div className="col-span-2">
@@ -236,6 +223,14 @@ const PERMISSION_GROUPS = [
     ],
   },
   {
+    group: 'C-Level Dashboard',
+    color: 'violet',
+    items: [
+      { key: 'access_c_level', label: 'Akses C-Level Dashboard',
+        desc: 'Lihat dan kelola Leader Notes, Leader Task, dan My Task di semua departemen (setara Commissioner)' },
+    ],
+  },
+  {
     group: 'Lainnya',
     color: 'slate',
     items: [
@@ -346,12 +341,135 @@ function RoleForm({ role, onSave, onClose }) {
   );
 }
 
+// ─── DepartmentForm ───────────────────────────────────────────────────────────
+function DepartmentForm({ department, users, onSave, onClose, onMembersChanged }) {
+  const [code, setCode]             = useState(department?.code || '');
+  const [name, setName]             = useState(department?.name || '');
+  const [codePrefix, setCodePrefix] = useState(department?.code_prefix || '');
+  const [color, setColor]           = useState(department?.color || SWATCH_COLORS[0]);
+  const [sortOrder, setSortOrder]   = useState(department?.sort_order ?? 0);
+  const [saving, setSaving]         = useState(false);
+  const [pendingMembers, setPendingMembers] = useState(() => new Set());
+
+  const toggleMember = async (u) => {
+    const currentIds = (u.departments || []).map(d => d.id);
+    const isMember = currentIds.includes(department.id);
+    const nextIds = isMember ? currentIds.filter(id => id !== department.id) : [...currentIds, department.id];
+    setPendingMembers(prev => new Set(prev).add(u.id));
+    try {
+      await client.put(`/users/${u.id}/departments`, { department_ids: nextIds });
+      onMembersChanged?.();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Gagal memperbarui anggota');
+    } finally {
+      setPendingMembers(prev => { const next = new Set(prev); next.delete(u.id); return next; });
+    }
+  };
+
+  const save = async () => {
+    if (!name.trim()) { toast.error('Nama wajib'); return; }
+    if (!department?.id && !code.trim()) { toast.error('Kode wajib'); return; }
+    setSaving(true);
+    try {
+      if (department?.id) {
+        await client.put(`/departments/${department.id}`, {
+          name, code_prefix: codePrefix, color, sort_order: +sortOrder,
+        });
+        toast.success('Departemen diperbarui');
+      } else {
+        await client.post('/departments', {
+          code, name, code_prefix: codePrefix, color, sort_order: +sortOrder,
+        });
+        toast.success('Departemen dibuat');
+      }
+      onSave();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Terjadi kesalahan');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="space-y-4">
+      {!department?.id && (
+        <div>
+          <label className="label">Kode *</label>
+          <input className="input" value={code}
+            onChange={e => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
+            placeholder="contoh: LEGAL" />
+          <p className="text-xs text-slate-400 mt-1">Identifier unik, huruf besar/angka/underscore. Tidak bisa diubah setelah dibuat.</p>
+        </div>
+      )}
+      <div>
+        <label className="label">Nama *</label>
+        <input className="input" value={name}
+          onChange={e => setName(e.target.value)} placeholder="contoh: Legal" />
+      </div>
+      <div>
+        <label className="label">
+          Prefix Kode Task
+          <span className="text-xs font-normal text-slate-400 ml-1 normal-case">— dipakai untuk auto-generate kode Leader Task, mis. LGL-001</span>
+        </label>
+        <input className="input" value={codePrefix}
+          onChange={e => setCodePrefix(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+          placeholder="kosongkan untuk pakai kode departemen" maxLength={10} />
+      </div>
+      <div>
+        <label className="label">Warna</label>
+        <div className="flex gap-2 flex-wrap">
+          {SWATCH_COLORS.map(c => (
+            <button type="button" key={c} onClick={() => setColor(c)}
+              className={`w-7 h-7 rounded-full border-2 transition-all ${color === c ? 'border-slate-800 scale-110' : 'border-transparent'}`}
+              style={{ backgroundColor: c }} />
+          ))}
+        </div>
+      </div>
+      <div>
+        <label className="label">Urutan Tampil</label>
+        <input type="number" className="input" value={sortOrder}
+          onChange={e => setSortOrder(e.target.value)} />
+      </div>
+      <div>
+        <label className="label">
+          Anggota Departemen
+          <span className="text-xs font-normal text-slate-400 ml-1 normal-case">— menentukan scope Leader Notes/Task yang bisa dilihat user; bisa lebih dari satu departemen</span>
+        </label>
+        {!department?.id ? (
+          <p className="text-xs text-slate-400">Simpan departemen dulu untuk mengatur anggota.</p>
+        ) : (users || []).length === 0 ? (
+          <p className="text-xs text-slate-400">Belum ada user.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-2 mt-1 border border-slate-200 rounded-lg p-3 bg-slate-50 max-h-56 overflow-y-auto">
+            {users.map(u => (
+              <label key={u.id}
+                className="flex items-center gap-3 cursor-pointer hover:bg-white rounded-md px-2 py-1.5 transition-colors">
+                <input type="checkbox" className="w-4 h-4 rounded accent-indigo-600"
+                  checked={(u.departments || []).some(d => d.id === department.id)}
+                  disabled={pendingMembers.has(u.id)}
+                  onChange={() => toggleMember(u)} />
+                <span className="text-sm text-slate-700 truncate">{u.name}</span>
+                <span className="text-xs text-slate-400 ml-auto shrink-0">{u.email}</span>
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        <button type="button" className="btn-secondary" onClick={onClose}>Batal</button>
+        <button type="button" className="btn-primary" disabled={saving} onClick={save}>
+          {saving ? 'Menyimpan...' : (department?.id ? 'Perbarui Departemen' : 'Buat Departemen')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function Users() {
-  const { hasRole, user: currentUser } = useAuth();
+  const { hasRole, hasPermission, user: currentUser } = useAuth();
   const [users,    setUsers]    = useState([]);
   const [roles,    setRoles]    = useState([]);
   const [products, setProducts] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [modal,    setModal]    = useState({ open: false, type: '', data: null });
   const [loading,  setLoading]  = useState(true);
   const [tab,      setTab]      = useState('users');
@@ -362,14 +480,16 @@ export default function Users() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [us, rl, pr] = await Promise.all([
+      const [us, rl, pr, dp] = await Promise.all([
         client.get('/users'),
         client.get('/users/roles'),
         client.get('/products'),
+        client.get('/departments'),
       ]);
       setUsers(us.data);
       setRoles(rl.data);
       setProducts(pr.data);
+      setDepartments(dp.data);
     } finally { setLoading(false); }
   }, []);
 
@@ -403,6 +523,17 @@ export default function Users() {
     }
   };
 
+  const deleteDepartment = async (dept) => {
+    if (!confirm(`Hapus departemen "${dept.name}"?`)) return;
+    try {
+      await client.delete(`/departments/${dept.id}`);
+      toast.success('Departemen dihapus');
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Gagal menghapus departemen');
+    }
+  };
+
   const totalPages  = Math.max(1, Math.ceil(users.length / perPage));
   const pagedUsers  = users.slice((page - 1) * perPage, page * perPage);
 
@@ -420,7 +551,7 @@ export default function Users() {
     <div className="space-y-5">
       {/* Tabs */}
       <div className="flex gap-2 border-b border-slate-200 pb-0">
-        {[['users','Users'], ['roles','Roles & Permissions']].map(([id, label]) => (
+        {[['users','Users'], ['roles','Roles & Permissions'], ['departments','Departemen']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors
               ${tab === id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
@@ -433,7 +564,7 @@ export default function Users() {
       {tab === 'users' && (
         <>
           <div className="flex justify-end">
-            {hasRole('super_admin','manager') && (
+            {hasPermission('manage_users') && (
               <button className="btn-primary"
                 onClick={() => setModal({ open: true, type: 'user', data: null })}>
                 <Plus className="w-4 h-4" /> Tambah User
@@ -501,10 +632,20 @@ export default function Users() {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        {u.department
-                          ? <span className="text-xs font-semibold px-2 py-0.5 rounded border border-slate-300 text-slate-600">{u.department}</span>
-                          : <span className="text-xs text-slate-300">—</span>}
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1 justify-center">
+                          {(u.departments || []).length === 0 ? (
+                            <span className="text-xs text-slate-300">—</span>
+                          ) : (
+                            (u.departments || []).map(d => (
+                              <span key={d.id}
+                                className="text-xs font-semibold px-2 py-0.5 rounded border"
+                                style={{ color: d.color, borderColor: d.color + '55', backgroundColor: d.color + '15' }}>
+                                {d.name}
+                              </span>
+                            ))
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${u.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
@@ -517,7 +658,7 @@ export default function Users() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1 justify-center">
-                          {hasRole('super_admin','manager') && (
+                          {hasPermission('manage_users') && (
                             <>
                               <button className="btn-ghost btn-sm p-1.5 rounded-lg" title="Edit"
                                 onClick={() => setModal({ open: true, type: 'user', data: u })}>
@@ -654,6 +795,55 @@ export default function Users() {
         </div>
       )}
 
+      {/* ── DEPARTEMEN TAB ── */}
+      {tab === 'departments' && (
+        <div className="space-y-4">
+          {hasRole('super_admin') && (
+            <div className="flex justify-end">
+              <button className="btn-primary"
+                onClick={() => setModal({ open: true, type: 'department', data: null })}>
+                <Plus className="w-4 h-4" /> Tambah Departemen
+              </button>
+            </div>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {departments.map(dept => {
+              const userCount = users.filter(u => (u.departments || []).some(d => d.id === dept.id)).length;
+              return (
+                <div key={dept.id} className="card p-5 flex flex-col">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: (dept.color || '#64748B') + '20' }}>
+                      <Building2 className="w-4 h-4" style={{ color: dept.color || '#64748B' }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-800 truncate">{dept.name}</p>
+                      <p className="text-xs text-slate-400 font-mono">{dept.code} · prefix {dept.code_prefix}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{userCount} user</p>
+                    </div>
+                    {hasRole('super_admin') && (
+                      <div className="flex gap-1 shrink-0">
+                        <button className="btn-ghost btn-sm p-1.5 rounded-lg" title="Edit departemen"
+                          onClick={() => setModal({ open: true, type: 'department', data: dept })}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button className="btn-ghost btn-sm p-1.5 rounded-lg text-red-500 hover:bg-red-50"
+                          title="Hapus departemen" onClick={() => deleteDepartment(dept)}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {departments.length === 0 && (
+              <p className="text-sm text-slate-400 italic col-span-full">Belum ada departemen.</p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Modals ── */}
       <Modal open={modal.open && modal.type === 'user'} onClose={closeModal}
         title={modal.data ? 'Edit User' : 'Tambah User'} size="md">
@@ -671,6 +861,12 @@ export default function Users() {
       <Modal open={modal.open && modal.type === 'role'} onClose={closeModal}
         title={modal.data ? 'Edit Role' : 'Tambah Role'} size="md">
         <RoleForm role={modal.data} onSave={() => { closeModal(); load(); }} onClose={closeModal} />
+      </Modal>
+
+      <Modal open={modal.open && modal.type === 'department'} onClose={closeModal}
+        title={modal.data ? 'Edit Departemen' : 'Tambah Departemen'} size="sm">
+        <DepartmentForm department={modal.data} users={users} onMembersChanged={load}
+          onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
 
       {/* ── Delete User Permanent Confirm ── */}

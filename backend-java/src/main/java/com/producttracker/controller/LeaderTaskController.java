@@ -13,12 +13,16 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @RestController
 public class LeaderTaskController {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private DepartmentHelper departmentHelper;
 
     private static final String TASK_FIELDS =
         "lt.id, lt.code, lt.title, lt.department, lt.priority, lt.status, lt.notes, lt.deadline, " +
@@ -59,13 +63,14 @@ public class LeaderTaskController {
         // MyTask bypass: a user always sees items assigned to them, regardless of department scope.
         boolean isMyTasksQuery = assignee_id != null && assignee_id.equals(toLong(actor.get("id")));
 
-        List<String> visible = DepartmentHelper.visibleDepartments(principal);
+        List<String> visible = departmentHelper.visibleDepartments(principal);
         if (visible != null && !isMyTasksQuery) {
             if (visible.isEmpty()) {
                 return ResponseEntity.ok(Map.of("items", List.of(), "total", 0, "page", page, "limit", limit));
             }
-            filters.add("lt.department = ?");
-            params.add(visible.get(0));
+            String ph = visible.stream().map(x -> "?").collect(Collectors.joining(","));
+            filters.add("lt.department IN (" + ph + ")");
+            params.addAll(visible);
         } else if (department != null && !department.isBlank()) {
             filters.add(buildInFilter("lt.department", department, params));
         }
@@ -123,7 +128,7 @@ public class LeaderTaskController {
         if (rows.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "Task tidak ditemukan"));
         Map<String, Object> task = rows.get(0);
 
-        List<String> visible = DepartmentHelper.visibleDepartments(principal);
+        List<String> visible = departmentHelper.visibleDepartments(principal);
         boolean isAssignee = Objects.equals(toLong(task.get("assignee_id")), toLong(actor.get("id")));
         if (visible != null && !isAssignee && !visible.contains(task.get("department"))) {
             return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses ke departemen ini"));
@@ -139,12 +144,12 @@ public class LeaderTaskController {
                                      @RequestBody Map<String, Object> body) {
         Map<String, Object> actor = toMap(principal);
         if (actor == null) return ResponseEntity.status(401).build();
-        if (!DepartmentHelper.canWrite(principal)) {
+        if (!departmentHelper.canWrite(principal)) {
             return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki izin untuk menambah Leader Task"));
         }
 
         String department = (String) body.get("department");
-        if (!DepartmentHelper.isValidDepartment(department)) {
+        if (!departmentHelper.isValidDepartment(department)) {
             return ResponseEntity.badRequest().body(Map.of("error", "Departemen tidak valid"));
         }
         if (body.get("title") == null || body.get("title").toString().isBlank()) {
@@ -200,7 +205,7 @@ public class LeaderTaskController {
                                      @RequestBody Map<String, Object> body) {
         Map<String, Object> actor = toMap(principal);
         if (actor == null) return ResponseEntity.status(401).build();
-        if (!DepartmentHelper.canWrite(principal)) {
+        if (!departmentHelper.canWrite(principal)) {
             return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki izin untuk mengubah Leader Task"));
         }
 
@@ -211,7 +216,7 @@ public class LeaderTaskController {
         Map<String, Object> prev = before.get(0);
 
         String department = body.get("department") != null ? (String) body.get("department") : str(prev.get("department"));
-        if (!DepartmentHelper.isValidDepartment(department)) {
+        if (!departmentHelper.isValidDepartment(department)) {
             return ResponseEntity.badRequest().body(Map.of("error", "Departemen tidak valid"));
         }
 
@@ -269,7 +274,7 @@ public class LeaderTaskController {
         if (rows.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "Task tidak ditemukan"));
 
         boolean isAssignee = Objects.equals(toLong(rows.get(0).get("assignee_id")), toLong(actor.get("id")));
-        if (!DepartmentHelper.canWrite(principal) && !isAssignee) {
+        if (!departmentHelper.canWrite(principal) && !isAssignee) {
             return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki izin untuk mengubah status task"));
         }
 
@@ -287,7 +292,7 @@ public class LeaderTaskController {
 
     @DeleteMapping("/api/leader-tasks/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id, @AuthenticationPrincipal Object principal) {
-        if (!DepartmentHelper.canWrite(principal)) {
+        if (!departmentHelper.canWrite(principal)) {
             return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki izin untuk menghapus Leader Task"));
         }
         int deleted = jdbc.update("DELETE FROM leader_tasks WHERE id=?", id);
@@ -361,7 +366,7 @@ public class LeaderTaskController {
     // ─── Helpers ───────────────────────────────────────────────────────────
 
     private String generateCode(String department) {
-        String prefix = DepartmentHelper.codePrefix(department);
+        String prefix = departmentHelper.codePrefix(department);
         List<Map<String, Object>> lastRows = jdbc.queryForList(
             "SELECT code FROM leader_tasks WHERE code LIKE ? ORDER BY code DESC LIMIT 1", prefix + "-%"
         );

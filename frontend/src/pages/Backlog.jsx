@@ -383,8 +383,16 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
   const [saving,      setSaving]      = useState(false);
   const [attachments, setAttachments] = useState([]);
   const [uploading,   setUploading]   = useState(false);
+  const [previewImage, setPreviewImage] = useState(null);
   const fileInputRef = useRef(null);
   const notesRef     = useRef(null);
+
+  useEffect(() => {
+    if (!previewImage) return;
+    const handler = (e) => { if (e.key === 'Escape') setPreviewImage(null); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [previewImage]);
 
   const insertNotesLink = (snippet) => {
     const el  = notesRef.current;
@@ -711,11 +719,12 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
             ) : (
               <div className="grid grid-cols-3 gap-2">
                 {attachments.map(att => (
-                  <div key={att.id} className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-50 aspect-video">
+                  <div key={att.id} className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-50 aspect-video cursor-pointer"
+                    onClick={() => setPreviewImage(att)}>
                     <img src={`/api/attachments/file/${att.filename}`} alt={att.original_name}
                       className="w-full h-full object-cover" />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-                      <button type="button" onClick={() => deleteAttachment(att.id)}
+                      <button type="button" onClick={(e) => { e.stopPropagation(); deleteAttachment(att.id); }}
                         className="opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -756,6 +765,18 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
           {saving ? 'Menyimpan...' : (item?.id ? 'Perbarui' : 'Tambah Item')}
         </button>
       </div>
+
+      {previewImage && (
+        <div className="fixed inset-0 z-[60] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-6"
+          onClick={() => setPreviewImage(null)}>
+          <button type="button" onClick={() => setPreviewImage(null)}
+            className="absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2">
+            <X className="w-5 h-5" />
+          </button>
+          <img src={`/api/attachments/file/${previewImage.filename}`} alt={previewImage.original_name}
+            className="max-w-full max-h-full rounded-lg shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
     </form>
   );
 }
