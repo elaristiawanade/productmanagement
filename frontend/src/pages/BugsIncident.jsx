@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts';
-import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, ShieldCheck, XCircle, AlertCircle, Paperclip, Upload, Image as ImageIcon, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, ShieldCheck, XCircle, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, Download } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
@@ -370,6 +370,31 @@ export default function BugsIncident() {
     toast.success('Bug dihapus'); load();
   };
 
+  const csvEscape = (val) => {
+    const s = val === null || val === undefined ? '' : String(val);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+
+  const exportBugsCSV = () => {
+    const headers = ['Kode', 'Judul', 'Deskripsi', 'Langkah Reproduksi', 'Severity', 'Prioritas', 'Stage', 'Backlog Item', 'Produk', 'Assigned To', 'Reported By', 'Dibuat'];
+    const rows = bugs.map(b => [
+      b.code, b.title, b.description, b.steps_to_reproduce, b.severity, b.priority, b.stage,
+      b.item_code ? `[${b.item_code}] ${b.item_title || ''}` : '',
+      b.product_code || b.product_name || '',
+      b.assigned_to_name || '',
+      b.reported_by_name || '',
+      b.created_at ? format(parseISO(b.created_at), 'yyyy-MM-dd HH:mm') : '',
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(csvEscape).join(',')).join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bugs_export_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const STAGE_COLORS = { open: '#ef4444', in_progress: '#3b82f6', fixed: '#14b8a6', verified: '#06b6d4', closed: '#94a3b8' };
   const summary = dashboard?.summary || {};
 
@@ -487,7 +512,10 @@ export default function BugsIncident() {
           {/* BUGS TAB */}
           {tab === 'bugs' && (
             <div className="space-y-4">
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
+                <button className="btn-secondary" onClick={exportBugsCSV} disabled={bugs.length === 0}>
+                  <Download className="w-4 h-4" /> Export CSV
+                </button>
                 {hasRole('super_admin','qa') && (
                   <button className="btn-primary" onClick={() => setModal({ open: true, type: 'bug', data: null })}>
                     <Plus className="w-4 h-4" /> Buat Bug
