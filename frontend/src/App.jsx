@@ -8,6 +8,7 @@ import Sprints    from './pages/Sprints';
 import Products   from './pages/Products';
 import Users      from './pages/Users';
 import QA         from './pages/QA';
+import BugsIncident from './pages/BugsIncident';
 import JiraImport from './pages/JiraImport';
 import Standup    from './pages/Standup';
 import EpicBoard  from './pages/EpicBoard';
@@ -40,6 +41,7 @@ function AppRoutes() {
         <Route path="products"     element={<Products />} />
         <Route path="users"        element={<Users />} />
         <Route path="qa"           element={<QA />} />
+        <Route path="bugs"         element={<BugsIncident />} />
         <Route path="standup"       element={<Standup />} />
         <Route path="epic-board"    element={<EpicBoard />} />
         <Route path="my-tasks"      element={<MyTask />} />

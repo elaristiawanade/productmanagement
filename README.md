@@ -12,6 +12,7 @@ Sistem tracking internal product development berbasis web dengan React + Node.js
 | **Products** | Manajemen produk, epic, dan feature per produk |
 | **Users & Roles** | 5 role: Super Admin, Manager, PO, Developer, QA |
 | **QA Module** | Test case management, test execution, QA dashboard |
+| **Bugs Incident** | Bug tracking + histori progress perbaikan (open→in_progress→fixed→verified→closed). Default hanya Super Admin & QA Engineer |
 
 ## Roles
 
@@ -124,6 +125,10 @@ GET  /api/users/roles
 CRUD /api/qa/test-cases
 CRUD /api/qa/test-runs
 GET  /api/qa/dashboard
+
+CRUD /api/bugs                ← Default: Super Admin & QA Engineer only (403 lainnya)
+CRUD /api/bugs/progress       ← Histori progress perbaikan bug
+GET  /api/bugs/dashboard
 ```
 
 ## Deployment (Internal Server)
