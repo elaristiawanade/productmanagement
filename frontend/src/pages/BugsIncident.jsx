@@ -252,6 +252,7 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
   });
   const [saving, setSaving] = useState(false);
   const [attachments, setAttachments] = useState([]);
+  const [pendingFiles, setPendingFiles] = useState([]);
   const [uploading,   setUploading]   = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
   const fileInputRef = useRef(null);
@@ -274,11 +275,24 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
 
   useEffect(() => { loadAttachments(); }, [loadAttachments]);
 
+  // Revoke local object URLs for queued (not-yet-uploaded) images on unmount only.
+  const pendingFilesRef = useRef(pendingFiles);
+  pendingFilesRef.current = pendingFiles;
+  useEffect(() => () => { pendingFilesRef.current.forEach(p => URL.revokeObjectURL(p.url)); }, []);
+
   const handleUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) { toast.error('Hanya file gambar yang diizinkan'); return; }
     if (file.size > 10 * 1024 * 1024) { toast.error('Ukuran file maks 10MB'); return; }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+
+    // Bug belum dibuat: simpan gambar sementara, unggah setelah bug tersimpan.
+    if (!bug?.id) {
+      setPendingFiles(pf => [...pf, { file, url: URL.createObjectURL(file), name: file.name }]);
+      return;
+    }
+
     setUploading(true);
     try {
       const fd = new FormData();
@@ -290,8 +304,14 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
       toast.error(err?.response?.data?.error || 'Gagal mengunggah gambar');
     } finally {
       setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  };
+
+  const removePendingFile = (idx) => {
+    setPendingFiles(pf => {
+      URL.revokeObjectURL(pf[idx].url);
+      return pf.filter((_, i) => i !== idx);
+    });
   };
 
   const deleteAttachment = async (id) => {
@@ -303,11 +323,31 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
     } catch { toast.error('Gagal menghapus'); }
   };
 
+  const uploadPendingFiles = async (newBugId) => {
+    for (const p of pendingFiles) {
+      try {
+        const fd = new FormData();
+        fd.append('file', p.file);
+        await client.post(`/bugs/${newBugId}/attachments`, fd);
+      } catch {
+        toast.error(`Gagal mengunggah ${p.name}`);
+      } finally {
+        URL.revokeObjectURL(p.url);
+      }
+    }
+  };
+
   const save = async (e) => {
     e.preventDefault(); setSaving(true);
     try {
-      if (bug?.id) { await client.put(`/bugs/${bug.id}`, form); toast.success('Bug diperbarui'); }
-      else         { await client.post('/bugs', form);          toast.success('Bug dibuat'); }
+      if (bug?.id) {
+        await client.put(`/bugs/${bug.id}`, form);
+        toast.success('Bug diperbarui');
+      } else {
+        const res = await client.post('/bugs', form);
+        if (pendingFiles.length) await uploadPendingFiles(res.data.id);
+        toast.success('Bug dibuat');
+      }
       onSave();
     } catch {} finally { setSaving(false); }
   };
@@ -359,64 +399,81 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
           {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
       </div>
-      {/* Attachments — only when editing existing bug */}
-      {bug?.id && (
-        <div className="col-span-2">
-          <div className="border-t border-slate-100 pt-4">
-            <div className="flex items-center justify-between mb-3">
-              <label className="label mb-0 flex items-center gap-1.5">
-                <Paperclip className="w-3.5 h-3.5 text-slate-400" />
-                Lampiran Gambar
-                {attachments.length > 0 && (
-                  <span className="text-xs font-normal text-slate-400 ml-1">({attachments.length})</span>
-                )}
-              </label>
-              <button type="button"
-                className="btn-secondary text-xs py-1 px-2 flex items-center gap-1.5"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}>
-                {uploading
-                  ? <span className="w-3.5 h-3.5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-                  : <Upload className="w-3.5 h-3.5" />}
-                {uploading ? 'Mengunggah...' : 'Unggah Gambar'}
-              </button>
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
-            </div>
-            {attachments.length === 0 ? (
-              <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors"
-                onClick={() => fileInputRef.current?.click()}>
-                <ImageIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-xs text-slate-400">Klik untuk unggah gambar</p>
-                <p className="text-xs text-slate-300 mt-0.5">JPG, PNG, GIF, WEBP • Maks 10MB</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-3 gap-2">
-                {attachments.map(att => (
-                  <div key={att.id} className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-50 aspect-video cursor-pointer"
-                    onClick={() => setPreviewImage(att)}>
-                    <img src={`/api/attachments/file/${att.filename}`} alt={att.original_name}
-                      className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-                      <button type="button" onClick={(e) => { e.stopPropagation(); deleteAttachment(att.id); }}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    <p className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs px-1.5 py-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                      {att.original_name}
-                    </p>
-                  </div>
-                ))}
-                <button type="button" onClick={() => fileInputRef.current?.click()}
-                  className="aspect-video rounded-lg border-2 border-dashed border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors flex flex-col items-center justify-center gap-1">
-                  <Upload className="w-4 h-4 text-slate-400" />
-                  <span className="text-xs text-slate-400">Tambah</span>
-                </button>
-              </div>
-            )}
+      {/* Attachments — queued locally until the bug is created, uploaded live once it exists */}
+      <div className="col-span-2">
+        <div className="border-t border-slate-100 pt-4">
+          <div className="flex items-center justify-between mb-3">
+            <label className="label mb-0 flex items-center gap-1.5">
+              <Paperclip className="w-3.5 h-3.5 text-slate-400" />
+              Lampiran Gambar
+              {(bug?.id ? attachments.length : pendingFiles.length) > 0 && (
+                <span className="text-xs font-normal text-slate-400 ml-1">({bug?.id ? attachments.length : pendingFiles.length})</span>
+              )}
+            </label>
+            <button type="button"
+              className="btn-secondary text-xs py-1 px-2 flex items-center gap-1.5"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}>
+              {uploading
+                ? <span className="w-3.5 h-3.5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                : <Upload className="w-3.5 h-3.5" />}
+              {uploading ? 'Mengunggah...' : 'Unggah Gambar'}
+            </button>
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
           </div>
+          {!bug?.id && (
+            <p className="text-xs text-slate-400 -mt-2 mb-3">Gambar akan diunggah setelah bug disimpan.</p>
+          )}
+          {(bug?.id ? attachments.length : pendingFiles.length) === 0 ? (
+            <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors"
+              onClick={() => fileInputRef.current?.click()}>
+              <ImageIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs text-slate-400">Klik untuk unggah gambar</p>
+              <p className="text-xs text-slate-300 mt-0.5">JPG, PNG, GIF, WEBP • Maks 10MB</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              {bug?.id
+                ? attachments.map(att => (
+                    <div key={att.id} className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-50 aspect-video cursor-pointer"
+                      onClick={() => setPreviewImage({ url: `/api/attachments/file/${att.filename}`, name: att.original_name })}>
+                      <img src={`/api/attachments/file/${att.filename}`} alt={att.original_name}
+                        className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                        <button type="button" onClick={(e) => { e.stopPropagation(); deleteAttachment(att.id); }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <p className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs px-1.5 py-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
+                        {att.original_name}
+                      </p>
+                    </div>
+                  ))
+                : pendingFiles.map((p, idx) => (
+                    <div key={idx} className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-50 aspect-video cursor-pointer"
+                      onClick={() => setPreviewImage({ url: p.url, name: p.name })}>
+                      <img src={p.url} alt={p.name} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                        <button type="button" onClick={(e) => { e.stopPropagation(); removePendingFile(idx); }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <p className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs px-1.5 py-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
+                        {p.name}
+                      </p>
+                    </div>
+                  ))}
+              <button type="button" onClick={() => fileInputRef.current?.click()}
+                className="aspect-video rounded-lg border-2 border-dashed border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors flex flex-col items-center justify-center gap-1">
+                <Upload className="w-4 h-4 text-slate-400" />
+                <span className="text-xs text-slate-400">Tambah</span>
+              </button>
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {bug?.id && (
         <div className="col-span-2">
@@ -436,7 +493,7 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
             className="absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2">
             <X className="w-5 h-5" />
           </button>
-          <img src={`/api/attachments/file/${previewImage.filename}`} alt={previewImage.original_name}
+          <img src={previewImage.url} alt={previewImage.name}
             className="max-w-full max-h-full rounded-lg shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
         </div>
       )}
@@ -539,6 +596,31 @@ export default function BugsIncident() {
     if (!confirm('Hapus bug ini?')) return;
     await client.delete(`/bugs/${id}`);
     toast.success('Bug dihapus'); load();
+  };
+
+  const csvEscape = (val) => {
+    const s = val === null || val === undefined ? '' : String(val);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+
+  const exportBugsCSV = () => {
+    const headers = ['Kode', 'Judul', 'Deskripsi', 'Langkah Reproduksi', 'Severity', 'Prioritas', 'Stage', 'Backlog Item', 'Produk', 'Assigned To', 'Reported By', 'Dibuat'];
+    const rows = bugs.map(b => [
+      b.code, b.title, b.description, b.steps_to_reproduce, b.severity, b.priority, b.stage,
+      b.item_code ? `[${b.item_code}] ${b.item_title || ''}` : '',
+      b.product_code || b.product_name || '',
+      b.assigned_to_name || '',
+      b.reported_by_name || '',
+      b.created_at ? format(parseISO(b.created_at), 'yyyy-MM-dd HH:mm') : '',
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(csvEscape).join(',')).join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bugs_export_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const STAGE_COLORS = { open: '#ef4444', in_progress: '#3b82f6', fixed: '#14b8a6', verified: '#06b6d4', closed: '#94a3b8' };
