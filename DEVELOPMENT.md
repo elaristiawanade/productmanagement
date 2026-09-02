@@ -144,6 +144,9 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v10.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v11.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v12.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v13.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v14.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v15.sql"
 ```
 
 > **Penting:** `migration_v10.sql` menambahkan kolom `users.department`, yang di-query
