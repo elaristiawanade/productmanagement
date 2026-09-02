@@ -237,6 +237,73 @@ public class BugController {
         ));
     }
 
+    // ── ACTIVITIES / COMMENTS ────────────────────────────────────────────────
+
+    @GetMapping("/{id}/activities")
+    public ResponseEntity<?> listActivities(@AuthenticationPrincipal Object principal, @PathVariable Long id) {
+        if (!bugHelper.canAccess(principal)) return forbidden();
+        List<Map<String, Object>> rows = jdbc.queryForList(
+            "SELECT a.id, a.type, a.content, a.created_at, " +
+            "       u.name AS user_name, u.avatar_color AS user_avatar_color, u.id AS user_id " +
+            "FROM bug_activities a " +
+            "LEFT JOIN users u ON u.id = a.user_id " +
+            "WHERE a.bug_id = ? ORDER BY a.created_at ASC",
+            id
+        );
+        return ResponseEntity.ok(rows);
+    }
+
+    @PostMapping("/{id}/activities")
+    public ResponseEntity<?> addActivity(@AuthenticationPrincipal Object principal,
+                                          @PathVariable Long id, @RequestBody Map<String, Object> body) {
+        if (!bugHelper.canAccess(principal)) return forbidden();
+        String content = (String) body.get("content");
+        if (content == null || content.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Komentar tidak boleh kosong"));
+        }
+        Map<String, Object> user = toMap(principal);
+
+        List<Map<String, Object>> exists = jdbc.queryForList("SELECT id FROM bugs WHERE id = ?", id);
+        if (exists.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "Bug tidak ditemukan"));
+
+        Map<String, Object> row = jdbc.queryForMap(
+            "INSERT INTO bug_activities (bug_id, user_id, type, content) VALUES (?,?,'comment',?) RETURNING id",
+            id, user != null ? toLong(user.get("id")) : null, content.trim()
+        );
+        List<Map<String, Object>> full = jdbc.queryForList(
+            "SELECT a.id, a.type, a.content, a.created_at, " +
+            "       u.name AS user_name, u.avatar_color AS user_avatar_color, u.id AS user_id " +
+            "FROM bug_activities a LEFT JOIN users u ON u.id = a.user_id WHERE a.id = ?",
+            row.get("id")
+        );
+        return ResponseEntity.status(201).body(full.get(0));
+    }
+
+    @DeleteMapping("/activities/{id}")
+    public ResponseEntity<?> deleteActivity(@AuthenticationPrincipal Object principal, @PathVariable Long id) {
+        if (!bugHelper.canAccess(principal)) return forbidden();
+        Map<String, Object> user = toMap(principal);
+
+        List<Map<String, Object>> rows = jdbc.queryForList(
+            "SELECT user_id, type FROM bug_activities WHERE id = ?", id
+        );
+        if (rows.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "Aktivitas tidak ditemukan"));
+        if ("change_log".equals(rows.get(0).get("type"))) {
+            return ResponseEntity.status(403).body(Map.of("error", "Log perubahan tidak dapat dihapus"));
+        }
+
+        Long ownerId = toLong(rows.get(0).get("user_id"));
+        Long actorId = user != null ? toLong(user.get("id")) : null;
+        boolean isOwner = ownerId != null && ownerId.equals(actorId);
+        boolean isSuperAdmin = "super_admin".equals(com.producttracker.config.PermissionHelper.getRoleName(principal));
+        if (!isOwner && !isSuperAdmin) {
+            return ResponseEntity.status(403).body(Map.of("error", "Hanya bisa menghapus komentar sendiri"));
+        }
+
+        jdbc.update("DELETE FROM bug_activities WHERE id = ?", id);
+        return ResponseEntity.ok(Map.of("message", "Komentar dihapus"));
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> toMap(Object o) {
         return o instanceof Map ? (Map<String, Object>) o : null;

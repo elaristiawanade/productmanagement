@@ -3,14 +3,17 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts';
-import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, ShieldCheck, XCircle, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, Download } from 'lucide-react';
+import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, ShieldCheck, XCircle, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
+import LinkInsertButton from '../components/LinkInsertButton';
+import { renderWithLinks } from '../utils/linkify';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, formatDistanceToNow } from 'date-fns';
+import { id as localeId } from 'date-fns/locale';
 
 const STAGE_ICONS = {
   open:        { icon: AlertCircle,  cls: 'text-red-500'    },
@@ -19,6 +22,225 @@ const STAGE_ICONS = {
   verified:    { icon: ShieldCheck,  cls: 'text-cyan-500'   },
   closed:      { icon: XCircle,      cls: 'text-slate-400'  },
 };
+
+// ─── Activity / Comments Section ──────────────────────────────────────────────
+
+function renderComment(text) {
+  return text.split(/(@\[[^\]]+\])/g).map((part, i) => {
+    if (part.startsWith('@[') && part.endsWith(']')) {
+      return (
+        <span key={i} className="inline-flex items-center gap-0.5 text-indigo-600 font-medium bg-indigo-50 rounded px-1">
+          @{part.slice(2, -1)}
+        </span>
+      );
+    }
+    return <span key={i}>{renderWithLinks(part, `c${i}`)}</span>;
+  });
+}
+
+function ActivitySection({ bugId, users = [] }) {
+  const { user } = useAuth();
+  const [activities,   setActivities]  = useState([]);
+  const [comment,      setComment]     = useState('');
+  const [sending,      setSending]     = useState(false);
+  const [mentionOpen,  setMentionOpen] = useState(false);
+  const [mentionQuery, setMentionQuery]= useState('');
+  const [mentionStart, setMentionStart]= useState(-1);
+  const [mentionIdx,   setMentionIdx]  = useState(0);
+  const endRef   = useRef(null);
+  const inputRef = useRef(null);
+
+  const load = useCallback(async () => {
+    if (!bugId) return;
+    try {
+      const res = await client.get(`/bugs/${bugId}/activities`);
+      setActivities(res.data || []);
+    } catch { /**/ }
+  }, [bugId]);
+
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [activities.length]);
+
+  const submit = async () => {
+    if (!comment.trim() || sending) return;
+    setSending(true);
+    try {
+      await client.post(`/bugs/${bugId}/activities`, { content: comment.trim() });
+      setComment('');
+      setMentionOpen(false);
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Gagal mengirim komentar');
+    } finally { setSending(false); }
+  };
+
+  const mentionSuggestions = users
+    .filter(u => u.name.toLowerCase().includes(mentionQuery.toLowerCase()))
+    .slice(0, 6);
+
+  const selectMention = (name) => {
+    const before = comment.slice(0, mentionStart);
+    const after  = comment.slice(mentionStart + 1 + mentionQuery.length);
+    const next   = before + `@[${name}]` + after;
+    setComment(next);
+    setMentionOpen(false);
+    setMentionQuery('');
+    setTimeout(() => {
+      const pos = (before + `@[${name}]`).length;
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(pos, pos);
+    }, 0);
+  };
+
+  const handleCommentChange = (e) => {
+    const val    = e.target.value;
+    const cursor = e.target.selectionStart;
+    const before = val.slice(0, cursor);
+    const atIdx  = before.lastIndexOf('@');
+    const query  = atIdx !== -1 ? before.slice(atIdx + 1) : '';
+
+    if (atIdx !== -1 && !query.includes(' ') && !query.includes('\n')) {
+      setMentionStart(atIdx);
+      setMentionQuery(query);
+      setMentionOpen(true);
+      setMentionIdx(0);
+    } else {
+      setMentionOpen(false);
+    }
+    setComment(val);
+  };
+
+  const handleKeyDown = (e) => {
+    if (mentionOpen && mentionSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIdx(i => Math.min(i + 1, mentionSuggestions.length - 1)); return; }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setMentionIdx(i => Math.max(i - 1, 0)); return; }
+      if (e.key === 'Tab' || (e.key === 'Enter' && mentionOpen)) {
+        e.preventDefault();
+        selectMention(mentionSuggestions[mentionIdx].name);
+        return;
+      }
+      if (e.key === 'Escape') { setMentionOpen(false); return; }
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      submit();
+    }
+  };
+
+  const deleteActivity = async (id) => {
+    if (!confirm('Hapus komentar ini?')) return;
+    try {
+      await client.delete(`/bugs/activities/${id}`);
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Gagal menghapus');
+    }
+  };
+
+  const insertLink = (snippet) => {
+    const el  = inputRef.current;
+    const pos = el ? (el.selectionStart ?? comment.length) : comment.length;
+    const before = comment.slice(0, pos);
+    const after  = comment.slice(pos);
+    const next = `${before}${snippet}${after}`;
+    setComment(next);
+    setTimeout(() => {
+      const newPos = (before + snippet).length;
+      el?.focus();
+      el?.setSelectionRange(newPos, newPos);
+    }, 0);
+  };
+
+  return (
+    <div className="border-t border-slate-100 pt-4">
+      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+        <MessageSquare className="w-3.5 h-3.5" />
+        Aktivitas & Komentar
+      </p>
+      <div className="max-h-56 overflow-y-auto space-y-2 mb-3 pr-1">
+        {activities.length === 0 && (
+          <p className="text-xs text-slate-400 text-center py-4">Belum ada aktivitas.</p>
+        )}
+        {activities.map(act => (
+          <div key={act.id}
+            className={`flex gap-2.5 group ${act.type === 'change_log' ? 'opacity-70' : ''}`}>
+            {act.type === 'change_log' ? (
+              <span className="w-5 h-5 mt-0.5 rounded-full bg-slate-200 flex items-center justify-center text-xs shrink-0">⚙</span>
+            ) : (
+              <div className="w-5 h-5 mt-0.5 rounded-full text-white text-xs font-bold flex items-center justify-center shrink-0"
+                style={{ backgroundColor: act.user_avatar_color || '#6366f1' }}>
+                {(act.user_name || '?').charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                {act.type === 'comment' && (
+                  <span className="text-xs font-medium text-slate-700">{act.user_name || 'Unknown'}</span>
+                )}
+                <span className="text-xs text-slate-400">
+                  {act.created_at ? formatDistanceToNow(parseISO(act.created_at), { addSuffix: true, locale: localeId }) : ''}
+                </span>
+                {act.type === 'comment' && (user?.id === act.user_id || user?.role === 'super_admin') && (
+                  <button onClick={() => deleteActivity(act.id)}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-red-500 ml-auto">
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+              <p className={`text-xs leading-relaxed ${act.type === 'change_log' ? 'text-slate-500 italic' : 'text-slate-700 bg-slate-50 rounded-lg px-2.5 py-1.5'}`}>
+                {act.type === 'change_log' ? act.content : renderComment(act.content)}
+              </p>
+            </div>
+          </div>
+        ))}
+        <div ref={endRef} />
+      </div>
+
+      {/* Input area */}
+      <div className="relative flex gap-2">
+        {/* Mention dropdown */}
+        {mentionOpen && mentionSuggestions.length > 0 && (
+          <div className="absolute bottom-full left-0 mb-1.5 w-52 bg-white border border-slate-200 rounded-lg shadow-lg z-50 overflow-hidden">
+            <p className="text-[10px] text-slate-400 px-3 pt-2 pb-1 font-medium uppercase tracking-wide">Mention pengguna</p>
+            {mentionSuggestions.map((u, i) => (
+              <button key={u.id} type="button"
+                className={`w-full text-left flex items-center gap-2 px-3 py-1.5 text-xs transition-colors ${i === mentionIdx ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'}`}
+                onMouseDown={e => { e.preventDefault(); selectMention(u.name); }}>
+                <span className="w-5 h-5 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0"
+                  style={{ backgroundColor: u.avatar_color || '#6366f1' }}>
+                  {u.name.charAt(0).toUpperCase()}
+                </span>
+                <span className="truncate">{u.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <input
+          ref={inputRef}
+          className="input text-xs flex-1 py-1.5"
+          placeholder="Tulis komentar... ketik @ untuk mention (Enter kirim)"
+          value={comment}
+          onChange={handleCommentChange}
+          onKeyDown={handleKeyDown}
+          onBlur={() => setTimeout(() => setMentionOpen(false), 150)}
+        />
+        <LinkInsertButton onInsert={insertLink} />
+        <button
+          type="button"
+          className="btn-primary py-1.5 px-3"
+          disabled={sending || !comment.trim()}
+          onClick={submit}
+        >
+          {sending
+            ? <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            : <Send className="w-3.5 h-3.5" />}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
   const [form, setForm] = useState({
@@ -252,6 +474,12 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
           )}
         </div>
       </div>
+
+      {bug?.id && (
+        <div className="col-span-2">
+          <ActivitySection bugId={bug.id} users={users} />
+        </div>
+      )}
 
       <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-slate-100">
         <button type="button" className="btn-secondary" onClick={onClose}>Batal</button>
@@ -512,11 +740,8 @@ export default function BugsIncident() {
           {/* BUGS TAB */}
           {tab === 'bugs' && (
             <div className="space-y-4">
-              <div className="flex justify-end gap-2">
-                <button className="btn-secondary" onClick={exportBugsCSV} disabled={bugs.length === 0}>
-                  <Download className="w-4 h-4" /> Export CSV
-                </button>
-                {hasRole('super_admin','qa') && (
+              <div className="flex justify-end">
+                {canAccess && (
                   <button className="btn-primary" onClick={() => setModal({ open: true, type: 'bug', data: null })}>
                     <Plus className="w-4 h-4" /> Buat Bug
                   </button>
@@ -568,18 +793,18 @@ export default function BugsIncident() {
                           <td className="px-3 py-3 text-xs text-slate-500">{b.product_code}</td>
                           <td className="px-3 py-3">
                             <div className="flex items-center gap-1 justify-center">
-                              {hasRole('super_admin','qa') && (
+                              {canAccess && (
                                 <button className="btn-ghost btn-sm p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50" title="Update Progress"
                                   onClick={() => setModal({ open: true, type: 'progress', data: b })}>
                                   <Wrench className="w-3.5 h-3.5" />
                                 </button>
                               )}
-                              {hasRole('super_admin','qa') && (
+                              {canAccess && (
                                 <button className="btn-ghost btn-sm p-1.5 rounded-lg" onClick={() => setModal({ open: true, type: 'bug', data: b })}>
                                   <Pencil className="w-3.5 h-3.5" />
                                 </button>
                               )}
-                              {hasRole('super_admin','qa') && (
+                              {canAccess && (
                                 <button className="btn-ghost btn-sm p-1.5 rounded-lg text-red-500 hover:bg-red-50" onClick={() => deleteBug(b.id)}>
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
