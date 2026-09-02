@@ -73,8 +73,13 @@ public class BugController {
         Long productId = toLong(body.get("product_id"));
         String bugCode = (String) body.get("code");
         if (bugCode == null || bugCode.isBlank()) {
+            List<Map<String, Object>> pRows = jdbc.queryForList(
+                "SELECT code FROM products WHERE id=?", productId
+            );
+            String pCode = pRows.isEmpty() ? "BUG" : (String) pRows.get(0).get("code");
             List<Map<String, Object>> last = jdbc.queryForList(
-                "SELECT code FROM bugs WHERE product_id=? ORDER BY id DESC LIMIT 1", productId
+                "SELECT code FROM bugs WHERE product_id=? AND code LIKE ? ORDER BY code DESC LIMIT 1",
+                productId, pCode + "-%"
             );
             int lastNum = 0;
             if (!last.isEmpty()) {
@@ -84,7 +89,7 @@ public class BugController {
                     if (m.find()) lastNum = Integer.parseInt(m.group());
                 }
             }
-            bugCode = "BUG-" + String.format("%03d", lastNum + 1);
+            bugCode = pCode + "-" + String.format("%03d", lastNum + 1);
         }
 
         Map<String, Object> user = toMap(principal);

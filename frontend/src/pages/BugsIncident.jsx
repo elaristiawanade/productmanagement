@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts';
-import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, ShieldCheck, XCircle, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send } from 'lucide-react';
+import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, ShieldCheck, XCircle, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
@@ -22,6 +22,10 @@ const STAGE_ICONS = {
   verified:    { icon: ShieldCheck,  cls: 'text-cyan-500'   },
   closed:      { icon: XCircle,      cls: 'text-slate-400'  },
 };
+
+const STAGES     = ['open', 'in_progress', 'fixed', 'verified', 'closed'];
+const SEVERITIES = ['critical', 'high', 'medium', 'low'];
+const PRIORITIES = ['critical', 'high', 'medium', 'low'];
 
 // ─── Activity / Comments Section ──────────────────────────────────────────────
 
@@ -541,6 +545,64 @@ function BugProgressForm({ bug, onSave, onClose }) {
   );
 }
 
+// ─── Multi-select filter dropdown (local copy of the one in Backlog.jsx) ──────
+
+function MultiSelect({ label, options, selected, onChange, minWidth = 130 }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const onDoc = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+
+  const toggle = (v) =>
+    onChange(selected.includes(v) ? selected.filter(x => x !== v) : [...selected, v]);
+
+  const count = selected.length;
+  const buttonLabel = count === 0
+    ? `Semua ${label}`
+    : count === 1
+      ? (options.find(o => o.v === selected[0])?.l ?? `${label} (1)`)
+      : `${label} (${count})`;
+
+  return (
+    <div className="relative" ref={ref} style={{ minWidth }}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className={`select w-full flex items-center justify-between gap-2 ${count ? 'border-indigo-300 text-slate-700' : 'text-slate-500'}`}>
+        <span className="truncate">{buttonLabel}</span>
+        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute z-40 mt-1 w-full min-w-[170px] bg-white border border-slate-200 rounded-lg shadow-lg py-1 max-h-64 overflow-y-auto">
+          {count > 0 && (
+            <button type="button" onClick={() => onChange([])}
+              className="w-full text-left px-3 py-1.5 text-xs text-slate-400 hover:text-slate-600 border-b border-slate-100 mb-1">
+              Bersihkan pilihan
+            </button>
+          )}
+          {options.length === 0 && (
+            <p className="px-3 py-2 text-xs text-slate-400">Tidak ada opsi</p>
+          )}
+          {options.map(o => {
+            const on = selected.includes(o.v);
+            return (
+              <button key={o.v} type="button" onClick={() => toggle(o.v)}
+                className={`w-full text-left flex items-center gap-2 px-3 py-1.5 text-sm transition-colors ${on ? 'text-indigo-700 bg-indigo-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>
+                <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${on ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}>
+                  {on && <Check className="w-3 h-3 text-white" />}
+                </span>
+                <span className="truncate capitalize">{o.l}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function BugsIncident() {
   const { hasRole, hasPermission } = useAuth();
   const canAccess = hasRole('super_admin') || hasPermission('access_bugs');
@@ -553,6 +615,9 @@ export default function BugsIncident() {
   const [users,        setUsers]       = useState([]);
   const [dashboard,    setDashboard]   = useState(null);
   const [filters,      setFilters]     = useState({ product_id: '' });
+  // Client-side only (Bugs tab list is already loaded in full per product, so these
+  // don't need a round-trip to the backend like `filters.product_id` does).
+  const [bugFilters,   setBugFilters]  = useState({ search: '', stage: [], severity: [], priority: [], assigned_to: [] });
   const [modal,        setModal]       = useState({ open: false, type: '', data: null });
   const [loading,      setLoading]     = useState(true);
   const [perPageBugs,     setPerPageBugs]     = useState(10);
@@ -583,6 +648,7 @@ export default function BugsIncident() {
   }, [filters]);
 
   useEffect(() => { if (canAccess) load(); }, [load, canAccess]);
+  useEffect(() => { setPageBugs(1); }, [bugFilters]);
 
   if (!canAccess) {
     return (
@@ -605,7 +671,7 @@ export default function BugsIncident() {
 
   const exportBugsCSV = () => {
     const headers = ['Kode', 'Judul', 'Deskripsi', 'Langkah Reproduksi', 'Severity', 'Prioritas', 'Stage', 'Backlog Item', 'Produk', 'Assigned To', 'Reported By', 'Dibuat'];
-    const rows = bugs.map(b => [
+    const rows = filteredBugs.map(b => [
       b.code, b.title, b.description, b.steps_to_reproduce, b.severity, b.priority, b.stage,
       b.item_code ? `[${b.item_code}] ${b.item_title || ''}` : '',
       b.product_code || b.product_name || '',
@@ -626,8 +692,20 @@ export default function BugsIncident() {
   const STAGE_COLORS = { open: '#ef4444', in_progress: '#3b82f6', fixed: '#14b8a6', verified: '#06b6d4', closed: '#94a3b8' };
   const summary = dashboard?.summary || {};
 
-  const totalPagesBugs     = Math.max(1, Math.ceil(bugs.length / perPageBugs));
-  const pagedBugs          = bugs.slice((pageBugs - 1) * perPageBugs, pageBugs * perPageBugs);
+  const filteredBugs = bugs.filter(b => {
+    if (bugFilters.search) {
+      const q = bugFilters.search.toLowerCase();
+      if (!(b.code?.toLowerCase().includes(q) || b.title?.toLowerCase().includes(q))) return false;
+    }
+    if (bugFilters.stage.length      && !bugFilters.stage.includes(b.stage))       return false;
+    if (bugFilters.severity.length   && !bugFilters.severity.includes(b.severity)) return false;
+    if (bugFilters.priority.length   && !bugFilters.priority.includes(b.priority)) return false;
+    if (bugFilters.assigned_to.length && !bugFilters.assigned_to.includes(b.assigned_to)) return false;
+    return true;
+  });
+
+  const totalPagesBugs     = Math.max(1, Math.ceil(filteredBugs.length / perPageBugs));
+  const pagedBugs          = filteredBugs.slice((pageBugs - 1) * perPageBugs, pageBugs * perPageBugs);
   const totalPagesProgress = Math.max(1, Math.ceil(progress.length / perPageProgress));
   const pagedProgress      = progress.slice((pageProgress - 1) * perPageProgress, pageProgress * perPageProgress);
 
@@ -740,16 +818,43 @@ export default function BugsIncident() {
           {/* BUGS TAB */}
           {tab === 'bugs' && (
             <div className="space-y-4">
-              <div className="flex justify-end">
-                {canAccess && (
-                  <button className="btn-primary" onClick={() => setModal({ open: true, type: 'bug', data: null })}>
-                    <Plus className="w-4 h-4" /> Buat Bug
+              {/* Filter Bar */}
+              <div className="card px-4 py-3 flex flex-wrap gap-3 items-center">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    className="input pl-9" placeholder="Cari judul atau kode..."
+                    value={bugFilters.search}
+                    onChange={e => setBugFilters(f => ({ ...f, search: e.target.value }))}
+                  />
+                </div>
+                {[
+                  { key: 'stage',    label: 'Stage',     opts: STAGES.map(s => ({ v: s, l: s.replace('_', ' ') })) },
+                  { key: 'severity', label: 'Severity',  opts: SEVERITIES.map(s => ({ v: s, l: s })) },
+                  { key: 'priority', label: 'Prioritas', opts: PRIORITIES.map(p => ({ v: p, l: p })) },
+                ].map(({ key, label, opts }) => (
+                  <MultiSelect key={key} label={label} options={opts}
+                    selected={bugFilters[key]}
+                    onChange={vals => setBugFilters(f => ({ ...f, [key]: vals }))} />
+                ))}
+                <MultiSelect label="Assignee" minWidth={140}
+                  options={users.map(u => ({ v: u.id, l: u.name }))}
+                  selected={bugFilters.assigned_to}
+                  onChange={vals => setBugFilters(f => ({ ...f, assigned_to: vals }))} />
+                <div className="ml-auto flex items-center gap-2">
+                  <button className="btn-secondary" onClick={exportBugsCSV} disabled={filteredBugs.length === 0}>
+                    <Download className="w-4 h-4" /> Export CSV
                   </button>
-                )}
+                  {canAccess && (
+                    <button className="btn-primary" onClick={() => setModal({ open: true, type: 'bug', data: null })}>
+                      <Plus className="w-4 h-4" /> Buat Bug
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="card overflow-hidden">
                 <div className="flex items-center justify-between px-5 py-2.5 border-b border-slate-100 bg-slate-50/50">
-                  <span className="text-xs text-slate-500">{bugs.length} bug</span>
+                  <span className="text-xs text-slate-500">{filteredBugs.length} bug</span>
                   <div className="flex items-center gap-2 text-xs text-slate-500">
                     Tampilkan
                     <select className="border border-slate-200 rounded px-1.5 py-0.5 bg-white text-xs"
@@ -818,7 +923,7 @@ export default function BugsIncident() {
                 </div>
                 {totalPagesBugs > 1 && (
                   <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 text-xs text-slate-500">
-                    <span>{(pageBugs-1)*perPageBugs+1}–{Math.min(pageBugs*perPageBugs, bugs.length)} dari {bugs.length}</span>
+                    <span>{(pageBugs-1)*perPageBugs+1}–{Math.min(pageBugs*perPageBugs, filteredBugs.length)} dari {filteredBugs.length}</span>
                     <div className="flex gap-1">
                       <button disabled={pageBugs === 1} onClick={() => setPageBugs(p => p-1)}
                         className="btn-ghost btn-sm px-2.5 py-1 disabled:opacity-40">‹ Prev</button>
