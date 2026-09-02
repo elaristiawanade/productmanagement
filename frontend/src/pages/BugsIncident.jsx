@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts';
-import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, ShieldCheck, XCircle, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check } from 'lucide-react';
+import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, ShieldCheck, XCircle, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
@@ -671,7 +671,7 @@ export default function BugsIncident() {
 
   const exportBugsCSV = () => {
     const headers = ['Kode', 'Judul', 'Deskripsi', 'Langkah Reproduksi', 'Severity', 'Prioritas', 'Stage', 'Backlog Item', 'Produk', 'Assigned To', 'Reported By', 'Dibuat'];
-    const rows = bugs.map(b => [
+    const rows = filteredBugs.map(b => [
       b.code, b.title, b.description, b.steps_to_reproduce, b.severity, b.priority, b.stage,
       b.item_code ? `[${b.item_code}] ${b.item_title || ''}` : '',
       b.product_code || b.product_name || '',
@@ -841,7 +841,10 @@ export default function BugsIncident() {
                   options={users.map(u => ({ v: u.id, l: u.name }))}
                   selected={bugFilters.assigned_to}
                   onChange={vals => setBugFilters(f => ({ ...f, assigned_to: vals }))} />
-                <div className="ml-auto">
+                <div className="ml-auto flex items-center gap-2">
+                  <button className="btn-secondary" onClick={exportBugsCSV} disabled={filteredBugs.length === 0}>
+                    <Download className="w-4 h-4" /> Export CSV
+                  </button>
                   {canAccess && (
                     <button className="btn-primary" onClick={() => setModal({ open: true, type: 'bug', data: null })}>
                       <Plus className="w-4 h-4" /> Buat Bug
