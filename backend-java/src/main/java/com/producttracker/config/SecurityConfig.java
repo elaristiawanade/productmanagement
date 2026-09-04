@@ -17,6 +17,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.security.web.header.writers.DelegatingRequestMatcherHeaderWriter;
+import org.springframework.security.web.header.writers.frameoptions.XFrameOptionsHeaderWriter;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
+import org.springframework.security.web.util.matcher.NegatedRequestMatcher;
 import javax.servlet.http.HttpServletResponse;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -52,10 +56,22 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        AntPathRequestMatcher attachmentFileMatcher = new AntPathRequestMatcher("/api/attachments/file/**");
         http
             .csrf(csrf -> csrf.disable())
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            // Allow same-origin framing only for served attachment files, so PDFs can be
+            // previewed in an in-app <iframe>; every other route keeps the default DENY.
+            .headers(headers -> headers
+                .frameOptions(frame -> frame.disable())
+                .addHeaderWriter(new DelegatingRequestMatcherHeaderWriter(
+                    attachmentFileMatcher,
+                    new XFrameOptionsHeaderWriter(XFrameOptionsHeaderWriter.XFrameOptionsMode.SAMEORIGIN)))
+                .addHeaderWriter(new DelegatingRequestMatcherHeaderWriter(
+                    new NegatedRequestMatcher(attachmentFileMatcher),
+                    new XFrameOptionsHeaderWriter(XFrameOptionsHeaderWriter.XFrameOptionsMode.DENY)))
+            )
             .authorizeRequests(auth -> auth
                 .antMatchers("/api/auth/login").permitAll()
                 .antMatchers("/api/attachments/file/**").permitAll()

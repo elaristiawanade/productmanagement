@@ -3,8 +3,8 @@
 
 | | |
 |---|---|
-| **Versi** | 1.6 |
-| **Tanggal** | 31 Agustus 2026 |
+| **Versi** | 2.0 |
+| **Tanggal** | 04 September 2026 |
 | **Status** | Live — Production |
 | **Pemilik** | Tim Internal |
 
@@ -91,6 +91,7 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 - Assign ke developer, set due date, set sprint, hubungkan ke epic/feature
 - Pagination dengan limit per halaman yang dapat dikonfigurasi
 - Import dari Jira (CSV)
+- **Lampiran** — unggah file ke backlog item: gambar (JPEG/PNG/GIF/WebP), PDF, Word, Excel, PowerPoint, ZIP, CSV, TXT (max 10MB per file, multi-file). Preview inline untuk gambar, PDF, TXT, dan CSV (dirender sebagai tabel) — tipe lain dibuka/diunduh di tab baru
 
 **Komentar & Aktivitas:**
 - Setiap item memiliki tab aktivitas yang menampilkan log perubahan dan komentar
@@ -221,8 +222,10 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 **Fitur:**
 - **Bugs** — CRUD data bug: judul, deskripsi, langkah reproduksi, severity & prioritas (`critical/high/medium/low`), assignee. **Tidak wajib** terhubung ke Backlog Item (beda dari Test Case QA yang wajib) — bug bisa berdiri sendiri untuk insiden yang belum tentu jadi backlog item
 - **Progress** — riwayat progres perbaikan bug, dicatat sebagai log/histori (bukan satu angka yang ditimpa) setiap kali statusnya diupdate, lengkap dengan catatan dan siapa yang mengupdate
-- **Bugs Dashboard** — statistik total bug, jumlah open, jumlah fixed, resolution rate, breakdown per produk dan per stage
+- **Bugs Dashboard** — statistik total bug, jumlah open, jumlah ready to test, resolution rate, breakdown per produk dan per stage
 - **Lampiran Gambar** — unggah screenshot/bukti visual pada bug (multi-gambar, max 10MB per file, JPEG/PNG/GIF/WebP), muncul setelah bug pertama kali disimpan (pola sama seperti lampiran Backlog Item, 3.2). Klik thumbnail untuk membuka preview gambar penuh layar
+- **Tracking tanggal** — tiap bug menampilkan **Tanggal Incident** (tanggal bug dibuat/dilaporkan), **Tanggal Closed** (otomatis terisi begitu stage masuk `done`, otomatis kosong lagi kalau stage dipindah keluar dari `done`), dan **Update Terakhir** (tanggal + nama user dari entry Progress paling baru, kosong kalau belum pernah ada update progress)
+- **Filter & pencarian** — cari berdasarkan judul/kode; filter multi-select stage, severity, prioritas, dan assignee; filter produk di level halaman (memuat ulang data dari server). Export hasil filter ke CSV
 
 **Stage bug** (dicatat sebagai histori di Progress, nilai stage terkini disimpan juga di data Bug untuk filter/tampilan cepat):
 
@@ -230,11 +233,10 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 |---|---|
 | `open` | Bug baru dilaporkan, belum dikerjakan |
 | `in_progress` | Sedang diperbaiki developer |
-| `fixed` | Developer sudah selesai memperbaiki, belum dikonfirmasi ulang QA |
-| `verified` | QA sudah retest dan mengonfirmasi perbaikan berhasil |
-| `closed` | Bug ditutup final — baik setelah verified, maupun ditutup tanpa fix (duplicate/won't-fix/tidak bisa direproduksi) |
+| `ready_to_test` | Developer sudah selesai memperbaiki, siap diretest QA |
+| `done` | Bug selesai — baik setelah diverifikasi QA, maupun ditutup tanpa fix (duplicate/won't-fix/tidak bisa direproduksi) |
 
-**Catatan implementasi:** Kode bug auto-generate per produk (`BUG-001`, `BUG-002`, ...), pola sama seperti kode Test Case (`TC-001`) di QA Module. Stage hanya bisa diubah lewat aksi "Update Progress" (menambah entry baru di histori) — form Edit Bug sendiri tidak punya field stage.
+**Catatan implementasi:** Kode bug auto-generate berbasis kode produk (`{KODE_PRODUK}-001`, `{KODE_PRODUK}-002`, ...) — bukan `BUG-001` seperti sebelumnya, pola sama seperti kode Backlog Item. Stage hanya bisa diubah lewat aksi "Update Progress" (menambah entry baru di histori) — form Edit Bug sendiri tidak punya field stage. `closed_at` di-set/di-clear otomatis oleh backend setiap kali stage berubah (bukan field yang bisa diisi manual).
 
 ---
 
@@ -340,10 +342,10 @@ QA Engineer buat Test Case → link ke backlog item
 ```
 QA Engineer / Super Admin buat Bug (produk wajib, backlog item opsional)
     → Assign ke developer (opsional)
-    → Klik "Update Progress" → pilih stage baru (open/in_progress/fixed/verified/closed) + catatan
-      → Entry baru tersimpan di histori Progress, stage terkini di data Bug ikut terupdate
-    → Ulangi Update Progress setiap ada perkembangan, sampai stage 'closed'
-    → Bugs Dashboard: pantau total bug, open, fixed, resolution rate
+    → Klik "Update Progress" → pilih stage baru (open/in_progress/ready_to_test/done) + catatan
+      → Entry baru tersimpan di histori Progress, stage terkini di data Bug ikut terupdate (masuk 'done' → closed_at otomatis terisi)
+    → Ulangi Update Progress setiap ada perkembangan, sampai stage 'done'
+    → Bugs Dashboard: pantau total bug, open, ready to test, resolution rate
 ```
 
 ---
@@ -373,7 +375,7 @@ QA Engineer / Super Admin buat Bug (produk wajib, backlog item opsional)
 | `item_activities` | Log perubahan dan komentar per backlog item |
 | `qa_test_cases` | Test case dengan link ke backlog item |
 | `qa_test_runs` | Sesi pengujian |
-| `bugs` | Data bug/incident; link ke backlog item opsional; kolom `stage` menyimpan stage terkini |
+| `bugs` | Data bug/incident; link ke backlog item opsional; kolom `stage` menyimpan stage terkini, `closed_at` terisi otomatis saat stage `done` |
 | `bug_progress_updates` | Histori perubahan stage bug (append-only log, tidak ada `updated_at`) |
 | `notifications` | Notifikasi per user |
 
@@ -416,7 +418,7 @@ POST   /api/backlog/:id/comments       Alias untuk endpoint activities di atas
 DELETE /api/activities/:id             Hapus komentar
 
 GET    /api/backlog/:id/attachments    List lampiran
-POST   /api/backlog/:id/attachments    Upload lampiran (max 10MB, image only, multipart/form-data)
+POST   /api/backlog/:id/attachments    Upload lampiran (max 10MB, gambar/PDF/Word/Excel/PowerPoint/ZIP/CSV/TXT, multipart/form-data)
 DELETE /api/attachments/:id            Hapus lampiran
 GET    /api/attachments/file/:filename Serve file lampiran (akses langsung ke file)
 ```
@@ -486,7 +488,7 @@ GET               /api/qa/dashboard            Statistik QA (coverage, pass rate
 GET/POST          /api/bugs                List & buat bug (params: product_id, backlog_item_id, stage)
 PUT/DELETE        /api/bugs/:id            Update (tanpa field stage) & hapus bug (cascade ke progress)
 GET/POST          /api/bugs/progress       List & buat entry progress (params: bug_id, product_id)
-GET               /api/bugs/dashboard      Statistik bug (total, open, fixed, resolution rate, breakdown)
+GET               /api/bugs/dashboard      Statistik bug (total, open, ready to test, resolution rate, breakdown)
 GET/POST          /api/bugs/:id/attachments List & upload lampiran gambar bug (max 10MB, image only, multipart/form-data)
 ```
 **Akses:** Semua endpoint di atas membalas `403` untuk role selain Super Admin/QA Engineer, kecuali role tsb diberi permission `access_bugs`. Lampiran gambar bug memakai endpoint `DELETE /api/attachments/:id` dan `GET /api/attachments/file/:filename` yang sama dengan lampiran Backlog Item.
@@ -582,6 +584,7 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | `migration_v8.sql` | Tambah kolom `estimated_hours NUMERIC(6,1)` di `backlog_items` |
 | `migration_v12.sql` | Modul Bugs Incident: tabel `bugs` & `bug_progress_updates`, permission `access_bugs` di-seed ke role `qa` |
 | `migration_v13.sql` | Tabel `bug_attachments` (lampiran gambar bug), mirror `backlog_attachments` |
+| `migration_v16.sql` | Sederhanakan stage Bugs Incident jadi 4 tahap (`open, in_progress, ready_to_test, done`), tambah kolom `bugs.closed_at` |
 
 ---
 
@@ -615,3 +618,6 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | 26 Jun 2026 | 1.5 | Perbaikan PRD: status sprint `planned` (bukan `planning`), kapasitas workload 20 pts & occupation 80 jam, level Ringan/Normal/Padat/Overload, soft vs permanent delete user, capacity field sprint, API reference dilengkapi (notifications, attachments, burndown POST, user roles, roadmap, import Jira) |
 | 31 Agu 2026 | 1.6 | Tambah modul **Bugs Incident** (3.9): pelacakan bug terpisah dari QA Test Case, dengan histori progres perbaikan bertahap (`open → in_progress → fixed → verified → closed`). Akses default dibatasi Super Admin & QA Engineer, bisa diperluas lewat permission `access_bugs` (pola sama seperti `access_c_level`). Backlog item bersifat opsional (beda dari Test Case yang wajib). `migration_v12.sql`: tabel `bugs`, `bug_progress_updates` |
 | 31 Agu 2026 | 1.7 | Bugs Incident (3.9): tambah **Lampiran Gambar** pada bug — unggah screenshot/bukti visual, klik thumbnail untuk preview penuh layar. Pola sama dengan lampiran Backlog Item (3.2), muncul setelah bug pertama kali disimpan. `migration_v13.sql`: tabel `bug_attachments` |
+| 02 Sep 2026 | 1.8 | Bugs Incident (3.9): kode bug sekarang mengikuti kode produk (`{KODE_PRODUK}-001`, bukan `BUG-001`), pola sama seperti kode Backlog Item. Tambah **filter bar** (pencarian judul/kode, filter multi-select stage/severity/prioritas/assignee) dan tombol **Export CSV** di tab Bugs. `migration_v15.sql`: re-code bug existing ke format baru |
+| 04 Sep 2026 | 1.9 | Bugs Incident (3.9): sederhanakan stage jadi 4 tahap — `fixed` direname jadi **Ready to Test** (menandai QA fix siap diretest), `verified` & `closed` digabung jadi satu stage **Done**. Tambah tracking **Tanggal Incident**, **Tanggal Closed** (auto-terisi/kosong mengikuti stage `done`), dan **Update Terakhir** (tanggal + nama user dari Progress terakhir) di tabel Bugs. `migration_v16.sql`: kolom `bugs.closed_at`, remap data stage lama |
+| 04 Sep 2026 | 2.0 | Backlog (3.2): **Lampiran** sekarang menerima PDF, Word, Excel, PowerPoint, ZIP, CSV, dan TXT — sebelumnya gambar saja. Preview inline untuk gambar/PDF/TXT/CSV (CSV dirender sebagai tabel), tipe lain dibuka/diunduh di tab baru |

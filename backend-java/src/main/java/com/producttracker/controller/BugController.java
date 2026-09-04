@@ -48,7 +48,10 @@ public class BugController {
             "  p.name AS product_name, p.code AS product_code, " +
             "  ru.name AS reported_by_name, au.name AS assigned_to_name, " +
             "  COUNT(bp.id)          AS update_count, " +
-            "  MAX(bp.created_at)    AS last_update " +
+            "  MAX(bp.created_at)    AS last_update, " +
+            "  (SELECT u3.name FROM bug_progress_updates bp3 " +
+            "     LEFT JOIN users u3 ON u3.id = bp3.updated_by " +
+            "     WHERE bp3.bug_id = b.id ORDER BY bp3.created_at DESC LIMIT 1) AS last_updated_by_name " +
             "FROM bugs b " +
             "LEFT JOIN backlog_items bi ON bi.id = b.backlog_item_id " +
             "LEFT JOIN products      p  ON p.id  = b.product_id " +
@@ -180,7 +183,10 @@ public class BugController {
                 "INSERT INTO bug_progress_updates (bug_id, stage, note, updated_by) VALUES (?,?,?,?) RETURNING *",
                 bugId, stage, body.get("note"), user != null ? user.get("id") : null
             );
-            jdbc.update("UPDATE bugs SET stage=? WHERE id=?", stage, bugId);
+            jdbc.update(
+                "UPDATE bugs SET stage=?, closed_at = CASE WHEN ?='done' THEN NOW() ELSE NULL END WHERE id=?",
+                stage, stage, bugId
+            );
             return ResponseEntity.status(201).body(row);
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
@@ -201,10 +207,9 @@ public class BugController {
             "SELECT " +
             "  COUNT(*)                                                        AS total_bugs, " +
             "  COUNT(CASE WHEN stage IN ('open','in_progress') THEN 1 END)     AS open_count, " +
-            "  COUNT(CASE WHEN stage = 'fixed'    THEN 1 END)                  AS fixed_count, " +
-            "  COUNT(CASE WHEN stage = 'verified' THEN 1 END)                  AS verified_count, " +
-            "  COUNT(CASE WHEN stage = 'closed'   THEN 1 END)                  AS closed_count, " +
-            "  ROUND(100.0 * COUNT(CASE WHEN stage = 'closed' THEN 1 END) / NULLIF(COUNT(*), 0), 1) AS resolution_rate " +
+            "  COUNT(CASE WHEN stage = 'ready_to_test' THEN 1 END)             AS ready_to_test_count, " +
+            "  COUNT(CASE WHEN stage = 'done'          THEN 1 END)             AS done_count, " +
+            "  ROUND(100.0 * COUNT(CASE WHEN stage = 'done' THEN 1 END) / NULLIF(COUNT(*), 0), 1) AS resolution_rate " +
             "FROM bugs b WHERE 1=1 " + productFilter,
             params
         );
@@ -213,7 +218,7 @@ public class BugController {
             "SELECT p.name AS product, p.color, " +
             "  COUNT(b.id)                                                 AS total_bugs, " +
             "  COUNT(CASE WHEN b.stage IN ('open','in_progress') THEN 1 END) AS open_count, " +
-            "  COUNT(CASE WHEN b.stage = 'closed' THEN 1 END)              AS closed_count " +
+            "  COUNT(CASE WHEN b.stage = 'done' THEN 1 END)                AS done_count " +
             "FROM products p " +
             "LEFT JOIN bugs b ON b.product_id = p.id " +
             "GROUP BY p.id, p.name, p.color " +
