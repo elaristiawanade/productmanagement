@@ -14,12 +14,15 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
@@ -34,6 +37,37 @@ public class AttachmentController {
 
     @Value("${app.upload.dir:./uploads}")
     private String uploadDir;
+
+    // Backlog attachments: images + common office/document formats
+    private static final Set<String> BACKLOG_MIME_TYPES = Set.of(
+        "image/jpeg", "image/png", "image/gif", "image/webp",
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/zip", "application/x-zip-compressed",
+        "text/csv", "text/plain"
+    );
+    private static final Set<String> BACKLOG_EXTENSIONS = Set.of(
+        ".jpg", ".jpeg", ".png", ".gif", ".webp",
+        ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+        ".zip", ".csv", ".txt"
+    );
+    private static final String BACKLOG_ALLOWED_MESSAGE =
+        "Tipe file tidak didukung. Format yang diizinkan: gambar (JPEG, PNG, GIF, WebP), PDF, Word, Excel, PowerPoint, ZIP, CSV, TXT";
+
+    // Content-type sniffing is unreliable across browsers/OSes for office formats,
+    // so fall back to the file extension when the declared MIME type isn't recognized.
+    private boolean isAllowedBacklogFile(String contentType, String originalFilename) {
+        if (contentType != null && BACKLOG_MIME_TYPES.contains(contentType.toLowerCase())) return true;
+        String name = originalFilename != null ? originalFilename.toLowerCase() : "";
+        int dot = name.lastIndexOf('.');
+        String ext = dot >= 0 ? name.substring(dot) : "";
+        return BACKLOG_EXTENSIONS.contains(ext);
+    }
 
     @GetMapping("/backlog/{id}/attachments")
     public ResponseEntity<?> list(@PathVariable Long id) {
@@ -54,8 +88,9 @@ public class AttachmentController {
                                     @RequestParam("file") MultipartFile file,
                                     @AuthenticationPrincipal Object principal) {
         String contentType = file.getContentType();
-        if (contentType == null || !contentType.startsWith("image/")) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Hanya file gambar yang diperbolehkan (JPEG, PNG, GIF, WebP)"));
+        String original = file.getOriginalFilename() != null ? file.getOriginalFilename() : "upload";
+        if (!isAllowedBacklogFile(contentType, original)) {
+            return ResponseEntity.badRequest().body(Map.of("error", BACKLOG_ALLOWED_MESSAGE));
         }
         if (file.getSize() > 10L * 1024 * 1024) {
             return ResponseEntity.badRequest().body(Map.of("error", "Ukuran file maksimal 10MB"));
@@ -65,7 +100,6 @@ public class AttachmentController {
             Path uploadPath = Paths.get(uploadDir).toAbsolutePath();
             Files.createDirectories(uploadPath);
 
-            String original = file.getOriginalFilename() != null ? file.getOriginalFilename() : "upload";
             String ext = original.contains(".") ? original.substring(original.lastIndexOf(".")) : "";
             String filename = UUID.randomUUID().toString() + ext;
 
@@ -188,9 +222,32 @@ public class AttachmentController {
             if (probed != null) contentType = probed;
         } catch (IOException ignored) {}
 
+        // Spring's ResourceHttpMessageConverter forces a generic "f.txt" download name (RFD
+        // attack mitigation) whenever we don't set our own Content-Disposition — this hits any
+        // extension outside its built-in safe list, e.g. every non-image type. Set it ourselves,
+        // using the original filename recorded at upload time.
+        String originalName = lookupOriginalName(filename);
+        String dispositionName = originalName != null ? originalName : filename;
+
         return ResponseEntity.ok()
             .contentType(MediaType.parseMediaType(contentType))
             .header(HttpHeaders.CACHE_CONTROL, "max-age=86400")
+            .header(HttpHeaders.CONTENT_DISPOSITION, buildContentDisposition(dispositionName))
             .body(resource);
+    }
+
+    private String lookupOriginalName(String filename) {
+        List<String> names = jdbc.queryForList(
+            "SELECT original_name FROM backlog_attachments WHERE filename = ? " +
+            "UNION ALL SELECT original_name FROM bug_attachments WHERE filename = ?",
+            String.class, filename, filename
+        );
+        return names.isEmpty() ? null : names.get(0);
+    }
+
+    private String buildContentDisposition(String filename) {
+        String asciiFallback = filename.replaceAll("[^\\x20-\\x7E]", "_").replace("\"", "'");
+        String encoded = URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
+        return "inline; filename=\"" + asciiFallback + "\"; filename*=UTF-8''" + encoded;
     }
 }

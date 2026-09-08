@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts';
-import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, ShieldCheck, XCircle, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download } from 'lucide-react';
+import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
@@ -16,14 +16,13 @@ import { format, parseISO, formatDistanceToNow } from 'date-fns';
 import { id as localeId } from 'date-fns/locale';
 
 const STAGE_ICONS = {
-  open:        { icon: AlertCircle,  cls: 'text-red-500'    },
-  in_progress: { icon: Wrench,       cls: 'text-blue-500'   },
-  fixed:       { icon: CheckCircle2, cls: 'text-teal-500'   },
-  verified:    { icon: ShieldCheck,  cls: 'text-cyan-500'   },
-  closed:      { icon: XCircle,      cls: 'text-slate-400'  },
+  open:          { icon: AlertCircle,   cls: 'text-red-500'    },
+  in_progress:   { icon: Wrench,        cls: 'text-blue-500'   },
+  ready_to_test: { icon: FlaskConical,  cls: 'text-amber-500'  },
+  done:          { icon: CheckCircle2,  cls: 'text-emerald-500' },
 };
 
-const STAGES     = ['open', 'in_progress', 'fixed', 'verified', 'closed'];
+const STAGES     = ['open', 'in_progress', 'ready_to_test', 'done'];
 const SEVERITIES = ['critical', 'high', 'medium', 'low'];
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
 
@@ -523,12 +522,12 @@ function BugProgressForm({ bug, onSave, onClose }) {
       </div>
       <div>
         <label className="label">Stage *</label>
-        <div className="grid grid-cols-5 gap-2">
-          {['open','in_progress','fixed','verified','closed'].map(s => (
+        <div className="grid grid-cols-4 gap-2">
+          {STAGES.map(s => (
             <button type="button" key={s} onClick={() => setForm(f => ({ ...f, stage: s }))}
               className={`py-2 rounded-lg text-xs font-medium border transition-all
                 ${form.stage === s ? 'ring-2 ring-indigo-400 border-indigo-400' : 'border-slate-200 hover:bg-slate-50'}`}>
-              {s.replace('_',' ')}
+              {s.replace(/_/g, ' ')}
             </button>
           ))}
         </div>
@@ -670,7 +669,7 @@ export default function BugsIncident() {
   };
 
   const exportBugsCSV = () => {
-    const headers = ['Kode', 'Judul', 'Deskripsi', 'Langkah Reproduksi', 'Severity', 'Prioritas', 'Stage', 'Backlog Item', 'Produk', 'Assigned To', 'Reported By', 'Dibuat'];
+    const headers = ['Kode', 'Judul', 'Deskripsi', 'Langkah Reproduksi', 'Severity', 'Prioritas', 'Stage', 'Backlog Item', 'Produk', 'Assigned To', 'Reported By', 'Tanggal Incident', 'Tanggal Closed', 'Update Terakhir', 'Update Terakhir Oleh'];
     const rows = filteredBugs.map(b => [
       b.code, b.title, b.description, b.steps_to_reproduce, b.severity, b.priority, b.stage,
       b.item_code ? `[${b.item_code}] ${b.item_title || ''}` : '',
@@ -678,6 +677,9 @@ export default function BugsIncident() {
       b.assigned_to_name || '',
       b.reported_by_name || '',
       b.created_at ? format(parseISO(b.created_at), 'yyyy-MM-dd HH:mm') : '',
+      b.closed_at ? format(parseISO(b.closed_at), 'yyyy-MM-dd HH:mm') : '',
+      b.last_update ? format(parseISO(b.last_update), 'yyyy-MM-dd HH:mm') : '',
+      b.last_updated_by_name || '',
     ]);
     const csv = [headers, ...rows].map(r => r.map(csvEscape).join(',')).join('\n');
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -689,7 +691,7 @@ export default function BugsIncident() {
     URL.revokeObjectURL(url);
   };
 
-  const STAGE_COLORS = { open: '#ef4444', in_progress: '#3b82f6', fixed: '#14b8a6', verified: '#06b6d4', closed: '#94a3b8' };
+  const STAGE_COLORS = { open: '#ef4444', in_progress: '#3b82f6', ready_to_test: '#f59e0b', done: '#10b981' };
   const summary = dashboard?.summary || {};
 
   const filteredBugs = bugs.filter(b => {
@@ -749,7 +751,7 @@ export default function BugsIncident() {
                 {[
                   { label: 'Total Bugs',     value: summary.total_bugs },
                   { label: 'Open',           value: summary.open_count },
-                  { label: 'Fixed',          value: summary.fixed_count },
+                  { label: 'Ready to Test',  value: summary.ready_to_test_count },
                   { label: 'Resolution Rate', value: `${summary.resolution_rate || 0}%` },
                 ].map(({ label, value }) => (
                   <div key={label} className="card p-4">
@@ -771,7 +773,7 @@ export default function BugsIncident() {
                       <Tooltip />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
                       <Bar dataKey="open_count"   name="Open"   fill="#ef4444" radius={[4,4,0,0]} />
-                      <Bar dataKey="closed_count" name="Closed" fill="#94a3b8" radius={[4,4,0,0]} />
+                      <Bar dataKey="done_count"   name="Done"   fill="#10b981" radius={[4,4,0,0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -829,7 +831,7 @@ export default function BugsIncident() {
                   />
                 </div>
                 {[
-                  { key: 'stage',    label: 'Stage',     opts: STAGES.map(s => ({ v: s, l: s.replace('_', ' ') })) },
+                  { key: 'stage',    label: 'Stage',     opts: STAGES.map(s => ({ v: s, l: s.replace(/_/g, ' ') })) },
                   { key: 'severity', label: 'Severity',  opts: SEVERITIES.map(s => ({ v: s, l: s })) },
                   { key: 'priority', label: 'Prioritas', opts: PRIORITIES.map(p => ({ v: p, l: p })) },
                 ].map(({ key, label, opts }) => (
@@ -876,11 +878,14 @@ export default function BugsIncident() {
                         <th className="text-center px-3 py-3">Stage</th>
                         <th className="text-left px-3 py-3">Assigned To</th>
                         <th className="text-left px-3 py-3">Produk</th>
+                        <th className="text-left px-3 py-3">Tanggal Incident</th>
+                        <th className="text-left px-3 py-3">Tanggal Closed</th>
+                        <th className="text-left px-3 py-3">Update Terakhir</th>
                         <th className="text-center px-3 py-3">Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {pagedBugs.length === 0 && <tr><td colSpan={9} className="text-center py-10 text-slate-400">Belum ada bug</td></tr>}
+                      {pagedBugs.length === 0 && <tr><td colSpan={12} className="text-center py-10 text-slate-400">Belum ada bug</td></tr>}
                       {pagedBugs.map(b => (
                         <tr key={b.id} className="table-row">
                           <td className="px-4 py-3"><span className="font-mono text-xs text-slate-500">{b.code}</span></td>
@@ -896,6 +901,20 @@ export default function BugsIncident() {
                           <td className="px-3 py-3 text-center"><StatusBadge status={b.stage} /></td>
                           <td className="px-3 py-3 text-xs text-slate-500">{b.assigned_to_name || '—'}</td>
                           <td className="px-3 py-3 text-xs text-slate-500">{b.product_code}</td>
+                          <td className="px-3 py-3 text-xs text-slate-500 whitespace-nowrap">
+                            {b.created_at ? format(parseISO(b.created_at), 'dd MMM yyyy') : '—'}
+                          </td>
+                          <td className="px-3 py-3 text-xs text-slate-500 whitespace-nowrap">
+                            {b.closed_at ? format(parseISO(b.closed_at), 'dd MMM yyyy') : '—'}
+                          </td>
+                          <td className="px-3 py-3 text-xs text-slate-500 whitespace-nowrap">
+                            {b.last_update ? (
+                              <>
+                                <p>{format(parseISO(b.last_update), 'dd MMM yyyy')}</p>
+                                <p className="text-slate-400">{b.last_updated_by_name || '—'}</p>
+                              </>
+                            ) : '—'}
+                          </td>
                           <td className="px-3 py-3">
                             <div className="flex items-center gap-1 justify-center">
                               {canAccess && (

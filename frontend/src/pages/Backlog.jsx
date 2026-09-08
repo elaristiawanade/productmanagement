@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Pencil, Trash2, AlertCircle, Link2, Paperclip, Upload, X, ImageIcon, MessageSquare, Send, FileDown, ChevronDown, Check } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, AlertCircle, Link2, Paperclip, Upload, X, ImageIcon, MessageSquare, Send, FileDown, ChevronDown, Check, FileText, FileSpreadsheet, Presentation, Archive, File as FileIcon, ExternalLink } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
@@ -16,6 +16,49 @@ import { Link } from 'react-router-dom';
 const STATUSES   = ['backlog','todo','in_progress','in_review','done','blocked'];
 const PRIORITIES = ['critical','high','medium','low'];
 const TYPES      = ['story','bug','task','epic','independent'];
+
+// ─── Backlog attachments ───────────────────────────────────────────────────
+const ATTACHMENT_ACCEPT = 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.csv,.txt';
+const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+const ALLOWED_ATTACHMENT_EXTENSIONS = [
+  ...IMAGE_EXTENSIONS, '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.zip', '.csv', '.txt',
+];
+
+function fileExt(name = '') {
+  const i = name.lastIndexOf('.');
+  return i >= 0 ? name.slice(i).toLowerCase() : '';
+}
+
+function isImageAttachment(att) {
+  if (att.mime_type?.startsWith('image/')) return true;
+  return IMAGE_EXTENSIONS.includes(fileExt(att.original_name || att.filename));
+}
+
+// Formats we can render inline without a document-viewer library: PDF has a native
+// browser renderer, TXT/CSV are just fetched as text. Everything else (docx/xlsx/zip/…)
+// falls back to opening/downloading in a new tab.
+function previewKindOf(att) {
+  const ext = fileExt(att.original_name || att.filename);
+  if (ext === '.pdf') return 'pdf';
+  if (ext === '.txt') return 'txt';
+  if (ext === '.csv') return 'csv';
+  return null;
+}
+
+function parseCsvSimple(text) {
+  return text.replace(/\r\n/g, '\n').replace(/﻿/, '').split('\n')
+    .filter(line => line.length > 0)
+    .map(line => line.split(','));
+}
+
+function AttachmentIcon({ att, className }) {
+  const ext = fileExt(att.original_name || att.filename);
+  if (['.xls', '.xlsx', '.csv'].includes(ext)) return <FileSpreadsheet className={className} />;
+  if (['.ppt', '.pptx'].includes(ext)) return <Presentation className={className} />;
+  if (ext === '.zip') return <Archive className={className} />;
+  if (['.pdf', '.doc', '.docx', '.txt'].includes(ext)) return <FileText className={className} />;
+  return <FileIcon className={className} />;
+}
 
 function F({ label, children, required }) {
   return (
@@ -384,15 +427,28 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
   const [attachments, setAttachments] = useState([]);
   const [uploading,   setUploading]   = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
+  const [previewDoc,   setPreviewDoc]   = useState(null); // { att, kind: 'pdf'|'txt'|'csv' }
+  const [docContent,   setDocContent]   = useState('');
+  const [docLoading,   setDocLoading]   = useState(false);
   const fileInputRef = useRef(null);
   const notesRef     = useRef(null);
 
   useEffect(() => {
-    if (!previewImage) return;
-    const handler = (e) => { if (e.key === 'Escape') setPreviewImage(null); };
+    if (!previewDoc || previewDoc.kind === 'pdf') { setDocContent(''); return; }
+    setDocLoading(true);
+    fetch(`/api/attachments/file/${previewDoc.att.filename}`)
+      .then(r => r.text())
+      .then(setDocContent)
+      .catch(() => setDocContent('Gagal memuat isi file.'))
+      .finally(() => setDocLoading(false));
+  }, [previewDoc]);
+
+  useEffect(() => {
+    if (!previewImage && !previewDoc) return;
+    const handler = (e) => { if (e.key === 'Escape') { setPreviewImage(null); setPreviewDoc(null); } };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [previewImage]);
+  }, [previewImage, previewDoc]);
 
   const insertNotesLink = (snippet) => {
     const el  = notesRef.current;
@@ -442,17 +498,20 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
   const handleUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) { toast.error('Hanya file gambar yang diizinkan'); return; }
+    if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(fileExt(file.name))) {
+      toast.error('Tipe file tidak didukung. Gunakan gambar, PDF, Word, Excel, PowerPoint, ZIP, CSV, atau TXT');
+      return;
+    }
     if (file.size > 10 * 1024 * 1024) { toast.error('Ukuran file maks 10MB'); return; }
     setUploading(true);
     try {
       const fd = new FormData();
       fd.append('file', file);
       await client.post(`/backlog/${item.id}/attachments`, fd);
-      toast.success('Gambar berhasil diunggah');
+      toast.success('File berhasil diunggah');
       loadAttachments();
     } catch (err) {
-      toast.error(err?.response?.data?.error || 'Gagal mengunggah gambar');
+      toast.error(err?.response?.data?.error || 'Gagal mengunggah file');
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -693,7 +752,7 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
             <div className="flex items-center justify-between mb-3">
               <label className="label mb-0 flex items-center gap-1.5">
                 <Paperclip className="w-3.5 h-3.5 text-slate-400" />
-                Lampiran Gambar
+                Lampiran
                 {attachments.length > 0 && (
                   <span className="text-xs font-normal text-slate-400 ml-1">({attachments.length})</span>
                 )}
@@ -705,35 +764,53 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
                 {uploading
                   ? <span className="w-3.5 h-3.5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
                   : <Upload className="w-3.5 h-3.5" />}
-                {uploading ? 'Mengunggah...' : 'Unggah Gambar'}
+                {uploading ? 'Mengunggah...' : 'Unggah File'}
               </button>
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
+              <input ref={fileInputRef} type="file" accept={ATTACHMENT_ACCEPT} className="hidden" onChange={handleUpload} />
             </div>
             {attachments.length === 0 ? (
               <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors"
                 onClick={() => fileInputRef.current?.click()}>
                 <ImageIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-xs text-slate-400">Klik untuk unggah gambar</p>
-                <p className="text-xs text-slate-300 mt-0.5">JPG, PNG, GIF, WEBP • Maks 10MB</p>
+                <p className="text-xs text-slate-400">Klik untuk unggah file</p>
+                <p className="text-xs text-slate-300 mt-0.5">Gambar, PDF, Word, Excel, PowerPoint, ZIP, CSV, TXT • Maks 10MB</p>
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-2">
-                {attachments.map(att => (
-                  <div key={att.id} className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-50 aspect-video cursor-pointer"
-                    onClick={() => setPreviewImage(att)}>
-                    <img src={`/api/attachments/file/${att.filename}`} alt={att.original_name}
-                      className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-                      <button type="button" onClick={(e) => { e.stopPropagation(); deleteAttachment(att.id); }}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
+                {attachments.map(att => {
+                  const isImage = isImageAttachment(att);
+                  const docKind = !isImage ? previewKindOf(att) : null;
+                  const openAttachment = () => {
+                    if (isImage) { setPreviewImage(att); return; }
+                    if (docKind) { setPreviewDoc({ att, kind: docKind }); return; }
+                    window.open(`/api/attachments/file/${att.filename}`, '_blank');
+                  };
+                  return (
+                    <div key={att.id} className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-50 aspect-video cursor-pointer"
+                      onClick={openAttachment}>
+                      {isImage ? (
+                        <img src={`/api/attachments/file/${att.filename}`} alt={att.original_name}
+                          className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 px-2">
+                          <AttachmentIcon att={att} className="w-7 h-7 text-slate-400" />
+                          <p className="text-[11px] text-slate-500 text-center truncate w-full">{att.original_name}</p>
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                        <button type="button" onClick={(e) => { e.stopPropagation(); deleteAttachment(att.id); }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      {isImage && (
+                        <p className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs px-1.5 py-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
+                          {att.original_name}
+                        </p>
+                      )}
                     </div>
-                    <p className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs px-1.5 py-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                      {att.original_name}
-                    </p>
-                  </div>
-                ))}
+                  );
+                })}
                 <button type="button" onClick={() => fileInputRef.current?.click()}
                   className="aspect-video rounded-lg border-2 border-dashed border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors flex flex-col items-center justify-center gap-1">
                   <Upload className="w-4 h-4 text-slate-400" />
@@ -775,6 +852,55 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
           </button>
           <img src={`/api/attachments/file/${previewImage.filename}`} alt={previewImage.original_name}
             className="max-w-full max-h-full rounded-lg shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
+
+      {previewDoc && (
+        <div className="fixed inset-0 z-[60] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-6"
+          onClick={() => setPreviewDoc(null)}>
+          <div className="w-full h-full max-w-4xl bg-white rounded-lg shadow-2xl flex flex-col overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 shrink-0">
+              <p className="text-sm font-medium text-slate-700 truncate pr-2">{previewDoc.att.original_name}</p>
+              <div className="flex items-center gap-1 shrink-0">
+                <a href={`/api/attachments/file/${previewDoc.att.filename}`} target="_blank" rel="noreferrer"
+                  className="btn-ghost btn-sm rounded-lg p-1.5" title="Buka di tab baru">
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+                <button type="button" onClick={() => setPreviewDoc(null)} className="btn-ghost btn-sm rounded-lg p-1.5">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto bg-slate-50">
+              {previewDoc.kind === 'pdf' && (
+                <iframe src={`/api/attachments/file/${previewDoc.att.filename}`} title={previewDoc.att.original_name}
+                  className="w-full h-full border-0" />
+              )}
+              {previewDoc.kind === 'txt' && (
+                docLoading
+                  ? <p className="p-4 text-sm text-slate-400">Memuat...</p>
+                  : <pre className="p-4 text-xs text-slate-700 whitespace-pre-wrap break-words">{docContent}</pre>
+              )}
+              {previewDoc.kind === 'csv' && (
+                docLoading
+                  ? <p className="p-4 text-sm text-slate-400">Memuat...</p>
+                  : (
+                    <table className="text-xs border-collapse">
+                      <tbody>
+                        {parseCsvSimple(docContent).map((row, i) => (
+                          <tr key={i} className={i === 0 ? 'bg-slate-100 font-semibold' : 'even:bg-white odd:bg-slate-50'}>
+                            {row.map((cell, j) => (
+                              <td key={j} className="border border-slate-200 px-2 py-1 whitespace-nowrap">{cell}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )
+              )}
+            </div>
+          </div>
         </div>
       )}
     </form>
