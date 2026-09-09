@@ -206,7 +206,7 @@ public class BugController {
         Map<String, Object> summary = jdbc.queryForMap(
             "SELECT " +
             "  COUNT(*)                                                        AS total_bugs, " +
-            "  COUNT(CASE WHEN stage IN ('open','in_progress') THEN 1 END)     AS open_count, " +
+            "  COUNT(CASE WHEN stage IN ('open','in_progress','reopen') THEN 1 END) AS open_count, " +
             "  COUNT(CASE WHEN stage = 'ready_to_test' THEN 1 END)             AS ready_to_test_count, " +
             "  COUNT(CASE WHEN stage = 'done'          THEN 1 END)             AS done_count, " +
             "  ROUND(100.0 * COUNT(CASE WHEN stage = 'done' THEN 1 END) / NULLIF(COUNT(*), 0), 1) AS resolution_rate " +
@@ -217,7 +217,7 @@ public class BugController {
         List<Map<String, Object>> byProduct = jdbc.queryForList(
             "SELECT p.name AS product, p.color, " +
             "  COUNT(b.id)                                                 AS total_bugs, " +
-            "  COUNT(CASE WHEN b.stage IN ('open','in_progress') THEN 1 END) AS open_count, " +
+            "  COUNT(CASE WHEN b.stage IN ('open','in_progress','reopen') THEN 1 END) AS open_count, " +
             "  COUNT(CASE WHEN b.stage = 'done' THEN 1 END)                AS done_count " +
             "FROM products p " +
             "LEFT JOIN bugs b ON b.product_id = p.id " +
@@ -239,11 +239,25 @@ public class BugController {
             "ORDER BY bp.created_at DESC NULLS LAST " +
             "LIMIT 10");
 
+        List<Map<String, Object>> recentComments = jdbc.queryForList(
+            "SELECT a.id, a.content, a.created_at, " +
+            "  b.code AS bug_code, b.title AS bug_title, " +
+            "  p.name AS product, u.name AS user_name, u.avatar_color AS user_avatar_color " +
+            "FROM bug_activities a " +
+            "JOIN bugs     b ON b.id = a.bug_id " +
+            "JOIN products p ON p.id = b.product_id " +
+            "LEFT JOIN users u ON u.id = a.user_id " +
+            "WHERE a.type = 'comment' " + productFilter + " " +
+            "ORDER BY a.created_at DESC " +
+            "LIMIT 10",
+            params);
+
         return ResponseEntity.ok(Map.of(
             "summary", summary,
             "byProduct", byProduct,
             "byStage", byStage,
-            "recentActivity", recentActivity
+            "recentActivity", recentActivity,
+            "recentComments", recentComments
         ));
     }
 

@@ -41,6 +41,8 @@ services:
       dockerfile: Dockerfile
     container_name: pt_backend
     restart: unless-stopped
+    ports:
+      - "4000:4000"
     volumes:
       - uploads_data:/app/uploads
     environment:

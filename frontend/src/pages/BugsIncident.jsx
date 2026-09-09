@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell
+  PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
-import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download } from 'lucide-react';
+import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
@@ -12,19 +12,83 @@ import LinkInsertButton from '../components/LinkInsertButton';
 import { renderWithLinks } from '../utils/linkify';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { format, parseISO, formatDistanceToNow } from 'date-fns';
+import {
+  format, parseISO, formatDistanceToNow,
+  startOfWeek, endOfWeek, startOfMonth, startOfYear, addWeeks, addMonths, addYears,
+} from 'date-fns';
 import { id as localeId } from 'date-fns/locale';
 
 const STAGE_ICONS = {
   open:          { icon: AlertCircle,   cls: 'text-red-500'    },
   in_progress:   { icon: Wrench,        cls: 'text-blue-500'   },
   ready_to_test: { icon: FlaskConical,  cls: 'text-amber-500'  },
+  reopen:        { icon: RotateCcw,     cls: 'text-purple-500' },
   done:          { icon: CheckCircle2,  cls: 'text-emerald-500' },
 };
 
-const STAGES     = ['open', 'in_progress', 'ready_to_test', 'done'];
+const STAGES     = ['open', 'in_progress', 'ready_to_test', 'reopen', 'done'];
+const STAGE_LABELS = {
+  open: 'Open', in_progress: 'In Progress', ready_to_test: 'Ready to Test', reopen: 'Re-Open', done: 'Done',
+};
 const SEVERITIES = ['critical', 'high', 'medium', 'low'];
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
+
+// ─── Bugs list sorting ─────────────────────────────────────────────────────
+// Rank maps give these string columns a real ordering (alphabetical order of
+// 'critical'/'high'/'medium'/'low' or the stage names is meaningless).
+const PRIORITY_RANK = { critical: 0, high: 1, medium: 2, low: 3 };
+const STAGE_RANK    = STAGES.reduce((acc, s, i) => ({ ...acc, [s]: i }), {});
+
+const SORTABLE_COLUMNS = {
+  severity:    { type: 'rank', rank: PRIORITY_RANK, defaultDir: 'asc' },  // asc = critical first
+  priority:    { type: 'rank', rank: PRIORITY_RANK, defaultDir: 'asc' },  // asc = critical first
+  stage:       { type: 'rank', rank: STAGE_RANK,    defaultDir: 'asc' },  // asc = open -> done
+  created_at:  { type: 'date', defaultDir: 'desc' },                     // desc = newest first
+  closed_at:   { type: 'date', defaultDir: 'desc' },
+  last_update: { type: 'date', defaultDir: 'desc' },
+};
+
+function compareBugsBy(a, b, key) {
+  const col = SORTABLE_COLUMNS[key];
+  if (col.type === 'rank') return (col.rank[a[key]] ?? 99) - (col.rank[b[key]] ?? 99);
+  return new Date(a[key]).getTime() - new Date(b[key]).getTime();
+}
+
+// ─── Bugs Dashboard: opened-vs-closed trend ───────────────────────────────
+// Computed client-side (the full `bugs` array is already loaded, unpaginated)
+// so switching Mingguan/Bulanan/Tahunan is instant with no extra API call,
+// and it always reflects the current data the moment the page is loaded.
+const TREND_WINDOWS = {
+  week:  { count: 8, startOf: d => startOfWeek(d, { weekStartsOn: 1 }), add: addWeeks,  label: s => `${format(s, 'dd MMM')} - ${format(endOfWeek(s, { weekStartsOn: 1 }), 'dd MMM')}` },
+  month: { count: 6, startOf: startOfMonth,                            add: addMonths, label: s => format(s, 'MMM yyyy') },
+  year:  { count: 3, startOf: startOfYear,                             add: addYears,  label: s => format(s, 'yyyy') },
+};
+
+function buildTrendData(bugs, period) {
+  const { count, startOf, add, label } = TREND_WINDOWS[period];
+  const currentStart = startOf(new Date());
+
+  const buckets = [];
+  for (let i = count - 1; i >= 0; i--) {
+    const bucketStart = add(currentStart, -i);
+    buckets.push({ bucketStart, bucketEnd: add(bucketStart, 1), opened_count: 0, closed_count: 0 });
+  }
+
+  const findBucket = (dateStr) => {
+    if (!dateStr) return null;
+    const d = parseISO(dateStr);
+    return buckets.find(bk => d >= bk.bucketStart && d < bk.bucketEnd);
+  };
+
+  bugs.forEach(b => {
+    const openedBucket = findBucket(b.created_at);
+    if (openedBucket) openedBucket.opened_count += 1;
+    const closedBucket = findBucket(b.closed_at);
+    if (closedBucket) closedBucket.closed_count += 1;
+  });
+
+  return buckets.map(bk => ({ ...bk, label: label(bk.bucketStart) }));
+}
 
 // ─── Activity / Comments Section ──────────────────────────────────────────────
 
@@ -522,12 +586,12 @@ function BugProgressForm({ bug, onSave, onClose }) {
       </div>
       <div>
         <label className="label">Stage *</label>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           {STAGES.map(s => (
             <button type="button" key={s} onClick={() => setForm(f => ({ ...f, stage: s }))}
               className={`py-2 rounded-lg text-xs font-medium border transition-all
                 ${form.stage === s ? 'ring-2 ring-indigo-400 border-indigo-400' : 'border-slate-200 hover:bg-slate-50'}`}>
-              {s.replace(/_/g, ' ')}
+              {STAGE_LABELS[s] || s}
             </button>
           ))}
         </div>
@@ -617,6 +681,11 @@ export default function BugsIncident() {
   // Client-side only (Bugs tab list is already loaded in full per product, so these
   // don't need a round-trip to the backend like `filters.product_id` does).
   const [bugFilters,   setBugFilters]  = useState({ search: '', stage: [], severity: [], priority: [], assigned_to: [] });
+  // Default true: Closed/Done bugs are hidden from the list until the user opts back in.
+  const [hideClosed,   setHideClosed]  = useState(true);
+  const [sortKey,      setSortKey]     = useState(null);
+  const [sortDir,      setSortDir]     = useState('asc');
+  const [trendPeriod,  setTrendPeriod] = useState('month');
   const [modal,        setModal]       = useState({ open: false, type: '', data: null });
   const [loading,      setLoading]     = useState(true);
   const [perPageBugs,     setPerPageBugs]     = useState(10);
@@ -647,7 +716,34 @@ export default function BugsIncident() {
   }, [filters]);
 
   useEffect(() => { if (canAccess) load(); }, [load, canAccess]);
-  useEffect(() => { setPageBugs(1); }, [bugFilters]);
+  useEffect(() => { setPageBugs(1); }, [bugFilters, hideClosed, sortKey, sortDir]);
+
+  // Cycle: click a new column -> its default direction: click again -> the
+  // opposite direction; click a third time -> clear back to the original order.
+  const handleSort = (key) => {
+    if (sortKey !== key) {
+      setSortKey(key);
+      setSortDir(SORTABLE_COLUMNS[key].defaultDir);
+    } else if (sortDir === SORTABLE_COLUMNS[key].defaultDir) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(null);
+    }
+  };
+
+  const sortIcon = (key) => {
+    if (sortKey !== key) return <ArrowUpDown className="w-3 h-3 text-slate-300" />;
+    return sortDir === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600" /> : <ArrowDown className="w-3 h-3 text-indigo-600" />;
+  };
+
+  const renderSortableTh = (key, label, align = 'center') => (
+    <th className={`px-3 py-3 ${align === 'center' ? 'text-center' : 'text-left'} cursor-pointer select-none hover:bg-slate-100 transition-colors`}
+      onClick={() => handleSort(key)}>
+      <span className={`inline-flex items-center gap-1 ${align === 'center' ? 'justify-center' : ''}`}>
+        {label}{sortIcon(key)}
+      </span>
+    </th>
+  );
 
   if (!canAccess) {
     return (
@@ -670,7 +766,7 @@ export default function BugsIncident() {
 
   const exportBugsCSV = () => {
     const headers = ['Kode', 'Judul', 'Deskripsi', 'Langkah Reproduksi', 'Severity', 'Prioritas', 'Stage', 'Backlog Item', 'Produk', 'Assigned To', 'Reported By', 'Tanggal Incident', 'Tanggal Closed', 'Update Terakhir', 'Update Terakhir Oleh'];
-    const rows = filteredBugs.map(b => [
+    const rows = sortedBugs.map(b => [
       b.code, b.title, b.description, b.steps_to_reproduce, b.severity, b.priority, b.stage,
       b.item_code ? `[${b.item_code}] ${b.item_title || ''}` : '',
       b.product_code || b.product_name || '',
@@ -691,10 +787,11 @@ export default function BugsIncident() {
     URL.revokeObjectURL(url);
   };
 
-  const STAGE_COLORS = { open: '#ef4444', in_progress: '#3b82f6', ready_to_test: '#f59e0b', done: '#10b981' };
+  const STAGE_COLORS = { open: '#ef4444', in_progress: '#3b82f6', ready_to_test: '#f59e0b', reopen: '#a855f7', done: '#10b981' };
   const summary = dashboard?.summary || {};
 
   const filteredBugs = bugs.filter(b => {
+    if (hideClosed && b.stage === 'done') return false;
     if (bugFilters.search) {
       const q = bugFilters.search.toLowerCase();
       if (!(b.code?.toLowerCase().includes(q) || b.title?.toLowerCase().includes(q))) return false;
@@ -706,8 +803,18 @@ export default function BugsIncident() {
     return true;
   });
 
-  const totalPagesBugs     = Math.max(1, Math.ceil(filteredBugs.length / perPageBugs));
-  const pagedBugs          = filteredBugs.slice((pageBugs - 1) * perPageBugs, pageBugs * perPageBugs);
+  const sortedBugs = sortKey
+    ? [...filteredBugs].sort((a, b) => {
+        const aMissing = a[sortKey] === null || a[sortKey] === undefined || a[sortKey] === '';
+        const bMissing = b[sortKey] === null || b[sortKey] === undefined || b[sortKey] === '';
+        if (aMissing || bMissing) return aMissing === bMissing ? 0 : (aMissing ? 1 : -1); // rows with no value always sort last
+        const result = compareBugsBy(a, b, sortKey);
+        return sortDir === 'asc' ? result : -result;
+      })
+    : filteredBugs;
+
+  const totalPagesBugs     = Math.max(1, Math.ceil(sortedBugs.length / perPageBugs));
+  const pagedBugs          = sortedBugs.slice((pageBugs - 1) * perPageBugs, pageBugs * perPageBugs);
   const totalPagesProgress = Math.max(1, Math.ceil(progress.length / perPageProgress));
   const pagedProgress      = progress.slice((pageProgress - 1) * perPageProgress, pageProgress * perPageProgress);
 
@@ -717,6 +824,8 @@ export default function BugsIncident() {
   const stagePieData = (dashboard?.byStage || [])
     .map(s => ({ name: s.stage, value: +s.count || 0, color: STAGE_COLORS[s.stage] || '#94a3b8' }))
     .filter(d => d.value > 0);
+
+  const trendData = buildTrendData(bugs, trendPeriod);
 
   return (
     <div className="space-y-5">
@@ -792,26 +901,80 @@ export default function BugsIncident() {
                 </div>
               </div>
 
-              {/* Recent Activity */}
-              <div className="card overflow-hidden">
-                <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
-                  <BugIcon className="w-4 h-4 text-red-500" />
-                  <h3 className="font-semibold text-slate-700">Recent Activity</h3>
-                  <span className="ml-auto text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{dashboard?.recentActivity?.length || 0}</span>
+              {/* Open vs Closed Trend */}
+              <div className="card p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-slate-700">Tren Bug Dibuka vs Ditutup</h3>
+                  <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+                    {[['week', 'Mingguan'], ['month', 'Bulanan'], ['year', 'Tahunan']].map(([v, l]) => (
+                      <button key={v} type="button" onClick={() => setTrendPeriod(v)}
+                        className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors
+                          ${trendPeriod === v ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className="divide-y divide-slate-50">
-                  {dashboard?.recentActivity?.length === 0 && <p className="text-center py-8 text-slate-400 text-sm">Belum ada aktivitas terkini</p>}
-                  {dashboard?.recentActivity?.map(a => (
-                    <div key={a.id} className="px-5 py-3 flex items-start gap-3">
-                      <BugIcon className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-700">{a.bug_title}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">[{a.bug_code}] · {a.product} · oleh {a.updated_by_name || '—'} → <StatusBadge status={a.stage} size="xs" /></p>
-                        {a.note && <p className="text-xs text-slate-600 mt-1 italic">{a.note}</p>}
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={trendData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <Tooltip />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Line type="monotone" dataKey="opened_count" name="Dibuka"  stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="closed_count" name="Ditutup" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Recent Activity + Recent Comments */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <div className="card overflow-hidden">
+                  <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+                    <BugIcon className="w-4 h-4 text-red-500" />
+                    <h3 className="font-semibold text-slate-700">Recent Activity</h3>
+                    <span className="ml-auto text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{dashboard?.recentActivity?.length || 0}</span>
+                  </div>
+                  <div className="divide-y divide-slate-50 max-h-[400px] overflow-y-auto">
+                    {dashboard?.recentActivity?.length === 0 && <p className="text-center py-8 text-slate-400 text-sm">Belum ada aktivitas terkini</p>}
+                    {dashboard?.recentActivity?.map(a => (
+                      <div key={a.id} className="px-5 py-3 flex items-start gap-3">
+                        <BugIcon className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-700">{a.bug_title}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">[{a.bug_code}] · {a.product} · oleh {a.updated_by_name || '—'} → <StatusBadge status={a.stage} size="xs" /></p>
+                          {a.note && <p className="text-xs text-slate-600 mt-1 italic">{a.note}</p>}
+                        </div>
+                        <span className="text-xs text-slate-400 shrink-0">{a.created_at ? format(parseISO(a.created_at), 'dd MMM HH:mm') : '—'}</span>
                       </div>
-                      <span className="text-xs text-slate-400 shrink-0">{a.created_at ? format(parseISO(a.created_at), 'dd MMM HH:mm') : '—'}</span>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                </div>
+
+                <div className="card overflow-hidden">
+                  <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-indigo-500" />
+                    <h3 className="font-semibold text-slate-700">Recent Comments</h3>
+                    <span className="ml-auto text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">{dashboard?.recentComments?.length || 0}</span>
+                  </div>
+                  <div className="divide-y divide-slate-50 max-h-[400px] overflow-y-auto">
+                    {dashboard?.recentComments?.length === 0 && <p className="text-center py-8 text-slate-400 text-sm">Belum ada komentar terkini</p>}
+                    {dashboard?.recentComments?.map(c => (
+                      <div key={c.id} className="px-5 py-3 flex items-start gap-3">
+                        <div className="w-5 h-5 mt-0.5 rounded-full text-white text-xs font-bold flex items-center justify-center shrink-0"
+                          style={{ backgroundColor: c.user_avatar_color || '#6366f1' }}>
+                          {(c.user_name || '?').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-700">{c.user_name || 'Unknown'}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">[{c.bug_code}] {c.bug_title} · {c.product}</p>
+                          <p className="text-xs text-slate-600 mt-1 bg-slate-50 rounded-lg px-2.5 py-1.5">{renderComment(c.content)}</p>
+                        </div>
+                        <span className="text-xs text-slate-400 shrink-0">{c.created_at ? format(parseISO(c.created_at), 'dd MMM HH:mm') : '—'}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -831,7 +994,7 @@ export default function BugsIncident() {
                   />
                 </div>
                 {[
-                  { key: 'stage',    label: 'Stage',     opts: STAGES.map(s => ({ v: s, l: s.replace(/_/g, ' ') })) },
+                  { key: 'stage',    label: 'Stage',     opts: STAGES.map(s => ({ v: s, l: STAGE_LABELS[s] || s })) },
                   { key: 'severity', label: 'Severity',  opts: SEVERITIES.map(s => ({ v: s, l: s })) },
                   { key: 'priority', label: 'Prioritas', opts: PRIORITIES.map(p => ({ v: p, l: p })) },
                 ].map(({ key, label, opts }) => (
@@ -843,6 +1006,12 @@ export default function BugsIncident() {
                   options={users.map(u => ({ v: u.id, l: u.name }))}
                   selected={bugFilters.assigned_to}
                   onChange={vals => setBugFilters(f => ({ ...f, assigned_to: vals }))} />
+                <button type="button" onClick={() => setHideClosed(h => !h)}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1.5 shrink-0
+                    ${hideClosed ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                  {hideClosed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  {hideClosed ? 'Closed/Done disembunyikan' : 'Tampilkan Closed/Done'}
+                </button>
                 <div className="ml-auto flex items-center gap-2">
                   <button className="btn-secondary" onClick={exportBugsCSV} disabled={filteredBugs.length === 0}>
                     <Download className="w-4 h-4" /> Export CSV
@@ -873,14 +1042,14 @@ export default function BugsIncident() {
                         <th className="text-left px-4 py-3">Kode</th>
                         <th className="text-left px-4 py-3">Judul</th>
                         <th className="text-left px-3 py-3">Item</th>
-                        <th className="text-center px-3 py-3">Severity</th>
-                        <th className="text-center px-3 py-3">Prioritas</th>
-                        <th className="text-center px-3 py-3">Stage</th>
+                        {renderSortableTh('severity', 'Severity')}
+                        {renderSortableTh('priority', 'Prioritas')}
+                        {renderSortableTh('stage', 'Stage')}
                         <th className="text-left px-3 py-3">Assigned To</th>
                         <th className="text-left px-3 py-3">Produk</th>
-                        <th className="text-left px-3 py-3">Tanggal Incident</th>
-                        <th className="text-left px-3 py-3">Tanggal Closed</th>
-                        <th className="text-left px-3 py-3">Update Terakhir</th>
+                        {renderSortableTh('created_at', 'Tanggal Incident', 'left')}
+                        {renderSortableTh('closed_at', 'Tanggal Closed', 'left')}
+                        {renderSortableTh('last_update', 'Update Terakhir', 'left')}
                         <th className="text-center px-3 py-3">Aksi</th>
                       </tr>
                     </thead>
