@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell
+  PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
-import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download } from 'lucide-react';
+import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
@@ -12,7 +12,10 @@ import LinkInsertButton from '../components/LinkInsertButton';
 import { renderWithLinks } from '../utils/linkify';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { format, parseISO, formatDistanceToNow } from 'date-fns';
+import {
+  format, parseISO, formatDistanceToNow,
+  startOfWeek, endOfWeek, startOfMonth, startOfYear, addWeeks, addMonths, addYears,
+} from 'date-fns';
 import { id as localeId } from 'date-fns/locale';
 
 const STAGE_ICONS = {
@@ -25,6 +28,63 @@ const STAGE_ICONS = {
 const STAGES     = ['open', 'in_progress', 'ready_to_test', 'done'];
 const SEVERITIES = ['critical', 'high', 'medium', 'low'];
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
+
+// ─── Bugs list sorting ─────────────────────────────────────────────────────
+// Rank maps give these string columns a real ordering (alphabetical order of
+// 'critical'/'high'/'medium'/'low' or the stage names is meaningless).
+const PRIORITY_RANK = { critical: 0, high: 1, medium: 2, low: 3 };
+const STAGE_RANK    = STAGES.reduce((acc, s, i) => ({ ...acc, [s]: i }), {});
+
+const SORTABLE_COLUMNS = {
+  severity:    { type: 'rank', rank: PRIORITY_RANK, defaultDir: 'asc' },  // asc = critical first
+  priority:    { type: 'rank', rank: PRIORITY_RANK, defaultDir: 'asc' },  // asc = critical first
+  stage:       { type: 'rank', rank: STAGE_RANK,    defaultDir: 'asc' },  // asc = open -> done
+  created_at:  { type: 'date', defaultDir: 'desc' },                     // desc = newest first
+  closed_at:   { type: 'date', defaultDir: 'desc' },
+  last_update: { type: 'date', defaultDir: 'desc' },
+};
+
+function compareBugsBy(a, b, key) {
+  const col = SORTABLE_COLUMNS[key];
+  if (col.type === 'rank') return (col.rank[a[key]] ?? 99) - (col.rank[b[key]] ?? 99);
+  return new Date(a[key]).getTime() - new Date(b[key]).getTime();
+}
+
+// ─── Bugs Dashboard: opened-vs-closed trend ───────────────────────────────
+// Computed client-side (the full `bugs` array is already loaded, unpaginated)
+// so switching Mingguan/Bulanan/Tahunan is instant with no extra API call,
+// and it always reflects the current data the moment the page is loaded.
+const TREND_WINDOWS = {
+  week:  { count: 8, startOf: d => startOfWeek(d, { weekStartsOn: 1 }), add: addWeeks,  label: s => `${format(s, 'dd MMM')} - ${format(endOfWeek(s, { weekStartsOn: 1 }), 'dd MMM')}` },
+  month: { count: 6, startOf: startOfMonth,                            add: addMonths, label: s => format(s, 'MMM yyyy') },
+  year:  { count: 3, startOf: startOfYear,                             add: addYears,  label: s => format(s, 'yyyy') },
+};
+
+function buildTrendData(bugs, period) {
+  const { count, startOf, add, label } = TREND_WINDOWS[period];
+  const currentStart = startOf(new Date());
+
+  const buckets = [];
+  for (let i = count - 1; i >= 0; i--) {
+    const bucketStart = add(currentStart, -i);
+    buckets.push({ bucketStart, bucketEnd: add(bucketStart, 1), opened_count: 0, closed_count: 0 });
+  }
+
+  const findBucket = (dateStr) => {
+    if (!dateStr) return null;
+    const d = parseISO(dateStr);
+    return buckets.find(bk => d >= bk.bucketStart && d < bk.bucketEnd);
+  };
+
+  bugs.forEach(b => {
+    const openedBucket = findBucket(b.created_at);
+    if (openedBucket) openedBucket.opened_count += 1;
+    const closedBucket = findBucket(b.closed_at);
+    if (closedBucket) closedBucket.closed_count += 1;
+  });
+
+  return buckets.map(bk => ({ ...bk, label: label(bk.bucketStart) }));
+}
 
 // ─── Activity / Comments Section ──────────────────────────────────────────────
 
@@ -617,6 +677,9 @@ export default function BugsIncident() {
   // Client-side only (Bugs tab list is already loaded in full per product, so these
   // don't need a round-trip to the backend like `filters.product_id` does).
   const [bugFilters,   setBugFilters]  = useState({ search: '', stage: [], severity: [], priority: [], assigned_to: [] });
+  const [sortKey,      setSortKey]     = useState(null);
+  const [sortDir,      setSortDir]     = useState('asc');
+  const [trendPeriod,  setTrendPeriod] = useState('month');
   const [modal,        setModal]       = useState({ open: false, type: '', data: null });
   const [loading,      setLoading]     = useState(true);
   const [perPageBugs,     setPerPageBugs]     = useState(10);
@@ -647,7 +710,34 @@ export default function BugsIncident() {
   }, [filters]);
 
   useEffect(() => { if (canAccess) load(); }, [load, canAccess]);
-  useEffect(() => { setPageBugs(1); }, [bugFilters]);
+  useEffect(() => { setPageBugs(1); }, [bugFilters, sortKey, sortDir]);
+
+  // Cycle: click a new column -> its default direction: click again -> the
+  // opposite direction; click a third time -> clear back to the original order.
+  const handleSort = (key) => {
+    if (sortKey !== key) {
+      setSortKey(key);
+      setSortDir(SORTABLE_COLUMNS[key].defaultDir);
+    } else if (sortDir === SORTABLE_COLUMNS[key].defaultDir) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(null);
+    }
+  };
+
+  const sortIcon = (key) => {
+    if (sortKey !== key) return <ArrowUpDown className="w-3 h-3 text-slate-300" />;
+    return sortDir === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600" /> : <ArrowDown className="w-3 h-3 text-indigo-600" />;
+  };
+
+  const renderSortableTh = (key, label, align = 'center') => (
+    <th className={`px-3 py-3 ${align === 'center' ? 'text-center' : 'text-left'} cursor-pointer select-none hover:bg-slate-100 transition-colors`}
+      onClick={() => handleSort(key)}>
+      <span className={`inline-flex items-center gap-1 ${align === 'center' ? 'justify-center' : ''}`}>
+        {label}{sortIcon(key)}
+      </span>
+    </th>
+  );
 
   if (!canAccess) {
     return (
@@ -670,7 +760,7 @@ export default function BugsIncident() {
 
   const exportBugsCSV = () => {
     const headers = ['Kode', 'Judul', 'Deskripsi', 'Langkah Reproduksi', 'Severity', 'Prioritas', 'Stage', 'Backlog Item', 'Produk', 'Assigned To', 'Reported By', 'Tanggal Incident', 'Tanggal Closed', 'Update Terakhir', 'Update Terakhir Oleh'];
-    const rows = filteredBugs.map(b => [
+    const rows = sortedBugs.map(b => [
       b.code, b.title, b.description, b.steps_to_reproduce, b.severity, b.priority, b.stage,
       b.item_code ? `[${b.item_code}] ${b.item_title || ''}` : '',
       b.product_code || b.product_name || '',
@@ -706,8 +796,18 @@ export default function BugsIncident() {
     return true;
   });
 
-  const totalPagesBugs     = Math.max(1, Math.ceil(filteredBugs.length / perPageBugs));
-  const pagedBugs          = filteredBugs.slice((pageBugs - 1) * perPageBugs, pageBugs * perPageBugs);
+  const sortedBugs = sortKey
+    ? [...filteredBugs].sort((a, b) => {
+        const aMissing = a[sortKey] === null || a[sortKey] === undefined || a[sortKey] === '';
+        const bMissing = b[sortKey] === null || b[sortKey] === undefined || b[sortKey] === '';
+        if (aMissing || bMissing) return aMissing === bMissing ? 0 : (aMissing ? 1 : -1); // rows with no value always sort last
+        const result = compareBugsBy(a, b, sortKey);
+        return sortDir === 'asc' ? result : -result;
+      })
+    : filteredBugs;
+
+  const totalPagesBugs     = Math.max(1, Math.ceil(sortedBugs.length / perPageBugs));
+  const pagedBugs          = sortedBugs.slice((pageBugs - 1) * perPageBugs, pageBugs * perPageBugs);
   const totalPagesProgress = Math.max(1, Math.ceil(progress.length / perPageProgress));
   const pagedProgress      = progress.slice((pageProgress - 1) * perPageProgress, pageProgress * perPageProgress);
 
@@ -717,6 +817,8 @@ export default function BugsIncident() {
   const stagePieData = (dashboard?.byStage || [])
     .map(s => ({ name: s.stage, value: +s.count || 0, color: STAGE_COLORS[s.stage] || '#94a3b8' }))
     .filter(d => d.value > 0);
+
+  const trendData = buildTrendData(bugs, trendPeriod);
 
   return (
     <div className="space-y-5">
@@ -790,6 +892,33 @@ export default function BugsIncident() {
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
+              </div>
+
+              {/* Open vs Closed Trend */}
+              <div className="card p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-slate-700">Tren Bug Dibuka vs Ditutup</h3>
+                  <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+                    {[['week', 'Mingguan'], ['month', 'Bulanan'], ['year', 'Tahunan']].map(([v, l]) => (
+                      <button key={v} type="button" onClick={() => setTrendPeriod(v)}
+                        className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors
+                          ${trendPeriod === v ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={trendData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <Tooltip />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Line type="monotone" dataKey="opened_count" name="Dibuka"  stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="closed_count" name="Ditutup" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
 
               {/* Recent Activity */}
@@ -873,14 +1002,14 @@ export default function BugsIncident() {
                         <th className="text-left px-4 py-3">Kode</th>
                         <th className="text-left px-4 py-3">Judul</th>
                         <th className="text-left px-3 py-3">Item</th>
-                        <th className="text-center px-3 py-3">Severity</th>
-                        <th className="text-center px-3 py-3">Prioritas</th>
-                        <th className="text-center px-3 py-3">Stage</th>
+                        {renderSortableTh('severity', 'Severity')}
+                        {renderSortableTh('priority', 'Prioritas')}
+                        {renderSortableTh('stage', 'Stage')}
                         <th className="text-left px-3 py-3">Assigned To</th>
                         <th className="text-left px-3 py-3">Produk</th>
-                        <th className="text-left px-3 py-3">Tanggal Incident</th>
-                        <th className="text-left px-3 py-3">Tanggal Closed</th>
-                        <th className="text-left px-3 py-3">Update Terakhir</th>
+                        {renderSortableTh('created_at', 'Tanggal Incident', 'left')}
+                        {renderSortableTh('closed_at', 'Tanggal Closed', 'left')}
+                        {renderSortableTh('last_update', 'Update Terakhir', 'left')}
                         <th className="text-center px-3 py-3">Aksi</th>
                       </tr>
                     </thead>

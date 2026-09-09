@@ -3,8 +3,8 @@
 
 | | |
 |---|---|
-| **Versi** | 2.0 |
-| **Tanggal** | 04 September 2026 |
+| **Versi** | 2.1 |
+| **Tanggal** | 09 September 2026 |
 | **Status** | Live — Production |
 | **Pemilik** | Tim Internal |
 
@@ -222,10 +222,11 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 **Fitur:**
 - **Bugs** — CRUD data bug: judul, deskripsi, langkah reproduksi, severity & prioritas (`critical/high/medium/low`), assignee. **Tidak wajib** terhubung ke Backlog Item (beda dari Test Case QA yang wajib) — bug bisa berdiri sendiri untuk insiden yang belum tentu jadi backlog item
 - **Progress** — riwayat progres perbaikan bug, dicatat sebagai log/histori (bukan satu angka yang ditimpa) setiap kali statusnya diupdate, lengkap dengan catatan dan siapa yang mengupdate
-- **Bugs Dashboard** — statistik total bug, jumlah open, jumlah ready to test, resolution rate, breakdown per produk dan per stage
+- **Bugs Dashboard** — statistik total bug, jumlah open, jumlah ready to test, resolution rate, breakdown per produk dan per stage, serta **grafik tren bug Dibuka vs Ditutup** (line chart) dengan toggle **Mingguan (8 minggu terakhir) / Bulanan (6 bulan terakhir) / Tahunan (3 tahun terakhir)**. Dihitung dari `created_at` (dibuka) dan `closed_at` (ditutup); bucket tanpa data tetap tampil sebagai 0 agar garis tidak putus
 - **Lampiran Gambar** — unggah screenshot/bukti visual pada bug (multi-gambar, max 10MB per file, JPEG/PNG/GIF/WebP), muncul setelah bug pertama kali disimpan (pola sama seperti lampiran Backlog Item, 3.2). Klik thumbnail untuk membuka preview gambar penuh layar
 - **Tracking tanggal** — tiap bug menampilkan **Tanggal Incident** (tanggal bug dibuat/dilaporkan), **Tanggal Closed** (otomatis terisi begitu stage masuk `done`, otomatis kosong lagi kalau stage dipindah keluar dari `done`), dan **Update Terakhir** (tanggal + nama user dari entry Progress paling baru, kosong kalau belum pernah ada update progress)
-- **Filter & pencarian** — cari berdasarkan judul/kode; filter multi-select stage, severity, prioritas, dan assignee; filter produk di level halaman (memuat ulang data dari server). Export hasil filter ke CSV
+- **Filter & pencarian** — cari berdasarkan judul/kode; filter multi-select stage, severity, prioritas, dan assignee; filter produk di level halaman (memuat ulang data dari server). Export hasil filter ke CSV (mengikuti urutan sort yang aktif)
+- **Sort kolom** — klik header kolom Severity, Prioritas, Stage, Tanggal Incident, Tanggal Closed, atau Update Terakhir untuk mengurutkan. Klik pertama: arah default kolom tsb (Severity/Prioritas dari Critical, Stage sesuai alur kerja Open→Done, tanggal dari yang terbaru); klik kedua: kebalikannya; klik ketiga: kembali ke urutan asli. Baris tanpa nilai (mis. bug yang belum closed) selalu ditampilkan paling bawah
 
 **Stage bug** (dicatat sebagai histori di Progress, nilai stage terkini disimpan juga di data Bug untuk filter/tampilan cepat):
 
@@ -236,7 +237,7 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 | `ready_to_test` | Developer sudah selesai memperbaiki, siap diretest QA |
 | `done` | Bug selesai — baik setelah diverifikasi QA, maupun ditutup tanpa fix (duplicate/won't-fix/tidak bisa direproduksi) |
 
-**Catatan implementasi:** Kode bug auto-generate berbasis kode produk (`{KODE_PRODUK}-001`, `{KODE_PRODUK}-002`, ...) — bukan `BUG-001` seperti sebelumnya, pola sama seperti kode Backlog Item. Stage hanya bisa diubah lewat aksi "Update Progress" (menambah entry baru di histori) — form Edit Bug sendiri tidak punya field stage. `closed_at` di-set/di-clear otomatis oleh backend setiap kali stage berubah (bukan field yang bisa diisi manual).
+**Catatan implementasi:** Kode bug auto-generate berbasis kode produk (`{KODE_PRODUK}-001`, `{KODE_PRODUK}-002`, ...) — bukan `BUG-001` seperti sebelumnya, pola sama seperti kode Backlog Item. Stage hanya bisa diubah lewat aksi "Update Progress" (menambah entry baru di histori) — form Edit Bug sendiri tidak punya field stage. `closed_at` di-set/di-clear otomatis oleh backend setiap kali stage berubah (bukan field yang bisa diisi manual). Sort kolom dan grafik tren Dibuka vs Ditutup dihitung **di frontend** (client-side) dari data bug yang sudah dimuat penuh per filter produk — bukan lewat parameter/endpoint backend baru, karena list bug memang tidak dipaginasi di server. Konsekuensinya: keduanya selalu mencerminkan data terkini pada saat halaman dimuat/direfresh, tapi tidak live-update sendiri selama tab dibiarkan terbuka (sama seperti data lain di halaman ini — tidak ada polling/websocket di aplikasi ini).
 
 ---
 
@@ -621,3 +622,4 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | 02 Sep 2026 | 1.8 | Bugs Incident (3.9): kode bug sekarang mengikuti kode produk (`{KODE_PRODUK}-001`, bukan `BUG-001`), pola sama seperti kode Backlog Item. Tambah **filter bar** (pencarian judul/kode, filter multi-select stage/severity/prioritas/assignee) dan tombol **Export CSV** di tab Bugs. `migration_v15.sql`: re-code bug existing ke format baru |
 | 04 Sep 2026 | 1.9 | Bugs Incident (3.9): sederhanakan stage jadi 4 tahap — `fixed` direname jadi **Ready to Test** (menandai QA fix siap diretest), `verified` & `closed` digabung jadi satu stage **Done**. Tambah tracking **Tanggal Incident**, **Tanggal Closed** (auto-terisi/kosong mengikuti stage `done`), dan **Update Terakhir** (tanggal + nama user dari Progress terakhir) di tabel Bugs. `migration_v16.sql`: kolom `bugs.closed_at`, remap data stage lama |
 | 04 Sep 2026 | 2.0 | Backlog (3.2): **Lampiran** sekarang menerima PDF, Word, Excel, PowerPoint, ZIP, CSV, dan TXT — sebelumnya gambar saja. Preview inline untuk gambar/PDF/TXT/CSV (CSV dirender sebagai tabel), tipe lain dibuka/diunduh di tab baru |
+| 09 Sep 2026 | 2.1 | Bugs Incident (3.9): tambah **sort kolom** di tabel Bugs (klik header Severity/Prioritas/Stage/Tanggal Incident/Tanggal Closed/Update Terakhir, siklus klik: default → kebalikan → asli). Tambah **grafik tren Dibuka vs Ditutup** di Bugs Dashboard dengan toggle Mingguan (8 minggu) / Bulanan (6 bulan) / Tahunan (3 tahun). Keduanya dihitung client-side dari data yang sudah dimuat — tidak ada perubahan skema database atau endpoint baru |
