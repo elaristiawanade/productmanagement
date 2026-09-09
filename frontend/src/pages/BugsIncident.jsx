@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
-import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
@@ -22,10 +22,14 @@ const STAGE_ICONS = {
   open:          { icon: AlertCircle,   cls: 'text-red-500'    },
   in_progress:   { icon: Wrench,        cls: 'text-blue-500'   },
   ready_to_test: { icon: FlaskConical,  cls: 'text-amber-500'  },
+  reopen:        { icon: RotateCcw,     cls: 'text-purple-500' },
   done:          { icon: CheckCircle2,  cls: 'text-emerald-500' },
 };
 
-const STAGES     = ['open', 'in_progress', 'ready_to_test', 'done'];
+const STAGES     = ['open', 'in_progress', 'ready_to_test', 'reopen', 'done'];
+const STAGE_LABELS = {
+  open: 'Open', in_progress: 'In Progress', ready_to_test: 'Ready to Test', reopen: 'Re-Open', done: 'Done',
+};
 const SEVERITIES = ['critical', 'high', 'medium', 'low'];
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
 
@@ -582,12 +586,12 @@ function BugProgressForm({ bug, onSave, onClose }) {
       </div>
       <div>
         <label className="label">Stage *</label>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           {STAGES.map(s => (
             <button type="button" key={s} onClick={() => setForm(f => ({ ...f, stage: s }))}
               className={`py-2 rounded-lg text-xs font-medium border transition-all
                 ${form.stage === s ? 'ring-2 ring-indigo-400 border-indigo-400' : 'border-slate-200 hover:bg-slate-50'}`}>
-              {s.replace(/_/g, ' ')}
+              {STAGE_LABELS[s] || s}
             </button>
           ))}
         </div>
@@ -677,6 +681,8 @@ export default function BugsIncident() {
   // Client-side only (Bugs tab list is already loaded in full per product, so these
   // don't need a round-trip to the backend like `filters.product_id` does).
   const [bugFilters,   setBugFilters]  = useState({ search: '', stage: [], severity: [], priority: [], assigned_to: [] });
+  // Default true: Closed/Done bugs are hidden from the list until the user opts back in.
+  const [hideClosed,   setHideClosed]  = useState(true);
   const [sortKey,      setSortKey]     = useState(null);
   const [sortDir,      setSortDir]     = useState('asc');
   const [trendPeriod,  setTrendPeriod] = useState('month');
@@ -710,7 +716,7 @@ export default function BugsIncident() {
   }, [filters]);
 
   useEffect(() => { if (canAccess) load(); }, [load, canAccess]);
-  useEffect(() => { setPageBugs(1); }, [bugFilters, sortKey, sortDir]);
+  useEffect(() => { setPageBugs(1); }, [bugFilters, hideClosed, sortKey, sortDir]);
 
   // Cycle: click a new column -> its default direction: click again -> the
   // opposite direction; click a third time -> clear back to the original order.
@@ -781,10 +787,11 @@ export default function BugsIncident() {
     URL.revokeObjectURL(url);
   };
 
-  const STAGE_COLORS = { open: '#ef4444', in_progress: '#3b82f6', ready_to_test: '#f59e0b', done: '#10b981' };
+  const STAGE_COLORS = { open: '#ef4444', in_progress: '#3b82f6', ready_to_test: '#f59e0b', reopen: '#a855f7', done: '#10b981' };
   const summary = dashboard?.summary || {};
 
   const filteredBugs = bugs.filter(b => {
+    if (hideClosed && b.stage === 'done') return false;
     if (bugFilters.search) {
       const q = bugFilters.search.toLowerCase();
       if (!(b.code?.toLowerCase().includes(q) || b.title?.toLowerCase().includes(q))) return false;
@@ -921,26 +928,53 @@ export default function BugsIncident() {
                 </ResponsiveContainer>
               </div>
 
-              {/* Recent Activity */}
-              <div className="card overflow-hidden">
-                <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
-                  <BugIcon className="w-4 h-4 text-red-500" />
-                  <h3 className="font-semibold text-slate-700">Recent Activity</h3>
-                  <span className="ml-auto text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{dashboard?.recentActivity?.length || 0}</span>
-                </div>
-                <div className="divide-y divide-slate-50">
-                  {dashboard?.recentActivity?.length === 0 && <p className="text-center py-8 text-slate-400 text-sm">Belum ada aktivitas terkini</p>}
-                  {dashboard?.recentActivity?.map(a => (
-                    <div key={a.id} className="px-5 py-3 flex items-start gap-3">
-                      <BugIcon className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-700">{a.bug_title}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">[{a.bug_code}] · {a.product} · oleh {a.updated_by_name || '—'} → <StatusBadge status={a.stage} size="xs" /></p>
-                        {a.note && <p className="text-xs text-slate-600 mt-1 italic">{a.note}</p>}
+              {/* Recent Activity + Recent Comments */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <div className="card overflow-hidden">
+                  <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+                    <BugIcon className="w-4 h-4 text-red-500" />
+                    <h3 className="font-semibold text-slate-700">Recent Activity</h3>
+                    <span className="ml-auto text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{dashboard?.recentActivity?.length || 0}</span>
+                  </div>
+                  <div className="divide-y divide-slate-50 max-h-[400px] overflow-y-auto">
+                    {dashboard?.recentActivity?.length === 0 && <p className="text-center py-8 text-slate-400 text-sm">Belum ada aktivitas terkini</p>}
+                    {dashboard?.recentActivity?.map(a => (
+                      <div key={a.id} className="px-5 py-3 flex items-start gap-3">
+                        <BugIcon className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-700">{a.bug_title}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">[{a.bug_code}] · {a.product} · oleh {a.updated_by_name || '—'} → <StatusBadge status={a.stage} size="xs" /></p>
+                          {a.note && <p className="text-xs text-slate-600 mt-1 italic">{a.note}</p>}
+                        </div>
+                        <span className="text-xs text-slate-400 shrink-0">{a.created_at ? format(parseISO(a.created_at), 'dd MMM HH:mm') : '—'}</span>
                       </div>
-                      <span className="text-xs text-slate-400 shrink-0">{a.created_at ? format(parseISO(a.created_at), 'dd MMM HH:mm') : '—'}</span>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                </div>
+
+                <div className="card overflow-hidden">
+                  <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-indigo-500" />
+                    <h3 className="font-semibold text-slate-700">Recent Comments</h3>
+                    <span className="ml-auto text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">{dashboard?.recentComments?.length || 0}</span>
+                  </div>
+                  <div className="divide-y divide-slate-50 max-h-[400px] overflow-y-auto">
+                    {dashboard?.recentComments?.length === 0 && <p className="text-center py-8 text-slate-400 text-sm">Belum ada komentar terkini</p>}
+                    {dashboard?.recentComments?.map(c => (
+                      <div key={c.id} className="px-5 py-3 flex items-start gap-3">
+                        <div className="w-5 h-5 mt-0.5 rounded-full text-white text-xs font-bold flex items-center justify-center shrink-0"
+                          style={{ backgroundColor: c.user_avatar_color || '#6366f1' }}>
+                          {(c.user_name || '?').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-700">{c.user_name || 'Unknown'}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">[{c.bug_code}] {c.bug_title} · {c.product}</p>
+                          <p className="text-xs text-slate-600 mt-1 bg-slate-50 rounded-lg px-2.5 py-1.5">{renderComment(c.content)}</p>
+                        </div>
+                        <span className="text-xs text-slate-400 shrink-0">{c.created_at ? format(parseISO(c.created_at), 'dd MMM HH:mm') : '—'}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -960,7 +994,7 @@ export default function BugsIncident() {
                   />
                 </div>
                 {[
-                  { key: 'stage',    label: 'Stage',     opts: STAGES.map(s => ({ v: s, l: s.replace(/_/g, ' ') })) },
+                  { key: 'stage',    label: 'Stage',     opts: STAGES.map(s => ({ v: s, l: STAGE_LABELS[s] || s })) },
                   { key: 'severity', label: 'Severity',  opts: SEVERITIES.map(s => ({ v: s, l: s })) },
                   { key: 'priority', label: 'Prioritas', opts: PRIORITIES.map(p => ({ v: p, l: p })) },
                 ].map(({ key, label, opts }) => (
@@ -972,6 +1006,12 @@ export default function BugsIncident() {
                   options={users.map(u => ({ v: u.id, l: u.name }))}
                   selected={bugFilters.assigned_to}
                   onChange={vals => setBugFilters(f => ({ ...f, assigned_to: vals }))} />
+                <button type="button" onClick={() => setHideClosed(h => !h)}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1.5 shrink-0
+                    ${hideClosed ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                  {hideClosed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  {hideClosed ? 'Closed/Done disembunyikan' : 'Tampilkan Closed/Done'}
+                </button>
                 <div className="ml-auto flex items-center gap-2">
                   <button className="btn-secondary" onClick={exportBugsCSV} disabled={filteredBugs.length === 0}>
                     <Download className="w-4 h-4" /> Export CSV
