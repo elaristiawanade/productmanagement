@@ -3,8 +3,8 @@
 
 | | |
 |---|---|
-| **Versi** | 2.2 |
-| **Tanggal** | 09 September 2026 |
+| **Versi** | 2.3 |
+| **Tanggal** | 10 September 2026 |
 | **Status** | Live — Production |
 | **Pemilik** | Tim Internal |
 
@@ -291,13 +291,41 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 
 ### 3.13 Notifikasi
 
-**Tujuan:** Memberitahu user tentang perubahan yang relevan.
+**Tujuan:** Memberitahu user tentang perubahan yang relevan, lewat tiga jalur: bell in-app, email personal, dan (opsional) channel Microsoft Teams.
+
+**Notifikasi In-App (Bell):**
+- Bell notifikasi di header, dengan badge jumlah belum dibaca
+- Dipicu saat: item di-assign ke user (Backlog, Bugs Incident, Leader Task), status/stage item berubah (Bugs Incident), atau user di-mention di komentar (Backlog, Bugs Incident)
+- Tandai satu/semua sebagai dibaca
+
+**Notifikasi Email:**
+- Email personal ke `users.email` milik user yang relevan (assignee, atau yang di-mention) — **bukan** broadcast ke satu alamat tetap
+- Trigger: assignment & update (Backlog), status berubah (Backlog — jalur email saja, tidak ada notifikasi bell untuk event ini), assignment & stage berubah (Bugs Incident), assignment (Leader Task), mention di komentar (Backlog & Bugs Incident, format `@[Nama]`)
+- User yang melakukan aksi terhadap item miliknya sendiri (mis. assignee mengubah status task yang di-assign ke dirinya sendiri) tidak menerima email untuk aksi tsb
+- Pengiriman asynchronous & best-effort — kegagalan kirim tidak pernah menggagalkan request API yang memicunya, dicatat di backend log
+- **Global, dikontrol Super Admin** — bukan preferensi per-user. Selama fitur dinyalakan Super Admin (lihat 3.14), semua user otomatis menerima email untuk event yang relevan buat mereka; user biasa tidak punya kontrol/preferensi individual atas fitur ini
+- Isi email: heading ringkas + tabel detail (modul, judul, perubahan, siapa yang melakukan) + tombol link balik ke item terkait di aplikasi
+
+**Microsoft Teams Webhook (opsional):**
+- Satu webhook channel global (bukan per-user), dikonfigurasi lewat env var `TEAMS_WEBHOOK_URL`
+- Trigger: item Backlog dibuat, diupdate, atau status berubah — modul lain (Bugs Incident, Leader Task) belum terhubung ke Teams
+
+---
+
+### 3.14 Notification Settings (Admin only)
+
+**Tujuan:** Memberi Super Admin kontrol penuh atas fitur Notifikasi Email (3.13) langsung dari aplikasi — tanpa perlu edit file konfigurasi server atau restart aplikasi.
+
+**Akses:** Halaman ini (`/settings/notifications`) hanya muncul di sidebar dan hanya bisa diakses untuk role **Super Admin** — dijaga di frontend (item menu disembunyikan untuk role lain) maupun backend (setiap endpoint API menolak dengan `403` untuk role selain Super Admin).
 
 **Fitur:**
-- Bell notifikasi di header
-- Notifikasi saat item di-assign ke user
-- Notifikasi saat status item berubah
-- Integrasi Microsoft Teams webhook (opsional, untuk notifikasi ke channel)
+- Toggle nyala/mati fitur notifikasi email secara keseluruhan
+- Form konfigurasi SMTP: Host, Port, Username, Password, From Address, SMTP Auth, STARTTLS
+- Password tidak pernah ditampilkan balik setelah disimpan (field kosong saat submit ulang = tidak diubah)
+- **Kirim Email Tes** — kirim satu email percobaan ke alamat manapun, hasil sukses/gagal (termasuk pesan error dari server SMTP, mis. autentikasi ditolak) ditampilkan langsung di halaman
+- Perubahan config **langsung aktif tanpa restart backend** — disimpan ke tabel `app_settings`, dibaca ulang setiap kali ada email yang mau dikirim
+
+**Catatan implementasi:** Sebelum halaman ini pernah dibuka/disimpan, sistem fallback ke nilai env var lama (`MAIL_HOST`, `MAIL_PORT`, dst. — lihat Bagian 8) — jadi deployment yang belum pernah menyentuh halaman ini tetap berjalan seperti semula, tidak ada breaking change.
 
 ---
 
@@ -383,6 +411,7 @@ QA Engineer / Super Admin / Developer buat Bug (produk wajib, backlog item opsio
 | `bug_progress_updates` | Histori perubahan stage bug (append-only log, tidak ada `updated_at`) |
 | `bug_activities` | Komentar & log perubahan per bug (`type`: `comment`/`change_log`), mirror `item_activities` milik Backlog |
 | `notifications` | Notifikasi per user |
+| `app_settings` | Key-value store untuk setting yang bisa diubah lewat UI tanpa restart — saat ini dipakai untuk config SMTP (`mail.*`), lihat 3.14 |
 
 ### Port
 
@@ -428,7 +457,7 @@ DELETE /api/attachments/:id            Hapus lampiran
 GET    /api/attachments/file/:filename Serve file lampiran (akses langsung ke file)
 ```
 
-**Format mention:** `@[Nama Lengkap]` — disimpan sebagai teks, dirender sebagai badge indigo di UI.
+**Format mention:** `@[Nama Lengkap]` — disimpan sebagai teks, dirender sebagai badge indigo di UI. Setiap nama yang cocok persis dengan `users.name` (selain komentator sendiri) menerima notifikasi bell tipe `mention` + email (lihat 3.13).
 
 **Field `estimated_hours`:** Wajib untuk tipe `independent`, diabaikan untuk tipe lain. Nilai disimpan sebagai `NUMERIC(6,1)`.
 
@@ -496,7 +525,7 @@ GET/POST          /api/bugs/progress       List & buat entry progress (params: b
 GET               /api/bugs/dashboard      Statistik bug (total, open, ready to test, resolution rate, breakdown,
                                             recentActivity, recentComments — masing-masing 10 terbaru; params: product_id)
 GET/POST          /api/bugs/:id/attachments List & upload lampiran gambar bug (max 10MB, image only, multipart/form-data)
-GET/POST          /api/bugs/:id/activities List & tambah komentar bug (mirror endpoint activities Backlog Item)
+GET/POST          /api/bugs/:id/activities List & tambah komentar bug (mirror endpoint activities Backlog Item, termasuk dukungan @[Nama] mention)
 DELETE            /api/bugs/activities/:id Hapus komentar bug (pemilik sendiri atau Super Admin; log perubahan tidak bisa dihapus)
 ```
 **Akses:** Semua endpoint di atas membalas `403` untuk role selain Super Admin/QA Engineer, kecuali role tsb diberi permission `access_bugs` (saat ini juga diberikan ke role Developer). Lampiran gambar bug memakai endpoint `DELETE /api/attachments/:id` dan `GET /api/attachments/file/:filename` yang sama dengan lampiran Backlog Item. Filter "Sembunyikan Closed/Done" dan sort kolom tidak punya parameter backend sendiri — keduanya murni client-side di atas response `GET /api/bugs`.
@@ -532,6 +561,15 @@ POST /api/jira    Import dari CSV export Jira (multipart/form-data)
 GET/POST          /api/roles        List & buat role
 PUT/DELETE        /api/roles/:id    Update & hapus role
 ```
+
+### Settings (Super Admin only)
+```
+GET  /api/settings/mail        Ambil config SMTP saat ini (password tidak pernah dikembalikan — hanya password_set: true/false)
+PUT  /api/settings/mail        Simpan config SMTP (host, port, username, password, from, smtp_auth, smtp_starttls;
+                                password kosong/tidak dikirim = tidak diubah)
+POST /api/settings/mail/test   Kirim satu email tes ke alamat di body {to}, balas {success, error}
+```
+**Akses:** Semua endpoint di atas membalas `403` untuk role selain Super Admin.
 
 ---
 
@@ -575,7 +613,21 @@ SPRING_DATASOURCE_PASSWORD=<password>
 APP_JWT_SECRET=<random-string-panjang>
 APP_CORS_ORIGIN=http://<server-ip>:3000
 TEAMS_WEBHOOK_URL=<optional>
+
+# Email notification — hanya dipakai sebagai fallback awal (sebelum halaman
+# Notification Settings, 3.14, pernah dibuka/disimpan sekali oleh Super Admin;
+# setelah itu config production sebenarnya disimpan di tabel app_settings)
+MAIL_NOTIFICATIONS_ENABLED=false
+MAIL_HOST=smtp.office365.com
+MAIL_PORT=587
+MAIL_USERNAME=<optional>
+MAIL_PASSWORD=<optional>
+MAIL_FROM=<optional>
+MAIL_SMTP_AUTH=true
+MAIL_SMTP_STARTTLS=true
 ```
+
+**Mailpit (khusus local development):** `docker-compose.yml` menyertakan service `mailpit` (SMTP catcher, UI di `localhost:8025`) untuk menguji pengiriman email tanpa perlu akun SMTP asli. Untuk deployment production, arahkan config di halaman Notification Settings (3.14) ke SMTP provider sungguhan — service `mailpit` boleh dihapus dari stack production kalau tidak dipakai.
 
 ### Database Migrations
 
@@ -595,6 +647,7 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | `migration_v14.sql` | Tabel `bug_activities` (komentar + log perubahan bug), mirror `leader_task_activities` |
 | `migration_v15.sql` | Re-code bug existing dari `BUG-001` ke format `{KODE_PRODUK}-001` |
 | `migration_v16.sql` | Sederhanakan stage Bugs Incident jadi 4 tahap (`open, in_progress, ready_to_test, done`), tambah kolom `bugs.closed_at` |
+| `migration_v17.sql` | Tabel `app_settings` (key-value store) — dipakai pertama kali untuk config SMTP Notification Settings (3.14) |
 
 ---
 
@@ -634,3 +687,6 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | 04 Sep 2026 | 2.0 | Backlog (3.2): **Lampiran** sekarang menerima PDF, Word, Excel, PowerPoint, ZIP, CSV, dan TXT — sebelumnya gambar saja. Preview inline untuk gambar/PDF/TXT/CSV (CSV dirender sebagai tabel), tipe lain dibuka/diunduh di tab baru |
 | 09 Sep 2026 | 2.1 | Bugs Incident (3.9): tambah **sort kolom** di tabel Bugs (klik header Severity/Prioritas/Stage/Tanggal Incident/Tanggal Closed/Update Terakhir, siklus klik: default → kebalikan → asli). Tambah **grafik tren Dibuka vs Ditutup** di Bugs Dashboard dengan toggle Mingguan (8 minggu) / Bulanan (6 bulan) / Tahunan (3 tahun). Keduanya dihitung client-side dari data yang sudah dimuat — tidak ada perubahan skema database atau endpoint baru |
 | 09 Sep 2026 | 2.2 | Bugs Incident (3.9): tambah stage **`reopen`** ("Re-Open", untuk bug yang gagal retest QA dan perlu diperbaiki ulang) — dihitung sebagai open di ringkasan dashboard, tidak ada validasi transisi (semua stage bisa dipilih kapan pun, sama seperti stage lain). Tambah toggle **"Sembunyikan Closed/Done"** (default aktif) di filter bar tab Bugs. Tambah panel **Recent Comments** di Bugs Dashboard, bersebelahan dengan Recent Activity — endpoint `GET /api/bugs/dashboard` sekarang juga mengembalikan `recentComments` (10 komentar terbaru lintas bug). Tidak ada perubahan skema database |
+| 10 Sep 2026 | 2.3 | Tambah **Notifikasi Email** (3.13): email personal ke assignee/yang di-mention saat assignment & update (Backlog), status berubah (Backlog), assignment & stage berubah (Bugs Incident, modul yang sebelumnya sama sekali tidak punya notifikasi), assignment (Leader Task), dan mention di komentar (Backlog & Bugs Incident — pipeline mention backend dibangun dari nol, sebelumnya UI-nya ada tapi tidak pernah memicu apa pun). Global, dikontrol Super Admin — bukan preferensi per-user |
+| 10 Sep 2026 | 2.3 | Tambah halaman **Notification Settings** (3.14, Super Admin only): toggle nyala/mati + form config SMTP + tombol Kirim Email Tes, tersimpan di database dan aktif langsung tanpa restart backend. `migration_v17.sql`: tabel `app_settings` |
+| 10 Sep 2026 | 2.3 | Fix: generate kode otomatis (Backlog, Bugs Incident, Leader Task, Import Jira) memakai `ORDER BY code DESC` yang sort sebagai teks bukan angka — menyebabkan kode bentrok begitu ada campuran format lama (tidak zero-padded, mis. seed data `DEMO-6`) dan format baru (`DEMO-007`). Diperbaiki di 5 controller (`ORDER BY` sekarang berdasarkan angka trailing kode, bukan teks) |

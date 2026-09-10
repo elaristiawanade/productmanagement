@@ -13,6 +13,7 @@ Sistem tracking internal product development berbasis web dengan React + Node.js
 | **Users & Roles** | 5 role: Super Admin, Manager, PO, Developer, QA |
 | **QA Module** | Test case management, test execution, QA dashboard |
 | **Bugs Incident** | Bug tracking + histori progress perbaikan (open→in_progress→ready_to_test→reopen→done), komentar/@mention, tanggal incident/closed/update terakhir, filter sembunyikan closed/done. Default Super Admin & QA Engineer; role lain (misal Developer) bisa diberi akses lewat permission `access_bugs` |
+| **Notifikasi Email** | Email personal ke assignee/yang di-mention saat assignment, status/stage berubah, atau mention (Backlog, Bugs Incident, Leader Task). Global, dikonfigurasi lewat halaman **Notification Settings** (Super Admin only) — toggle, config SMTP, kirim email tes, aktif tanpa restart |
 
 ## Roles
 
@@ -131,6 +132,10 @@ CRUD /api/bugs/progress       ← Histori progress perbaikan bug
 GET  /api/bugs/dashboard      ← summary, byProduct, byStage, recentActivity, recentComments
 GET/POST   /api/bugs/:id/activities   ← Komentar bug (mirror activities Backlog)
 DELETE     /api/bugs/activities/:id
+
+GET  /api/settings/mail       ← Config SMTP notifikasi email (Super Admin only)
+PUT  /api/settings/mail       ← Simpan config SMTP
+POST /api/settings/mail/test  ← Kirim email tes
 ```
 
 ## Deployment (Internal Server)

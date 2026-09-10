@@ -120,6 +120,8 @@ Saat leader menekan "Add Task" di dalam form Leader Notes:
 - **Lihat saja:** siapa pun dengan `department` yang cocok (mis. Developer/QA melihat task departemen IT), tidak bisa create/edit
 - Task hanya terlihat dalam scope `department` milik user (kolom `users.department`, lihat 2.1) — tidak perlu tabel join terpisah seperti `user_products`, karena satu user hanya punya satu departemen
 
+**Notifikasi:** Saat task di-assign ke user (create maupun update assignee), assignee menerima notifikasi bell **dan** email (kalau fitur Notifikasi Email dinyalakan Super Admin — lihat PRD Product Tracker Internal, 3.13 & 3.14). Leader Task belum terhubung ke Microsoft Teams webhook.
+
 ---
 
 ### 3.3 My Task (C-Level)

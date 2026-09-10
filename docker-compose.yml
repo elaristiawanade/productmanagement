@@ -29,6 +29,7 @@ services:
       - ./backend/db/migration_v14.sql:/docker-entrypoint-initdb.d/16_migration_v14.sql
       - ./backend/db/migration_v15.sql:/docker-entrypoint-initdb.d/17_migration_v15.sql
       - ./backend/db/migration_v16.sql:/docker-entrypoint-initdb.d/18_migration_v16.sql
+      - ./backend/db/migration_v17.sql:/docker-entrypoint-initdb.d/19_migration_v17.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d product_tracker"]
       interval: 10s
@@ -53,9 +54,26 @@ services:
       APP_JWT_SECRET: ${JWT_SECRET:-change_this_to_a_long_random_secret}
       APP_JWT_EXPIRATION: 604800000
       UPLOAD_DIR: /app/uploads
+      TEAMS_WEBHOOK_URL: ${TEAMS_WEBHOOK_URL:-}
+      MAIL_NOTIFICATIONS_ENABLED: ${MAIL_NOTIFICATIONS_ENABLED:-false}
+      MAIL_HOST: ${MAIL_HOST:-smtp.office365.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-true}
+      MAIL_SMTP_STARTTLS: ${MAIL_SMTP_STARTTLS:-true}
     depends_on:
       db:
         condition: service_healthy
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: pt_mailpit
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+      - "1025:1025"
 
   frontend:
     build:

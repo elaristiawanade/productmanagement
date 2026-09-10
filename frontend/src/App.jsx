@@ -15,6 +15,7 @@ import EpicBoard  from './pages/EpicBoard';
 import MyTask     from './pages/MyTask';
 import Profile    from './pages/Profile';
 import CLevel     from './pages/CLevel';
+import NotificationSettings from './pages/NotificationSettings';
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -48,6 +49,7 @@ function AppRoutes() {
         <Route path="c-level"      element={<CLevel />} />
         <Route path="import/jira"  element={<JiraImport />} />
         <Route path="profile"      element={<Profile />} />
+        <Route path="settings/notifications" element={<NotificationSettings />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
