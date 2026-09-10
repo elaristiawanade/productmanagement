@@ -3,7 +3,7 @@
 
 | | |
 |---|---|
-| **Versi** | 2.3 |
+| **Versi** | 2.4 |
 | **Tanggal** | 10 September 2026 |
 | **Status** | Live — Production |
 | **Pemilik** | Tim Internal |
@@ -79,6 +79,7 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 **Fitur Backlog:**
 - CRUD item dengan 5 tipe di atas
 - Hierarki parent-child: Task/Bug ← Story ← Epic
+- **Dropdown pencarian untuk field Parent:** field **Parent User Story** (Task/Bug) dan **Parent Epic** (Story) berupa dropdown dengan kotak pencarian di dalamnya — ketik untuk filter berdasarkan kode/judul, bukan sekadar daftar panjang untuk di-scroll. Pola yang sama juga dipakai untuk field Backlog Item di form Bug (3.9) dan Test Case (3.8)
 - **Story Points auto-cascade:** SP pada Task otomatis dijumlahkan ke Story parent → lalu ke Epic grandparent. Berlaku untuk create, update, dan delete
 - **Epic SP read-only:** Form Epic menampilkan SP sebagai kalkulasi otomatis (tidak bisa diinput manual)
 - **Story Points hints:** Panduan skala SP (1–13) ditampilkan langsung di form untuk membantu estimasi
@@ -206,7 +207,7 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 **Tujuan:** Manajemen test case dan eksekusi pengujian.
 
 **Fitur:**
-- CRUD test case dengan link ke backlog item
+- CRUD test case dengan link ke backlog item — field **Backlog Item** (wajib) memakai dropdown dengan kotak pencarian (pola sama seperti 3.2 & 3.9), memudahkan pencarian saat daftar backlog item sudah banyak
 - Test run management (kumpulan test case untuk satu sesi pengujian)
 - Eksekusi test case: `pass`, `fail`, `skip`, `blocked`
 - QA dashboard: statistik coverage, pass rate, item yang belum di-test
@@ -220,7 +221,8 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 **Akses:** Modul ini **tidak terlihat/tidak bisa diakses** oleh role selain **Super Admin** dan **QA Engineer** secara default — baik dari sisi menu (disembunyikan) maupun API (setiap endpoint menolak dengan `403` untuk role lain). Role lain bisa diberi akses lewat permission baru `access_bugs` di tab **Roles & Permissions** (Users & Roles, 3.10) — pola yang sama seperti `access_c_level` untuk C-Level Dashboard (lihat [PRD - C-Level Dashboard.md](./PRD%20-%20C-Level%20Dashboard.md), Bagian 10). Saat ini role **Developer** sudah diberi permission `access_bugs`, sehingga punya akses penuh yang setara Super Admin/QA Engineer di modul ini (termasuk tombol Aksi di tabel Bugs, yang sebelumnya sempat ter-hardcode hanya untuk Super Admin/QA).
 
 **Fitur:**
-- **Bugs** — CRUD data bug: judul, deskripsi, langkah reproduksi, severity & prioritas (`critical/high/medium/low`), assignee. **Tidak wajib** terhubung ke Backlog Item (beda dari Test Case QA yang wajib) — bug bisa berdiri sendiri untuk insiden yang belum tentu jadi backlog item
+- **Bugs** — CRUD data bug: judul, deskripsi, langkah reproduksi, severity & prioritas (`critical/high/medium/low`), assignee. **Tidak wajib** terhubung ke Backlog Item (beda dari Test Case QA yang wajib) — bug bisa berdiri sendiri untuk insiden yang belum tentu jadi backlog item. Field Backlog Item di form Buat/Edit Bug memakai dropdown dengan kotak pencarian (pola sama seperti 3.2 & 3.8)
+- **Incident Author** — tiap bug menampilkan siapa yang melaporkan/membuat bug tersebut, sebagai kolom terpisah di tabel Bugs (di samping kolom Assigned To). Otomatis diisi dari user yang sedang login saat bug dibuat — **read-only**, tidak ada field untuk memilih/mengubah Incident Author secara manual di form
 - **Progress** — riwayat progres perbaikan bug, dicatat sebagai log/histori (bukan satu angka yang ditimpa) setiap kali statusnya diupdate, lengkap dengan catatan dan siapa yang mengupdate
 - **Aktivitas & Komentar** — tiap bug punya thread komentar (dibuka dari modal Edit Bug), dengan @mention (ketik `@` untuk dropdown user, badge indigo `@Nama`) dan log perubahan sistem, mengikuti pola yang sama seperti Backlog Item (3.2). Hapus komentar sendiri; Super Admin bisa hapus komentar siapa pun. Log perubahan tidak bisa dihapus
 - **Bugs Dashboard** — statistik total bug, jumlah open (termasuk `open`/`in_progress`/`reopen`), jumlah ready to test, resolution rate, breakdown per produk dan per stage, **grafik tren bug Dibuka vs Ditutup** (line chart) dengan toggle **Mingguan (8 minggu terakhir) / Bulanan (6 bulan terakhir) / Tahunan (3 tahun terakhir)** (dihitung dari `created_at` dan `closed_at`; bucket tanpa data tetap tampil sebagai 0 agar garis tidak putus), serta dua panel bersebelahan: **Recent Activity** (10 update progress/stage terbaru lintas bug) dan **Recent Comments** (10 komentar terbaru lintas bug)
@@ -407,7 +409,7 @@ QA Engineer / Super Admin / Developer buat Bug (produk wajib, backlog item opsio
 | `item_activities` | Log perubahan dan komentar per backlog item |
 | `qa_test_cases` | Test case dengan link ke backlog item |
 | `qa_test_runs` | Sesi pengujian |
-| `bugs` | Data bug/incident; link ke backlog item opsional; kolom `stage` menyimpan stage terkini (`open/in_progress/ready_to_test/reopen/done`, free-text — tidak ada CHECK constraint), `closed_at` terisi otomatis saat stage `done` |
+| `bugs` | Data bug/incident; link ke backlog item opsional; kolom `stage` menyimpan stage terkini (`open/in_progress/ready_to_test/reopen/done`, free-text — tidak ada CHECK constraint), `closed_at` terisi otomatis saat stage `done`. Kolom `reported_by` (FK `users`, otomatis diisi dari user pembuat saat create, ditampilkan sebagai kolom **Incident Author** di tabel Bugs) sudah ada sejak `migration_v12.sql` — baru ditampilkan di UI mulai versi 2.4 |
 | `bug_progress_updates` | Histori perubahan stage bug (append-only log, tidak ada `updated_at`) |
 | `bug_activities` | Komentar & log perubahan per bug (`type`: `comment`/`change_log`), mirror `item_activities` milik Backlog |
 | `notifications` | Notifikasi per user |
@@ -690,3 +692,5 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | 10 Sep 2026 | 2.3 | Tambah **Notifikasi Email** (3.13): email personal ke assignee/yang di-mention saat assignment & update (Backlog), status berubah (Backlog), assignment & stage berubah (Bugs Incident, modul yang sebelumnya sama sekali tidak punya notifikasi), assignment (Leader Task), dan mention di komentar (Backlog & Bugs Incident — pipeline mention backend dibangun dari nol, sebelumnya UI-nya ada tapi tidak pernah memicu apa pun). Global, dikontrol Super Admin — bukan preferensi per-user |
 | 10 Sep 2026 | 2.3 | Tambah halaman **Notification Settings** (3.14, Super Admin only): toggle nyala/mati + form config SMTP + tombol Kirim Email Tes, tersimpan di database dan aktif langsung tanpa restart backend. `migration_v17.sql`: tabel `app_settings` |
 | 10 Sep 2026 | 2.3 | Fix: generate kode otomatis (Backlog, Bugs Incident, Leader Task, Import Jira) memakai `ORDER BY code DESC` yang sort sebagai teks bukan angka — menyebabkan kode bentrok begitu ada campuran format lama (tidak zero-padded, mis. seed data `DEMO-6`) dan format baru (`DEMO-007`). Diperbaiki di 5 controller (`ORDER BY` sekarang berdasarkan angka trailing kode, bukan teks) |
+| 10 Sep 2026 | 2.4 | Bugs Incident (3.9): tambah kolom **Incident Author** di tabel Bugs — menampilkan nama user yang membuat bug (`reported_by`), read-only (otomatis diisi dari user yang login saat create, tidak ada field untuk mengubahnya manual). Tidak ada perubahan skema database — kolom `reported_by` sudah ada sejak `migration_v12.sql` dan `reported_by_name` sudah dikembalikan `GET /api/bugs` sebelumnya, hanya belum ditampilkan di tabel |
+| 10 Sep 2026 | 2.4 | Backlog (3.2), QA (3.8), Bugs Incident (3.9): field pemilihan backlog item (Parent User Story & Parent Epic di form Backlog; Backlog Item di form Test Case & Bug) diganti dari dropdown native jadi dropdown dengan kotak pencarian — komponen baru `SearchableSelect`, filter berdasarkan kode/judul secara client-side dari data yang sudah dimuat. Mempermudah pencarian saat daftar backlog item sudah banyak. Tidak ada perubahan skema database atau endpoint baru |
