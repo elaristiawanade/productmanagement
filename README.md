@@ -12,7 +12,8 @@ Sistem tracking internal product development berbasis web dengan React + Node.js
 | **Products** | Manajemen produk, epic, dan feature per produk |
 | **Users & Roles** | 5 role: Super Admin, Manager, PO, Developer, QA |
 | **QA Module** | Test case management, test execution, QA dashboard |
-| **Bugs Incident** | Bug tracking + histori progress perbaikan (open→in_progress→ready_to_test→reopen→done), komentar/@mention, tanggal incident/closed/update terakhir, kolom Incident Author (pelapor bug), filter sembunyikan closed/done. Default Super Admin & QA Engineer; role lain (misal Developer) bisa diberi akses lewat permission `access_bugs` |
+| **Bugs Incident** | Bug tracking + histori progress perbaikan (open→in_progress→ready_to_test→reopen→done), komentar/@mention, tanggal incident/closed/update terakhir, kolom Incident Author (pelapor bug), filter sembunyikan closed/done, default sort tanggal incident terbaru di atas. Default Super Admin & QA Engineer; role lain (misal Developer) bisa diberi akses lewat permission `access_bugs` |
+| **Lapor Bug Publik** | Halaman `/report-bug` tanpa login — siapa pun di jaringan kantor (bukan cuma user terdaftar) bisa lapor bug lewat form: pilih aplikasi, judul, deskripsi, langkah reproduksi, severity, nama+email pelapor, screenshot opsional. Tiket masuk langsung ke Bugs Incident yang sama, auto-assign ke Product Owner produk terkait |
 | **Notifikasi Email** | Email personal ke assignee/yang di-mention saat assignment, status/stage berubah, atau mention (Backlog, Bugs Incident, Leader Task). Global, dikonfigurasi lewat halaman **Notification Settings** (Super Admin only) — toggle, config SMTP, kirim email tes, aktif tanpa restart |
 
 ## Roles
@@ -35,9 +36,10 @@ cp backend/.env.example backend/.env
 docker-compose up -d
 
 # 3. Akses aplikasi
-# Frontend : http://localhost:3000
-# Backend  : http://localhost:4000
-# DB       : localhost:5432
+# Frontend         : http://localhost:3000
+# Backend          : http://localhost:4000
+# DB               : localhost:5432
+# Lapor Bug Publik : http://localhost:3000/report-bug (tanpa login)
 ```
 
 ## Development (tanpa Docker)
@@ -136,6 +138,10 @@ DELETE     /api/bugs/activities/:id
 GET  /api/settings/mail       ← Config SMTP notifikasi email (Super Admin only)
 PUT  /api/settings/mail       ← Simpan config SMTP
 POST /api/settings/mail/test  ← Kirim email tes
+
+GET  /api/public/products              ← Tanpa login. List produk aktif untuk dropdown form Lapor Bug Publik
+POST /api/public/bugs                  ← Tanpa login. Buat tiket bug publik (auto-assign ke Product Owner)
+POST /api/public/bugs/:id/attachments  ← Tanpa login. Upload screenshot ke tiket publik (hanya tiket publik)
 ```
 
 ## Deployment (Internal Server)

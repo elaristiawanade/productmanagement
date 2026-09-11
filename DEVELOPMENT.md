@@ -149,6 +149,7 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v15.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v16.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v17.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v18.sql"
 ```
 
 > **Penting:** `migration_v10.sql` menambahkan kolom `users.department`, yang di-query
@@ -219,7 +220,8 @@ product-tracker/
 │       ├── migration_v14.sql
 │       ├── migration_v15.sql
 │       ├── migration_v16.sql
-│       └── migration_v17.sql
+│       ├── migration_v17.sql
+│       └── migration_v18.sql
 ├── backend-java/          # Spring Boot API (port 4000)
 │   ├── src/
 │   ├── pom.xml

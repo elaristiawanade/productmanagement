@@ -3,8 +3,8 @@
 
 | | |
 |---|---|
-| **Versi** | 2.4 |
-| **Tanggal** | 10 September 2026 |
+| **Versi** | 2.5 |
+| **Tanggal** | 11 September 2026 |
 | **Status** | Live — Production |
 | **Pemilik** | Tim Internal |
 
@@ -37,6 +37,8 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 | **QA Engineer** | Penguji | Kelola test case, test run, eksekusi pengujian, dan modul Bugs Incident (3.9) |
 
 **Aturan akses produk:** Developer dan QA hanya melihat item dari produk tempat mereka terdaftar sebagai member. Exception: semua user selalu dapat melihat item yang di-assign langsung ke mereka (My Tasks).
+
+**Pelapor eksternal (bukan role sistem):** Sejak versi 2.5, karyawan kantor yang **tidak punya akun** Product Tracker sama sekali bisa melaporkan bug lewat form publik tanpa login (lihat 3.15) — bukan salah satu dari 5 role di atas, tidak masuk tabel `users`, dan tidak punya akses ke bagian manapun dari aplikasi selain form itu sendiri.
 
 ---
 
@@ -331,6 +333,25 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 
 ---
 
+### 3.15 Lapor Bug Publik (Landing Page Ticketing)
+
+**Tujuan:** Membuka pelaporan bug/insiden ke **seluruh karyawan kantor**, bukan cuma tim internal yang punya akun Product Tracker — misalnya orang Accounting yang menemukan bug di aplikasi accounting mereka. Tiket yang masuk lewat sini langsung jadi data yang sama dengan modul Bugs Incident (3.9), bukan sistem terpisah/staging.
+
+**Akses:** Halaman `/report-bug` dan tiga endpoint pendukungnya (`GET /api/public/products`, `POST /api/public/bugs`, `POST /api/public/bugs/:id/attachments`) **tidak memerlukan login sama sekali** — satu-satunya bagian dari aplikasi yang bisa diakses tanpa JWT selain halaman Login itu sendiri. Ini disengaja: fitur ditujukan untuk siapa pun di jaringan kantor yang sama, bukan cuma user terdaftar. Lihat Bagian 7 (Keamanan) untuk batasan/asumsi trust model-nya.
+
+**Fitur:**
+- Form berisi: pilih aplikasi/produk (dropdown), nama pelapor, email pelapor, judul bug, deskripsi, langkah reproduksi, tingkat keparahan (severity), dan lampiran screenshot opsional (image only, maks 10MB — sama seperti lampiran Bugs Incident biasa)
+- **Tidak ada field Prioritas** — pelapor publik tidak diminta menilai prioritas, backend selalu set `medium`, tim internal yang menentukan ulang saat triase
+- **Assignment otomatis** — begitu pelapor pilih produk, tiket langsung di-assign ke Product Owner produk tsb (`products.owner_id`). Kalau produk belum punya owner, tiket tetap dibuat tapi tidak ter-assign ke siapa pun (tidak ada notifikasi terkirim) — Admin/QA meng-assign manual belakangan dari Bugs Incident seperti biasa
+- **Identitas pelapor bukan akun** — nama & email pelapor disimpan sebagai teks bebas (kolom `bugs.reporter_name`/`reporter_email`), bukan referensi ke tabel `users`. Kolom `reported_by` (yang biasanya diisi user login) dibiarkan `NULL` untuk tiket dari jalur ini
+- Setelah submit, pelapor melihat konfirmasi berisi kode tiket (mis. `DEMO-011`) — tidak ada redirect ke halaman lain, karena pelapor memang bukan user yang bisa masuk ke area manapun di aplikasi
+- Di tabel Bugs (3.9), kolom **Incident Author** untuk tiket dari jalur ini menampilkan `reporter_name`/`reporter_email` sebagai fallback (karena `reported_by_name` kosong) — tim internal tetap bisa tahu siapa pelapornya meski bukan user terdaftar
+- Notifikasi assignment (bell + email, lihat 3.13) tetap terpicu normal ke Product Owner yang ke-assign, dengan atribusi **"System (Laporan Publik)"** sebagai pihak yang melakukan assignment (bukan nama pelapor) — karena assignment-nya otomatis oleh sistem, bukan tindakan manual pelapor
+
+**Catatan implementasi:** Kode bug (`{KODE_PRODUK}-NNN`) di-generate dengan logika yang sama persis seperti `POST /api/bugs` biasa. Lampiran screenshot dari jalur publik hanya bisa diunggah ke tiket yang juga dibuat lewat jalur publik (`bugs.reported_by IS NULL`) — endpoint `POST /api/public/bugs/:id/attachments` menolak dengan `403` kalau `:id` menunjuk ke tiket internal, supaya pengunjung anonim tidak bisa menambah lampiran ke tiket siapa pun dengan menebak-nebak ID. Produk yang ditampilkan di dropdown hanya yang berstatus `active`.
+
+---
+
 ## 4. Alur Kerja Utama
 
 ### Alur Sprint Planning
@@ -382,6 +403,17 @@ QA Engineer / Super Admin / Developer buat Bug (produk wajib, backlog item opsio
     → Bugs Dashboard: pantau total bug, open (termasuk reopen), ready to test, resolution rate, Recent Activity & Recent Comments
 ```
 
+### Alur Lapor Bug Publik
+```
+Karyawan tanpa akun buka /report-bug (tanpa login)
+    → Pilih aplikasi/produk, isi nama & email, judul, deskripsi, langkah reproduksi, severity
+    → (Opsional) lampirkan screenshot
+    → Submit → tiket langsung masuk ke tabel bugs yang sama dengan Bugs Incident (3.9), stage 'open'
+    → Assign otomatis ke Product Owner produk tsb (kalau ada)
+    → Tim internal (Super Admin/QA/Developer) lihat tiket di Bugs Incident seperti tiket biasa
+    → Lanjut alur Update Progress normal (lihat Alur Bugs Incident di atas)
+```
+
 ---
 
 ## 5. Arsitektur Teknis
@@ -409,7 +441,7 @@ QA Engineer / Super Admin / Developer buat Bug (produk wajib, backlog item opsio
 | `item_activities` | Log perubahan dan komentar per backlog item |
 | `qa_test_cases` | Test case dengan link ke backlog item |
 | `qa_test_runs` | Sesi pengujian |
-| `bugs` | Data bug/incident; link ke backlog item opsional; kolom `stage` menyimpan stage terkini (`open/in_progress/ready_to_test/reopen/done`, free-text — tidak ada CHECK constraint), `closed_at` terisi otomatis saat stage `done`. Kolom `reported_by` (FK `users`, otomatis diisi dari user pembuat saat create, ditampilkan sebagai kolom **Incident Author** di tabel Bugs) sudah ada sejak `migration_v12.sql` — baru ditampilkan di UI mulai versi 2.4 |
+| `bugs` | Data bug/incident; link ke backlog item opsional; kolom `stage` menyimpan stage terkini (`open/in_progress/ready_to_test/reopen/done`, free-text — tidak ada CHECK constraint), `closed_at` terisi otomatis saat stage `done`. Kolom `reported_by` (FK `users`, otomatis diisi dari user pembuat saat create, ditampilkan sebagai kolom **Incident Author** di tabel Bugs) sudah ada sejak `migration_v12.sql` — baru ditampilkan di UI mulai versi 2.4. Kolom `reporter_name`/`reporter_email` (`migration_v18.sql`, versi 2.5) menyimpan identitas pelapor sebagai teks bebas untuk tiket dari jalur Lapor Bug Publik (3.15) — dipakai saat `reported_by` bernilai `NULL` |
 | `bug_progress_updates` | Histori perubahan stage bug (append-only log, tidak ada `updated_at`) |
 | `bug_activities` | Komentar & log perubahan per bug (`type`: `comment`/`change_log`), mirror `item_activities` milik Backlog |
 | `notifications` | Notifikasi per user |
@@ -530,7 +562,17 @@ GET/POST          /api/bugs/:id/attachments List & upload lampiran gambar bug (m
 GET/POST          /api/bugs/:id/activities List & tambah komentar bug (mirror endpoint activities Backlog Item, termasuk dukungan @[Nama] mention)
 DELETE            /api/bugs/activities/:id Hapus komentar bug (pemilik sendiri atau Super Admin; log perubahan tidak bisa dihapus)
 ```
-**Akses:** Semua endpoint di atas membalas `403` untuk role selain Super Admin/QA Engineer, kecuali role tsb diberi permission `access_bugs` (saat ini juga diberikan ke role Developer). Lampiran gambar bug memakai endpoint `DELETE /api/attachments/:id` dan `GET /api/attachments/file/:filename` yang sama dengan lampiran Backlog Item. Filter "Sembunyikan Closed/Done" dan sort kolom tidak punya parameter backend sendiri — keduanya murni client-side di atas response `GET /api/bugs`.
+**Akses:** Semua endpoint di atas membalas `403` untuk role selain Super Admin/QA Engineer, kecuali role tsb diberi permission `access_bugs` (saat ini juga diberikan ke role Developer). Lampiran gambar bug memakai endpoint `DELETE /api/attachments/:id` dan `GET /api/attachments/file/:filename` yang sama dengan lampiran Backlog Item. Filter "Sembunyikan Closed/Done" dan sort kolom tidak punya parameter backend sendiri — keduanya murni client-side di atas response `GET /api/bugs`. Sejak versi 2.5, list ini juga berisi tiket yang dibuat lewat jalur publik (3.15) — tidak ada endpoint/parameter terpisah untuk membedakannya, cukup dilihat dari `reported_by` yang `NULL`.
+
+### Public (tanpa autentikasi)
+```
+GET  /api/public/products              List produk aktif (id, code, name saja) — untuk dropdown form Lapor Bug Publik
+POST /api/public/bugs                  Buat tiket bug publik (body: product_id, title, description,
+                                        steps_to_reproduce, severity, reporter_name, reporter_email)
+POST /api/public/bugs/:id/attachments  Upload lampiran gambar ke tiket publik (max 10MB, image only,
+                                        multipart/form-data) — menolak 403 kalau :id bukan tiket publik
+```
+**Akses:** Tidak memerlukan JWT sama sekali — lihat 3.15 dan Bagian 7 (Keamanan). Endpoint lain di luar tiga ini (`/api/bugs`, `/api/products`, dst.) tetap memerlukan login seperti biasa.
 
 ### Dashboard
 ```
@@ -585,6 +627,7 @@ POST /api/settings/mail/test   Kirim satu email tes ke alamat di body {to}, bala
 - Input file di-parse server-side; format xlsx divalidasi via magic bytes ZIP
 - Email dinormalisasi ke lowercase sebelum disimpan
 - Self-update profil dibatasi hanya ke field yang aman (nama, email, avatar) — role tidak bisa diubah sendiri
+- **`/api/public/**` (3.15) sengaja tanpa autentikasi** — dirancang untuk deployment LAN kantor saja (semua pengakses ada di jaringan WiFi yang sama), bukan internet-facing. Tidak ada rate limiting/CAPTCHA di versi ini karena volumenya diperkirakan rendah; kalau nanti trafiknya naik atau deployment berubah jadi internet-facing, ini perlu ditinjau ulang. Satu-satunya guard yang ada: upload lampiran publik menolak (`403`) kalau target tiketnya bukan tiket yang juga dibuat lewat jalur publik, supaya pengunjung anonim tidak bisa menambah file ke tiket internal manapun dengan menebak ID
 
 ---
 
@@ -650,6 +693,7 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | `migration_v15.sql` | Re-code bug existing dari `BUG-001` ke format `{KODE_PRODUK}-001` |
 | `migration_v16.sql` | Sederhanakan stage Bugs Incident jadi 4 tahap (`open, in_progress, ready_to_test, done`), tambah kolom `bugs.closed_at` |
 | `migration_v17.sql` | Tabel `app_settings` (key-value store) — dipakai pertama kali untuk config SMTP Notification Settings (3.14) |
+| `migration_v18.sql` | Kolom `bugs.reporter_name`, `bugs.reporter_email` (nullable) — identitas pelapor untuk tiket dari Lapor Bug Publik (3.15) |
 
 ---
 
@@ -694,3 +738,5 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | 10 Sep 2026 | 2.3 | Fix: generate kode otomatis (Backlog, Bugs Incident, Leader Task, Import Jira) memakai `ORDER BY code DESC` yang sort sebagai teks bukan angka — menyebabkan kode bentrok begitu ada campuran format lama (tidak zero-padded, mis. seed data `DEMO-6`) dan format baru (`DEMO-007`). Diperbaiki di 5 controller (`ORDER BY` sekarang berdasarkan angka trailing kode, bukan teks) |
 | 10 Sep 2026 | 2.4 | Bugs Incident (3.9): tambah kolom **Incident Author** di tabel Bugs — menampilkan nama user yang membuat bug (`reported_by`), read-only (otomatis diisi dari user yang login saat create, tidak ada field untuk mengubahnya manual). Tidak ada perubahan skema database — kolom `reported_by` sudah ada sejak `migration_v12.sql` dan `reported_by_name` sudah dikembalikan `GET /api/bugs` sebelumnya, hanya belum ditampilkan di tabel |
 | 10 Sep 2026 | 2.4 | Backlog (3.2), QA (3.8), Bugs Incident (3.9): field pemilihan backlog item (Parent User Story & Parent Epic di form Backlog; Backlog Item di form Test Case & Bug) diganti dari dropdown native jadi dropdown dengan kotak pencarian — komponen baru `SearchableSelect`, filter berdasarkan kode/judul secara client-side dari data yang sudah dimuat. Mempermudah pencarian saat daftar backlog item sudah banyak. Tidak ada perubahan skema database atau endpoint baru |
+| 11 Sep 2026 | 2.5 | Tambah modul **Lapor Bug Publik** (3.15) — form `/report-bug` tanpa login untuk karyawan kantor yang tidak punya akun Product Tracker, jadi bagian dari deployment LAN yang sama (bukan sistem/domain terpisah). Tiket masuk langsung ke tabel `bugs` yang sama dengan Bugs Incident (3.9): produk dipilih dari dropdown, auto-assign ke Product Owner produk tsb, identitas pelapor (nama+email) disimpan sebagai teks bebas (`reported_by` tetap `NULL`), lampiran screenshot opsional. Endpoint baru tanpa autentikasi: `GET /api/public/products`, `POST /api/public/bugs`, `POST /api/public/bugs/:id/attachments` (lihat Bagian 6 & 7 untuk detail akses/keamanan). `migration_v18.sql`: kolom `bugs.reporter_name`, `bugs.reporter_email` |
+| 11 Sep 2026 | 2.5 | Bugs Incident (3.9): tabel Bugs sekarang default sort **Tanggal Incident terbaru di atas** (sebelumnya urutan asli dari backend, per produk lalu kode) — supaya tiket yang baru dibuat/dilaporkan (termasuk dari Lapor Bug Publik) langsung terlihat tanpa perlu klik sort dulu. Klik header kolom lain tetap berfungsi seperti biasa. Tidak ada perubahan skema database atau endpoint baru, murni default state client-side |
