@@ -176,6 +176,49 @@ public class AttachmentController {
         }
     }
 
+    @PostMapping("/public/bugs/{id}/attachments")
+    public ResponseEntity<?> uploadPublicBugAttachment(@PathVariable Long id,
+                                    @RequestParam("file") MultipartFile file) {
+        List<Map<String, Object>> bugRows = jdbc.queryForList("SELECT reported_by FROM bugs WHERE id=?", id);
+        if (bugRows.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("error", "Bug tidak ditemukan"));
+        }
+        // Only allow anonymous attachment uploads onto publicly-reported tickets
+        // (reported_by IS NULL); internal tickets require the authenticated endpoint.
+        if (bugRows.get(0).get("reported_by") != null) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak diizinkan"));
+        }
+
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Hanya file gambar yang diperbolehkan (JPEG, PNG, GIF, WebP)"));
+        }
+        if (file.getSize() > 10L * 1024 * 1024) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Ukuran file maksimal 10MB"));
+        }
+
+        try {
+            Path uploadPath = Paths.get(uploadDir).toAbsolutePath();
+            Files.createDirectories(uploadPath);
+
+            String original = file.getOriginalFilename() != null ? file.getOriginalFilename() : "upload";
+            String ext = original.contains(".") ? original.substring(original.lastIndexOf(".")) : "";
+            String filename = UUID.randomUUID().toString() + ext;
+
+            Files.copy(file.getInputStream(), uploadPath.resolve(filename), StandardCopyOption.REPLACE_EXISTING);
+
+            Map<String, Object> row = jdbc.queryForMap(
+                "INSERT INTO bug_attachments (bug_id, filename, original_name, file_size, mime_type, uploaded_by) " +
+                "VALUES (?,?,?,?,?,NULL) RETURNING *",
+                id, filename, original, file.getSize(), contentType
+            );
+            row.put("url", "/api/attachments/file/" + filename);
+            return ResponseEntity.status(201).body(row);
+        } catch (IOException e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Gagal menyimpan file"));
+        }
+    }
+
     @DeleteMapping("/attachments/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         List<Map<String, Object>> rows = jdbc.queryForList(

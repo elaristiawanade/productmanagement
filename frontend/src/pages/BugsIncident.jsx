@@ -688,8 +688,12 @@ export default function BugsIncident() {
   const [bugFilters,   setBugFilters]  = useState({ search: '', stage: [], severity: [], priority: [], assigned_to: [] });
   // Default true: Closed/Done bugs are hidden from the list until the user opts back in.
   const [hideClosed,   setHideClosed]  = useState(true);
-  const [sortKey,      setSortKey]     = useState(null);
-  const [sortDir,      setSortDir]     = useState('asc');
+  // Default to newest-first (Tanggal Incident, desc) so a freshly-loaded/reported
+  // bug is immediately visible at the top instead of buried by the backend's
+  // default product/code ordering. Clicking the column header still cycles
+  // normally (desc -> asc -> back to the backend's original order).
+  const [sortKey,      setSortKey]     = useState('created_at');
+  const [sortDir,      setSortDir]     = useState('desc');
   const [trendPeriod,  setTrendPeriod] = useState('month');
   const [modal,        setModal]       = useState({ open: false, type: '', data: null });
   const [loading,      setLoading]     = useState(true);
@@ -776,7 +780,7 @@ export default function BugsIncident() {
       b.item_code ? `[${b.item_code}] ${b.item_title || ''}` : '',
       b.product_code || b.product_name || '',
       b.assigned_to_name || '',
-      b.reported_by_name || '',
+      b.reported_by_name || b.reporter_name || b.reporter_email || '',
       b.created_at ? format(parseISO(b.created_at), 'yyyy-MM-dd HH:mm') : '',
       b.closed_at ? format(parseISO(b.closed_at), 'yyyy-MM-dd HH:mm') : '',
       b.last_update ? format(parseISO(b.last_update), 'yyyy-MM-dd HH:mm') : '',
@@ -1075,7 +1079,7 @@ export default function BugsIncident() {
                           <td className="px-3 py-3 text-center"><PriorityBadge priority={b.priority} /></td>
                           <td className="px-3 py-3 text-center"><StatusBadge status={b.stage} /></td>
                           <td className="px-3 py-3 text-xs text-slate-500">{b.assigned_to_name || '—'}</td>
-                          <td className="px-3 py-3 text-xs text-slate-500">{b.reported_by_name || '—'}</td>
+                          <td className="px-3 py-3 text-xs text-slate-500">{b.reported_by_name || b.reporter_name || b.reporter_email || '—'}</td>
                           <td className="px-3 py-3 text-xs text-slate-500">{b.product_code}</td>
                           <td className="px-3 py-3 text-xs text-slate-500 whitespace-nowrap">
                             {b.created_at ? format(parseISO(b.created_at), 'dd MMM yyyy') : '—'}
