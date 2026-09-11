@@ -6,6 +6,7 @@ import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import LinkInsertButton from '../components/LinkInsertButton';
+import SearchableSelect from '../components/SearchableSelect';
 import { renderWithLinks } from '../utils/linkify';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -613,12 +614,15 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
       {(form.type === 'task' || form.type === 'bug') && (
         <div className="col-span-2">
           <F label="Parent User Story" required>
-            <select className="select border-indigo-300 focus:border-indigo-500" value={form.parent_id}
-              onChange={e => setForm(f => ({ ...f, parent_id: e.target.value }))} required>
-              <option value="">— Pilih user story —</option>
-              {stories.length === 0 && <option disabled value="">Tidak ada story di produk ini</option>}
-              {stories.map(s => <option key={s.id} value={s.id}>{s.code} — {s.title}</option>)}
-            </select>
+            <SearchableSelect
+              className="border-indigo-300"
+              value={form.parent_id}
+              onChange={v => setForm(f => ({ ...f, parent_id: v }))}
+              options={stories.map(s => ({ value: String(s.id), label: `${s.code} — ${s.title}` }))}
+              placeholder="— Pilih user story —"
+              searchPlaceholder="Cari user story..."
+              emptyMessage="Tidak ada story di produk ini"
+            />
           </F>
           <p className="text-xs text-indigo-500 mt-1 flex items-center gap-1">
             <Link2 className="w-3 h-3" />{form.type === 'task' ? 'Task' : 'Bug'} harus terhubung ke tepat 1 user story
@@ -628,13 +632,16 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
       {form.type === 'story' && (
         <div className="col-span-2">
           <F label="Parent Epic">
-            <select className="select border-purple-300 focus:border-purple-500" value={form.parent_id}
-              onChange={e => setForm(f => ({ ...f, parent_id: e.target.value }))}>
-              <option value="">— Tanpa epic (standalone story) —</option>
-              {epicsBacklog.length === 0
-                ? <option disabled value="">Tidak ada epic di produk ini</option>
-                : epicsBacklog.map(e => <option key={e.id} value={e.id}>{e.code} — {e.title}</option>)}
-            </select>
+            <SearchableSelect
+              className="border-purple-300"
+              value={form.parent_id}
+              onChange={v => setForm(f => ({ ...f, parent_id: v }))}
+              options={epicsBacklog.map(e => ({ value: String(e.id), label: `${e.code} — ${e.title}` }))}
+              placeholder="— Tanpa epic (standalone story) —"
+              emptyOptionLabel="— Tanpa epic (standalone story) —"
+              searchPlaceholder="Cari epic..."
+              emptyMessage="Tidak ada epic di produk ini"
+            />
           </F>
           <p className="text-xs text-purple-500 mt-1 flex items-center gap-1">
             <Link2 className="w-3 h-3" />Story dapat dihubungkan ke satu epic

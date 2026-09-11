@@ -8,6 +8,7 @@ import client from '../api/client';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
+import SearchableSelect from '../components/SearchableSelect';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { format, parseISO } from 'date-fns';
@@ -31,7 +32,9 @@ function TestCaseForm({ tc, products, backlogItems, onSave, onClose }) {
   const filteredItems = backlogItems.filter(b => !form.product_id || b.product_id === +form.product_id);
 
   const save = async (e) => {
-    e.preventDefault(); setSaving(true);
+    e.preventDefault();
+    if (!form.backlog_item_id) { toast.error('Backlog Item wajib dipilih'); return; }
+    setSaving(true);
     try {
       if (tc?.id) { await client.put(`/qa/test-cases/${tc.id}`, form); toast.success('Test case diperbarui'); }
       else        { await client.post('/qa/test-cases', form);          toast.success('Test case dibuat'); }
@@ -50,10 +53,13 @@ function TestCaseForm({ tc, products, backlogItems, onSave, onClose }) {
       </div>
       <div>
         <label className="label">Backlog Item *</label>
-        <select className="select" value={form.backlog_item_id} onChange={e => setForm(f => ({ ...f, backlog_item_id: e.target.value }))} required>
-          <option value="">Pilih item</option>
-          {filteredItems.map(b => <option key={b.id} value={b.id}>[{b.code}] {b.title}</option>)}
-        </select>
+        <SearchableSelect
+          value={form.backlog_item_id}
+          onChange={v => setForm(f => ({ ...f, backlog_item_id: v }))}
+          options={filteredItems.map(b => ({ value: String(b.id), label: `[${b.code}] ${b.title}` }))}
+          placeholder="Pilih item"
+          searchPlaceholder="Cari backlog item..."
+        />
       </div>
       <div className="col-span-2">
         <label className="label">Judul Test Case *</label>

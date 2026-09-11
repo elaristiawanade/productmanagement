@@ -9,6 +9,7 @@ import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import LinkInsertButton from '../components/LinkInsertButton';
+import SearchableSelect from '../components/SearchableSelect';
 import { renderWithLinks } from '../utils/linkify';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -430,10 +431,14 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
       </div>
       <div>
         <label className="label">Backlog Item (opsional)</label>
-        <select className="select" value={form.backlog_item_id} onChange={e => setForm(f => ({ ...f, backlog_item_id: e.target.value }))}>
-          <option value="">— Tidak terkait —</option>
-          {filteredItems.map(b => <option key={b.id} value={b.id}>[{b.code}] {b.title}</option>)}
-        </select>
+        <SearchableSelect
+          value={form.backlog_item_id}
+          onChange={v => setForm(f => ({ ...f, backlog_item_id: v }))}
+          options={filteredItems.map(b => ({ value: String(b.id), label: `[${b.code}] ${b.title}` }))}
+          placeholder="— Tidak terkait —"
+          emptyOptionLabel="— Tidak terkait —"
+          searchPlaceholder="Cari backlog item..."
+        />
       </div>
       <div className="col-span-2">
         <label className="label">Judul Bug *</label>
@@ -683,8 +688,12 @@ export default function BugsIncident() {
   const [bugFilters,   setBugFilters]  = useState({ search: '', stage: [], severity: [], priority: [], assigned_to: [] });
   // Default true: Closed/Done bugs are hidden from the list until the user opts back in.
   const [hideClosed,   setHideClosed]  = useState(true);
-  const [sortKey,      setSortKey]     = useState(null);
-  const [sortDir,      setSortDir]     = useState('asc');
+  // Default to newest-first (Tanggal Incident, desc) so a freshly-loaded/reported
+  // bug is immediately visible at the top instead of buried by the backend's
+  // default product/code ordering. Clicking the column header still cycles
+  // normally (desc -> asc -> back to the backend's original order).
+  const [sortKey,      setSortKey]     = useState('created_at');
+  const [sortDir,      setSortDir]     = useState('desc');
   const [trendPeriod,  setTrendPeriod] = useState('month');
   const [modal,        setModal]       = useState({ open: false, type: '', data: null });
   const [loading,      setLoading]     = useState(true);
@@ -771,7 +780,7 @@ export default function BugsIncident() {
       b.item_code ? `[${b.item_code}] ${b.item_title || ''}` : '',
       b.product_code || b.product_name || '',
       b.assigned_to_name || '',
-      b.reported_by_name || '',
+      b.reported_by_name || b.reporter_name || b.reporter_email || '',
       b.created_at ? format(parseISO(b.created_at), 'yyyy-MM-dd HH:mm') : '',
       b.closed_at ? format(parseISO(b.closed_at), 'yyyy-MM-dd HH:mm') : '',
       b.last_update ? format(parseISO(b.last_update), 'yyyy-MM-dd HH:mm') : '',
@@ -1046,6 +1055,7 @@ export default function BugsIncident() {
                         {renderSortableTh('priority', 'Prioritas')}
                         {renderSortableTh('stage', 'Stage')}
                         <th className="text-left px-3 py-3">Assigned To</th>
+                        <th className="text-left px-3 py-3">Incident Author</th>
                         <th className="text-left px-3 py-3">Produk</th>
                         {renderSortableTh('created_at', 'Tanggal Incident', 'left')}
                         {renderSortableTh('closed_at', 'Tanggal Closed', 'left')}
@@ -1054,7 +1064,7 @@ export default function BugsIncident() {
                       </tr>
                     </thead>
                     <tbody>
-                      {pagedBugs.length === 0 && <tr><td colSpan={12} className="text-center py-10 text-slate-400">Belum ada bug</td></tr>}
+                      {pagedBugs.length === 0 && <tr><td colSpan={13} className="text-center py-10 text-slate-400">Belum ada bug</td></tr>}
                       {pagedBugs.map(b => (
                         <tr key={b.id} className="table-row">
                           <td className="px-4 py-3"><span className="font-mono text-xs text-slate-500">{b.code}</span></td>
@@ -1069,6 +1079,7 @@ export default function BugsIncident() {
                           <td className="px-3 py-3 text-center"><PriorityBadge priority={b.priority} /></td>
                           <td className="px-3 py-3 text-center"><StatusBadge status={b.stage} /></td>
                           <td className="px-3 py-3 text-xs text-slate-500">{b.assigned_to_name || '—'}</td>
+                          <td className="px-3 py-3 text-xs text-slate-500">{b.reported_by_name || b.reporter_name || b.reporter_email || '—'}</td>
                           <td className="px-3 py-3 text-xs text-slate-500">{b.product_code}</td>
                           <td className="px-3 py-3 text-xs text-slate-500 whitespace-nowrap">
                             {b.created_at ? format(parseISO(b.created_at), 'dd MMM yyyy') : '—'}

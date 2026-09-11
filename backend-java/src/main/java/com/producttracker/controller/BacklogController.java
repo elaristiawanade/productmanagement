@@ -1,6 +1,7 @@
 package com.producttracker.controller;
 
 import com.producttracker.config.PermissionHelper;
+import com.producttracker.service.EmailService;
 import com.producttracker.service.TeamsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +20,7 @@ public class BacklogController {
 
     @Autowired private JdbcTemplate jdbc;
     @Autowired private TeamsService teams;
+    @Autowired private EmailService email;
 
     private static final String ITEM_FIELDS =
         "bi.id, bi.product_id, bi.code, bi.title, bi.type, bi.priority, " +
@@ -29,7 +31,7 @@ public class BacklogController {
         "f.feature_name AS feature_name, CAST(f.id AS VARCHAR) AS feature_code, " +
         "e.name AS epic_name, e.code AS epic_code, " +
         "s.name AS sprint_name, " +
-        "u.name AS assignee_name, u.avatar_color AS assignee_color, " +
+        "u.name AS assignee_name, u.avatar_color AS assignee_color, u.email AS assignee_email, " +
         "par.code AS parent_code, par.title AS parent_title, " +
         "CASE WHEN bi.deadline < NOW() AND bi.status NOT IN ('done','backlog') THEN true ELSE false END AS is_delayed ";
 
@@ -170,7 +172,8 @@ public class BacklogController {
             );
             String pCode = pRows.isEmpty() ? "PB" : (String) pRows.get(0).get("code");
             List<Map<String, Object>> lastRows = jdbc.queryForList(
-                "SELECT code FROM backlog_items WHERE product_id=? AND code LIKE ? ORDER BY code DESC LIMIT 1",
+                "SELECT code FROM backlog_items WHERE product_id=? AND code LIKE ? " +
+                "ORDER BY CAST(SUBSTRING(code FROM '\\d+$') AS INTEGER) DESC LIMIT 1",
                 productId, pCode + "-%"
             );
             String lastCode = lastRows.isEmpty() ? null : (String) lastRows.get(0).get("code");
@@ -222,6 +225,8 @@ public class BacklogController {
                     "Kamu di-assign ke " + itemCode,
                     "Task \"" + body.get("title") + "\" telah di-assign kepadamu oleh " + actorName,
                     "/backlog?item=" + newId);
+                email.notifyAssignment(str(item.get("assignee_email")), "Backlog",
+                    itemCode, str(item.get("title")), actorName, "/backlog?item=" + newId);
             }
 
             // Teams
@@ -329,6 +334,8 @@ public class BacklogController {
                 "Kamu di-assign ke " + str(item.get("code")),
                 "Task \"" + item.get("title") + "\" telah di-assign kepadamu oleh " + actorName,
                 "/backlog?item=" + id);
+            email.notifyAssignment(str(item.get("assignee_email")), "Backlog",
+                str(item.get("code")), str(item.get("title")), actorName, "/backlog?item=" + id);
         }
 
         // Teams
@@ -375,7 +382,15 @@ public class BacklogController {
             "SELECT " + ITEM_FIELDS + ITEM_JOINS + "WHERE bi.id=?", id
         );
         if (!detail.isEmpty()) {
-            teams.sendStatusChanged(detail.get(0), actorName, oldStatus, newStatus);
+            Map<String, Object> item = detail.get(0);
+            teams.sendStatusChanged(item, actorName, oldStatus, newStatus);
+            Long assigneeId = toLong(item.get("assignee_id"));
+            Long actorId = actor != null ? toLong(actor.get("id")) : null;
+            if (assigneeId != null && !assigneeId.equals(actorId)) {
+                email.notifyStatusChange(str(item.get("assignee_email")), "Backlog",
+                    str(item.get("code")), str(item.get("title")), oldStatus, newStatus, actorName,
+                    "/backlog?item=" + id);
+            }
         }
 
         return ResponseEntity.ok(Map.of("id", id, "status", newStatus));

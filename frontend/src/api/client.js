@@ -2,6 +2,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
+const PUBLIC_PATHS = ['/login', '/report-bug'];
 
 const client = axios.create({ baseURL: API_BASE });
 
@@ -14,7 +15,7 @@ client.interceptors.request.use((config) => {
 client.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401 && window.location.pathname !== '/login') {
+    if (err.response?.status === 401 && !PUBLIC_PATHS.includes(window.location.pathname)) {
       localStorage.removeItem('pt_token');
       localStorage.removeItem('pt_user');
       window.location.href = '/login';

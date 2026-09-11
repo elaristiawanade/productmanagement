@@ -1,6 +1,7 @@
 package com.producttracker.controller;
 
 import com.producttracker.config.DepartmentHelper;
+import com.producttracker.service.EmailService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -24,10 +25,13 @@ public class LeaderTaskController {
     @Autowired
     private DepartmentHelper departmentHelper;
 
+    @Autowired
+    private EmailService email;
+
     private static final String TASK_FIELDS =
         "lt.id, lt.code, lt.title, lt.department, lt.priority, lt.status, lt.notes, lt.deadline, " +
         "lt.parent_id, lt.assignee_id, lt.source_note_id, lt.created_by, lt.created_at, lt.updated_at, " +
-        "u.name AS assignee_name, u.avatar_color AS assignee_color, " +
+        "u.name AS assignee_name, u.avatar_color AS assignee_color, u.email AS assignee_email, " +
         "par.code AS parent_code, par.title AS parent_title, " +
         "ln.note_date AS source_note_date, ln.goals_this_week AS source_note_goals, nu.name AS source_note_author, " +
         "CASE WHEN lt.deadline < NOW() AND lt.status NOT IN ('done') THEN true ELSE false END AS is_delayed ";
@@ -176,18 +180,22 @@ public class LeaderTaskController {
 
             logActivity(newId, "Task dibuat oleh " + actorName);
 
+            List<Map<String, Object>> detail = jdbc.queryForList(
+                "SELECT " + TASK_FIELDS + TASK_JOINS + "WHERE lt.id=?", newId
+            );
+            Map<String, Object> task = detail.get(0);
+
             Long assigneeId = toLong(body.get("assignee_id"));
             if (assigneeId != null && !assigneeId.equals(toLong(actor.get("id")))) {
                 createNotification(assigneeId, "assignment",
                     "Kamu di-assign ke " + code,
                     "Leader Task \"" + body.get("title") + "\" telah di-assign kepadamu oleh " + actorName,
                     "/c-level?tab=tasks&task=" + newId);
+                email.notifyAssignment(str(task.get("assignee_email")), "Leader Task",
+                    code, str(task.get("title")), actorName, "/c-level?tab=tasks&task=" + newId);
             }
 
-            List<Map<String, Object>> detail = jdbc.queryForList(
-                "SELECT " + TASK_FIELDS + TASK_JOINS + "WHERE lt.id=?", newId
-            );
-            return ResponseEntity.status(201).body(detail.get(0));
+            return ResponseEntity.status(201).body(task);
         } catch (Exception e) {
             String msg = e.getMessage() != null ? e.getMessage() : "";
             if (msg.contains("duplicate key") || msg.contains("violates unique constraint")) {
@@ -251,6 +259,8 @@ public class LeaderTaskController {
                 "Kamu di-assign ke " + str(task.get("code")),
                 "Leader Task \"" + task.get("title") + "\" telah di-assign kepadamu oleh " + actorName,
                 "/c-level?tab=tasks&task=" + id);
+            email.notifyAssignment(str(task.get("assignee_email")), "Leader Task",
+                str(task.get("code")), str(task.get("title")), actorName, "/c-level?tab=tasks&task=" + id);
         }
 
         return ResponseEntity.ok(task);
@@ -368,7 +378,8 @@ public class LeaderTaskController {
     private String generateCode(String department) {
         String prefix = departmentHelper.codePrefix(department);
         List<Map<String, Object>> lastRows = jdbc.queryForList(
-            "SELECT code FROM leader_tasks WHERE code LIKE ? ORDER BY code DESC LIMIT 1", prefix + "-%"
+            "SELECT code FROM leader_tasks WHERE code LIKE ? " +
+            "ORDER BY CAST(SUBSTRING(code FROM '\\d+$') AS INTEGER) DESC LIMIT 1", prefix + "-%"
         );
         int lastNum = 0;
         if (!lastRows.isEmpty()) {

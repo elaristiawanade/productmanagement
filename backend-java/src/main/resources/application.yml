@@ -15,12 +15,26 @@ spring:
     hikari:
       maximum-pool-size: 10
       connection-timeout: 30000
+  mail:
+    host: ${MAIL_HOST:smtp.office365.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:true}
 
 app:
   upload:
     dir: ${UPLOAD_DIR:./uploads}
   teams:
     webhook-url: ${TEAMS_WEBHOOK_URL:}
+  mail:
+    enabled: ${MAIL_NOTIFICATIONS_ENABLED:false}
+    from: ${MAIL_FROM:}
   jwt:
     secret: ${APP_JWT_SECRET:pt_internal_dev_secret_key_2024}
     expiration: ${APP_JWT_EXPIRATION:604800000}
