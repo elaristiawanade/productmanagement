@@ -10,6 +10,7 @@ import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import LinkInsertButton from '../components/LinkInsertButton';
 import SearchableSelect from '../components/SearchableSelect';
+import AssigneeStack from '../components/AssigneeStack';
 import { renderWithLinks } from '../utils/linkify';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -316,7 +317,7 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
     title: bug?.title || '', description: bug?.description || '',
     steps_to_reproduce: bug?.steps_to_reproduce || '',
     severity: bug?.severity || 'medium', priority: bug?.priority || 'medium',
-    assigned_to: bug?.assigned_to || '',
+    assignee_ids: (bug?.assignees || []).map(a => a.id),
   });
   const [saving, setSaving] = useState(false);
   const [attachments, setAttachments] = useState([]);
@@ -408,11 +409,16 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
   const save = async (e) => {
     e.preventDefault(); setSaving(true);
     try {
+      const payload = { ...form };
+      // Backend stores the first pick as the legacy `assigned_to` column, rest via additional_assignee_ids
+      payload.assigned_to = payload.assignee_ids[0] || '';
+      payload.additional_assignee_ids = payload.assignee_ids.slice(1);
+      delete payload.assignee_ids;
       if (bug?.id) {
-        await client.put(`/bugs/${bug.id}`, form);
+        await client.put(`/bugs/${bug.id}`, payload);
         toast.success('Bug diperbarui');
       } else {
-        const res = await client.post('/bugs', form);
+        const res = await client.post('/bugs', payload);
         if (pendingFiles.length) await uploadPendingFiles(res.data.id);
         toast.success('Bug dibuat');
       }
@@ -466,10 +472,10 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
       </div>
       <div className="col-span-2">
         <label className="label">Assigned To</label>
-        <select className="select" value={form.assigned_to} onChange={e => setForm(f => ({ ...f, assigned_to: e.target.value }))}>
-          <option value="">— Belum ditugaskan —</option>
-          {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-        </select>
+        <MultiSelect label="assignee"
+          options={users.map(u => ({ v: u.id, l: u.name }))}
+          selected={form.assignee_ids}
+          onChange={vals => setForm(f => ({ ...f, assignee_ids: vals }))} />
       </div>
       {/* Attachments — queued locally until the bug is created, uploaded live once it exists */}
       <div className="col-span-2">
@@ -779,7 +785,7 @@ export default function BugsIncident() {
       b.code, b.title, b.description, b.steps_to_reproduce, b.severity, b.priority, b.stage,
       b.item_code ? `[${b.item_code}] ${b.item_title || ''}` : '',
       b.product_code || b.product_name || '',
-      b.assigned_to_name || '',
+      (b.assignees || []).map(a => a.name).join(', ') || b.assigned_to_name || '',
       b.reported_by_name || b.reporter_name || b.reporter_email || '',
       b.created_at ? format(parseISO(b.created_at), 'yyyy-MM-dd HH:mm') : '',
       b.closed_at ? format(parseISO(b.closed_at), 'yyyy-MM-dd HH:mm') : '',
@@ -808,7 +814,8 @@ export default function BugsIncident() {
     if (bugFilters.stage.length      && !bugFilters.stage.includes(b.stage))       return false;
     if (bugFilters.severity.length   && !bugFilters.severity.includes(b.severity)) return false;
     if (bugFilters.priority.length   && !bugFilters.priority.includes(b.priority)) return false;
-    if (bugFilters.assigned_to.length && !bugFilters.assigned_to.includes(b.assigned_to)) return false;
+    if (bugFilters.assigned_to.length &&
+        !(b.assignees || []).some(a => bugFilters.assigned_to.includes(a.id))) return false;
     return true;
   });
 
@@ -1078,7 +1085,11 @@ export default function BugsIncident() {
                           <td className="px-3 py-3 text-center"><PriorityBadge priority={b.severity} /></td>
                           <td className="px-3 py-3 text-center"><PriorityBadge priority={b.priority} /></td>
                           <td className="px-3 py-3 text-center"><StatusBadge status={b.stage} /></td>
-                          <td className="px-3 py-3 text-xs text-slate-500">{b.assigned_to_name || '—'}</td>
+                          <td className="px-3 py-3">
+                            {b.assignees?.length > 0
+                              ? <AssigneeStack assignees={b.assignees} />
+                              : <span className="text-xs text-slate-400">—</span>}
+                          </td>
                           <td className="px-3 py-3 text-xs text-slate-500">{b.reported_by_name || b.reporter_name || b.reporter_email || '—'}</td>
                           <td className="px-3 py-3 text-xs text-slate-500">{b.product_code}</td>
                           <td className="px-3 py-3 text-xs text-slate-500 whitespace-nowrap">

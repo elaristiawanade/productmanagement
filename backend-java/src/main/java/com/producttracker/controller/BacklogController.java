@@ -1,5 +1,7 @@
 package com.producttracker.controller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.producttracker.config.PermissionHelper;
 import com.producttracker.service.EmailService;
 import com.producttracker.service.TeamsService;
@@ -10,8 +12,11 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @RestController
@@ -21,6 +26,8 @@ public class BacklogController {
     @Autowired private JdbcTemplate jdbc;
     @Autowired private TeamsService teams;
     @Autowired private EmailService email;
+
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private static final String ITEM_FIELDS =
         "bi.id, bi.product_id, bi.code, bi.title, bi.type, bi.priority, " +
@@ -33,7 +40,12 @@ public class BacklogController {
         "s.name AS sprint_name, " +
         "u.name AS assignee_name, u.avatar_color AS assignee_color, u.email AS assignee_email, " +
         "par.code AS parent_code, par.title AS parent_title, " +
-        "CASE WHEN bi.deadline < NOW() AND bi.status NOT IN ('done','backlog') THEN true ELSE false END AS is_delayed ";
+        "CASE WHEN bi.deadline < NOW() AND bi.status NOT IN ('done','backlog') THEN true ELSE false END AS is_delayed, " +
+        "(SELECT COALESCE(json_agg(json_build_object(" +
+        "  'id', au.id, 'name', au.name, 'color', au.avatar_color, 'email', au.email" +
+        " ) ORDER BY bia.is_primary DESC, au.name), '[]'::json)::text " +
+        " FROM backlog_item_assignees bia JOIN users au ON au.id = bia.user_id " +
+        " WHERE bia.backlog_item_id = bi.id) AS assignees_json ";
 
     private static final String ITEM_JOINS =
         "FROM backlog_items bi " +
@@ -54,7 +66,7 @@ public class BacklogController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String priority,
             @RequestParam(required = false) String type,
-            @RequestParam(required = false) Long assignee_id,
+            @RequestParam(required = false) String assignee_id,
             @RequestParam(required = false) Long parent_id,
             @RequestParam(required = false) String deadline_from,
             @RequestParam(required = false) String deadline_to,
@@ -69,8 +81,10 @@ public class BacklogController {
         Map<String, Object> user = toMap(principal);
         // Skip product restriction when user is viewing their own assigned tasks
         // (MyTask module uses assignee_id=current_user — users must always see their own items)
-        boolean isMyTasksQuery = user != null && assignee_id != null
-            && assignee_id.equals(toLong(user.get("id")));
+        Long soloAssigneeId = (assignee_id != null && !assignee_id.isBlank() && !assignee_id.contains(","))
+            ? toLong(assignee_id.trim()) : null;
+        boolean isMyTasksQuery = user != null && soloAssigneeId != null
+            && soloAssigneeId.equals(toLong(user.get("id")));
 
         if (user != null && !isManagerOrAbove(user) && !isMyTasksQuery) {
             List<Long> assignedIds = getAssignedProductIds(toLong(user.get("id")));
@@ -88,7 +102,19 @@ public class BacklogController {
         if (status != null)      { filters.add(buildInFilter("bi.status", status, params)); }
         if (priority != null)    { filters.add(buildInFilter("bi.priority", priority, params)); }
         if (type != null)        { filters.add(buildInFilter("bi.type", type, params)); }
-        if (assignee_id != null) { filters.add("bi.assignee_id = ?"); params.add(assignee_id); }
+        if (assignee_id != null && !assignee_id.isBlank()) {
+            List<Long> assigneeIds = new ArrayList<>();
+            for (String v : assignee_id.split(",")) {
+                Long l = toLong(v.trim());
+                if (l != null) assigneeIds.add(l);
+            }
+            if (!assigneeIds.isEmpty()) {
+                String ph = assigneeIds.stream().map(x -> "?").collect(Collectors.joining(","));
+                filters.add("EXISTS (SELECT 1 FROM backlog_item_assignees bia2 " +
+                    "WHERE bia2.backlog_item_id = bi.id AND bia2.user_id IN (" + ph + "))");
+                params.addAll(assigneeIds);
+            }
+        }
         if (parent_id != null)   { filters.add("bi.parent_id = ?");   params.add(parent_id); }
         if (deadline_from != null && !deadline_from.isBlank()) {
             filters.add("bi.deadline >= ?::date");
@@ -124,6 +150,7 @@ public class BacklogController {
                 "LIMIT ? OFFSET ?",
                 pageParams.toArray()
             );
+            enrichAssignees(items);
 
             return ResponseEntity.ok(Map.of(
                 "items", items, "total", total != null ? total : 0, "page", page, "limit", limit
@@ -141,6 +168,7 @@ public class BacklogController {
             "SELECT " + ITEM_FIELDS + ITEM_JOINS + "WHERE bi.id=?", id
         );
         if (rows.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "Item tidak ditemukan"));
+        enrichAssignees(rows);
         return ResponseEntity.ok(rows.get(0));
     }
 
@@ -210,24 +238,25 @@ public class BacklogController {
 
             Long newId = toLong(created.get("id"));
 
+            // Sync full assignee set (primary + additional) into the join table
+            Long assigneeId = toLong(body.get("assignee_id"));
+            List<Long> additionalIds = parseIdList(body.get("additional_assignee_ids"));
+            syncAssignees(newId, assigneeId, additionalIds);
+
             List<Map<String, Object>> detail = jdbc.queryForList(
                 "SELECT " + ITEM_FIELDS + ITEM_JOINS + "WHERE bi.id=?", newId
             );
+            enrichAssignees(detail);
             Map<String, Object> item = detail.get(0);
 
             // Activity log
             logActivity(newId, actor, "Item dibuat oleh " + actorName);
 
-            // Notification if assigned
-            Long assigneeId = toLong(body.get("assignee_id"));
-            if (assigneeId != null && !assigneeId.equals(toLong(actor != null ? actor.get("id") : null))) {
-                createNotification(assigneeId, "assignment",
-                    "Kamu di-assign ke " + itemCode,
-                    "Task \"" + body.get("title") + "\" telah di-assign kepadamu oleh " + actorName,
-                    "/backlog?item=" + newId);
-                email.notifyAssignment(str(item.get("assignee_email")), "Backlog",
-                    itemCode, str(item.get("title")), actorName, "/backlog?item=" + newId);
-            }
+            // Notification to every assignee (primary + additional)
+            notifyAssignees(item, actor != null ? toLong(actor.get("id")) : null,
+                "Kamu di-assign ke " + itemCode,
+                "Task \"" + body.get("title") + "\" telah di-assign kepadamu oleh " + actorName,
+                "/backlog?item=" + newId, itemCode, actorName);
 
             // Teams
             teams.sendTaskCreated(item, actorName);
@@ -258,12 +287,11 @@ public class BacklogController {
         if (!canWriteBacklog(principal)) {
             if (PermissionHelper.hasPermission(principal, "update_assigned")) {
                 Long actorId = PermissionHelper.getUserId(principal);
-                List<Map<String, Object>> assigneeCheck = jdbc.queryForList(
-                    "SELECT assignee_id FROM backlog_items WHERE id = ?", id
+                Long assignedCount = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM backlog_item_assignees WHERE backlog_item_id = ? AND user_id = ?",
+                    Long.class, id, actorId
                 );
-                Long currentAssignee = assigneeCheck.isEmpty() ? null
-                    : toLong(assigneeCheck.get(0).get("assignee_id"));
-                if (!java.util.Objects.equals(actorId, currentAssignee)) {
+                if (assignedCount == null || assignedCount == 0) {
                     return ResponseEntity.status(403).body(Map.of("error", "Hanya bisa mengubah item yang di-assign kepadamu"));
                 }
             } else {
@@ -276,6 +304,7 @@ public class BacklogController {
             "SELECT " + ITEM_FIELDS + ITEM_JOINS + "WHERE bi.id=?", id
         );
         if (before.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "Item tidak ditemukan"));
+        enrichAssignees(before);
         Map<String, Object> prev = before.get(0);
 
         String type   = body.get("type")      != null ? (String) body.get("type")      : str(prev.get("type"));
@@ -310,9 +339,15 @@ public class BacklogController {
             recalcAncestorSp(oldParentId); // also recalc old parent if parent changed
         }
 
+        // Sync full assignee set (primary + additional) into the join table
+        Long newAssigneeId = toLong(body.get("assignee_id"));
+        List<Long> additionalIds = parseIdList(body.get("additional_assignee_ids"));
+        syncAssignees(id, newAssigneeId, additionalIds);
+
         List<Map<String, Object>> detail = jdbc.queryForList(
             "SELECT " + ITEM_FIELDS + ITEM_JOINS + "WHERE bi.id=?", id
         );
+        enrichAssignees(detail);
         Map<String, Object> item = detail.get(0);
 
         // Build change description
@@ -324,18 +359,13 @@ public class BacklogController {
             logActivity(id, null, "Item diperbarui oleh " + actorName);
         }
 
-        // Notification if assignee changed
-        Long newAssigneeId = toLong(body.get("assignee_id"));
-        Long prevAssigneeId = toLong(prev.get("assignee_id"));
+        // Notification if the assignee set changed — notify everyone currently assigned
         Long actorId = actor != null ? toLong(actor.get("id")) : null;
-        if (newAssigneeId != null && !newAssigneeId.equals(prevAssigneeId)
-                && !newAssigneeId.equals(actorId)) {
-            createNotification(newAssigneeId, "assignment",
+        if (!extractAssigneeIds(prev).equals(extractAssigneeIds(item))) {
+            notifyAssignees(item, actorId,
                 "Kamu di-assign ke " + str(item.get("code")),
                 "Task \"" + item.get("title") + "\" telah di-assign kepadamu oleh " + actorName,
-                "/backlog?item=" + id);
-            email.notifyAssignment(str(item.get("assignee_email")), "Backlog",
-                str(item.get("code")), str(item.get("title")), actorName, "/backlog?item=" + id);
+                "/backlog?item=" + id, str(item.get("code")), actorName);
         }
 
         // Teams
@@ -382,14 +412,24 @@ public class BacklogController {
             "SELECT " + ITEM_FIELDS + ITEM_JOINS + "WHERE bi.id=?", id
         );
         if (!detail.isEmpty()) {
+            enrichAssignees(detail);
             Map<String, Object> item = detail.get(0);
             teams.sendStatusChanged(item, actorName, oldStatus, newStatus);
-            Long assigneeId = toLong(item.get("assignee_id"));
             Long actorId = actor != null ? toLong(actor.get("id")) : null;
-            if (assigneeId != null && !assigneeId.equals(actorId)) {
-                email.notifyStatusChange(str(item.get("assignee_email")), "Backlog",
-                    str(item.get("code")), str(item.get("title")), oldStatus, newStatus, actorName,
-                    "/backlog?item=" + id);
+            Object rawAssignees = item.get("assignees");
+            if (rawAssignees instanceof List) {
+                for (Object o : (List<?>) rawAssignees) {
+                    if (!(o instanceof Map)) continue;
+                    Map<?, ?> a = (Map<?, ?>) o;
+                    Long uid = toLong(a.get("id"));
+                    if (uid == null || uid.equals(actorId)) continue;
+                    String em = a.get("email") != null ? a.get("email").toString() : "";
+                    if (!em.isBlank()) {
+                        email.notifyStatusChange(em, "Backlog",
+                            str(item.get("code")), str(item.get("title")), oldStatus, newStatus, actorName,
+                            "/backlog?item=" + id);
+                    }
+                }
             }
         }
 
@@ -431,6 +471,94 @@ public class BacklogController {
         } catch (Exception ignored) {}
     }
 
+    /** Notifies (in-app + email) every current assignee of an item, except the actor who made the change. */
+    private void notifyAssignees(Map<String, Object> item, Long excludeUserId,
+                                  String notifTitle, String notifMessage, String link,
+                                  String code, String actorName) {
+        Object rawAssignees = item.get("assignees");
+        if (!(rawAssignees instanceof List)) return;
+        for (Object o : (List<?>) rawAssignees) {
+            if (!(o instanceof Map)) continue;
+            Map<?, ?> a = (Map<?, ?>) o;
+            Long uid = toLong(a.get("id"));
+            if (uid == null || uid.equals(excludeUserId)) continue;
+            createNotification(uid, "assignment", notifTitle, notifMessage, link);
+            String em = a.get("email") != null ? a.get("email").toString() : "";
+            if (!em.isBlank()) {
+                email.notifyAssignment(em, "Backlog", code, str(item.get("title")), actorName, link);
+            }
+        }
+    }
+
+    /** Replaces this item's assignee set (primary + additional) in the join table. */
+    private void syncAssignees(Long itemId, Long primaryId, List<Long> additionalIds) {
+        jdbc.update("DELETE FROM backlog_item_assignees WHERE backlog_item_id = ?", itemId);
+        Set<Long> all = new LinkedHashSet<>();
+        if (primaryId != null) all.add(primaryId);
+        if (additionalIds != null) all.addAll(additionalIds);
+        for (Long uid : all) {
+            boolean isPrimary = uid.equals(primaryId);
+            jdbc.update("INSERT INTO backlog_item_assignees (backlog_item_id, user_id, is_primary) VALUES (?,?,?)",
+                itemId, uid, isPrimary);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Long> parseIdList(Object raw) {
+        List<Long> ids = new ArrayList<>();
+        if (!(raw instanceof List)) return ids;
+        for (Object o : (List<Object>) raw) {
+            Long l = toLong(o);
+            if (l != null) ids.add(l);
+        }
+        return ids;
+    }
+
+    /** Parses the assignees_json text column produced by ITEM_FIELDS into a List<Map> under "assignees". */
+    private void enrichAssignees(List<Map<String, Object>> rows) {
+        for (Map<String, Object> row : rows) enrichAssignees(row);
+    }
+
+    private void enrichAssignees(Map<String, Object> row) {
+        Object raw = row.remove("assignees_json");
+        List<Map<String, Object>> assignees;
+        try {
+            assignees = raw == null ? List.of()
+                : JSON.readValue(raw.toString(), new TypeReference<List<Map<String, Object>>>() {});
+        } catch (Exception e) {
+            assignees = List.of();
+        }
+        row.put("assignees", assignees);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Set<Long> extractAssigneeIds(Map<String, Object> row) {
+        Object a = row.get("assignees");
+        Set<Long> ids = new HashSet<>();
+        if (!(a instanceof List)) return ids;
+        for (Object o : (List<Object>) a) {
+            if (o instanceof Map) {
+                Long id = toLong(((Map<String, Object>) o).get("id"));
+                if (id != null) ids.add(id);
+            }
+        }
+        return ids;
+    }
+
+    @SuppressWarnings("unchecked")
+    private String assigneeNamesJoined(Map<String, Object> row) {
+        Object a = row.get("assignees");
+        if (!(a instanceof List)) return "";
+        List<String> names = new ArrayList<>();
+        for (Object o : (List<Object>) a) {
+            if (o instanceof Map) {
+                Object n = ((Map<String, Object>) o).get("name");
+                if (n != null) names.add(n.toString());
+            }
+        }
+        return String.join(", ", names);
+    }
+
     private void createNotification(Long userId, String type, String title, String message, String link) {
         try {
             jdbc.update(
@@ -446,8 +574,8 @@ public class BacklogController {
         checkChange(changes, "Status", str(prev.get("status")), str(body.get("status")));
         checkChange(changes, "Prioritas", str(prev.get("priority")), str(body.get("priority")));
         checkChange(changes, "Assignee",
-            str(prev.get("assignee_name")),
-            str(after.get("assignee_name")));
+            assigneeNamesJoined(prev),
+            assigneeNamesJoined(after));
         checkChange(changes, "Sprint",
             str(prev.get("sprint_name")),
             str(after.get("sprint_name")));

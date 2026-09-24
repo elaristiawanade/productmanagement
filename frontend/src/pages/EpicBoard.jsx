@@ -5,6 +5,7 @@ import { format, parseISO } from 'date-fns';
 import client from '../api/client';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
+import AssigneeStack from '../components/AssigneeStack';
 import { useAuth } from '../context/AuthContext';
 import { renderWithLinks } from '../utils/linkify';
 
@@ -16,16 +17,6 @@ const TYPE_CLS = {
   story: 'text-blue-600 bg-blue-50',
   epic:  'text-purple-600 bg-purple-50',
 };
-
-function Avatar({ name, color }) {
-  return (
-    <div
-      className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
-      style={{ backgroundColor: color || '#6366f1' }}>
-      {name?.charAt(0)}
-    </div>
-  );
-}
 
 // ─── Task / Bug row (leaf level) ─────────────────────────────────────────────
 
@@ -42,7 +33,8 @@ function TaskRow({ item }) {
         <span className="text-[10px] text-slate-400 shrink-0">{item.story_points}pt</span>
       )}
       <StatusBadge status={item.status} />
-      {item.assignee_name && <Avatar name={item.assignee_name} color={item.assignee_color} />}
+      <AssigneeStack assignees={item.assignees} showName={false} size="xs" />
+
       {item.deadline && (
         <span className={`text-[11px] shrink-0 ${item.is_delayed ? 'text-red-500 font-medium' : 'text-slate-400'}`}>
           {format(parseISO(item.deadline), 'dd MMM')}
@@ -106,12 +98,12 @@ function StoryRow({ story }) {
         )}
         <PriorityBadge priority={story.priority} />
         <StatusBadge status={story.status} />
-        {story.assignee_name && (
-          <div className="flex items-center gap-1 shrink-0">
-            <Avatar name={story.assignee_name} color={story.assignee_color} />
-            <span className="text-xs text-slate-500 max-w-[70px] truncate hidden sm:block">{story.assignee_name}</span>
-          </div>
-        )}
+        <div className="hidden sm:block">
+          <AssigneeStack assignees={story.assignees} size="xs" />
+        </div>
+        <div className="sm:hidden">
+          <AssigneeStack assignees={story.assignees} showName={false} size="xs" />
+        </div>
         {story.deadline && (
           <span className={`text-xs shrink-0 ${story.is_delayed ? 'text-red-500 font-medium' : 'text-slate-400'}`}>
             {format(parseISO(story.deadline), 'dd MMM')}
@@ -216,12 +208,7 @@ function EpicRow({ epic }) {
         )}
         <PriorityBadge priority={epic.priority} />
         <StatusBadge status={epic.status} />
-        {epic.assignee_name && (
-          <div className="flex items-center gap-1.5 shrink-0">
-            <Avatar name={epic.assignee_name} color={epic.assignee_color} />
-            <span className="text-xs text-slate-600 max-w-[90px] truncate">{epic.assignee_name}</span>
-          </div>
-        )}
+        <AssigneeStack assignees={epic.assignees} size="xs" />
         {epic.deadline && (
           <span className={`text-sm shrink-0 ${epic.is_delayed ? 'text-red-500 font-semibold' : 'text-slate-500'}`}>
             {format(parseISO(epic.deadline), 'dd MMM yyyy')}

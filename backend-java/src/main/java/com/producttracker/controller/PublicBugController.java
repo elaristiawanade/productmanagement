@@ -1,5 +1,6 @@
 package com.producttracker.controller;
 
+import com.producttracker.service.AssigneeSupport;
 import com.producttracker.service.EmailService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -30,6 +31,9 @@ public class PublicBugController {
 
     @Autowired
     private EmailService email;
+
+    @Autowired
+    private AssigneeSupport assigneeSupport;
 
     @GetMapping("/products")
     public ResponseEntity<?> listActiveProducts() {
@@ -92,18 +96,19 @@ public class PublicBugController {
             );
 
             Long newBugId = toLong(row.get("id"));
+            assigneeSupport.sync("bug_assignees", "bug_id", newBugId, ownerId, List.of());
+            Map<String, Object> detail = bugDetail(newBugId);
             if (ownerId != null) {
                 createNotification(ownerId, "assignment",
                     "Bug publik baru " + row.get("code"),
                     "Bug \"" + row.get("title") + "\" dilaporkan oleh " + reporterName + " (" + reporterEmail + ")",
                     "/bugs?bug=" + newBugId);
-                Map<String, Object> detail = bugDetail(newBugId);
                 email.notifyAssignment(detail != null ? str(detail.get("assigned_to_email")) : null,
                     "Bug Incident", str(row.get("code")), str(row.get("title")), "System (Laporan Publik)",
                     "/bugs?bug=" + newBugId);
             }
 
-            return ResponseEntity.status(201).body(row);
+            return ResponseEntity.status(201).body(detail != null ? detail : row);
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
         }
@@ -120,11 +125,14 @@ public class PublicBugController {
 
     private Map<String, Object> bugDetail(Long bugId) {
         List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT b.*, au.name AS assigned_to_name, au.email AS assigned_to_email " +
+            "SELECT b.*, au.name AS assigned_to_name, au.email AS assigned_to_email, " +
+            "  " + assigneeSupport.assigneesJsonSelect("bug_assignees", "bug_id", "b") + " " +
             "FROM bugs b LEFT JOIN users au ON au.id = b.assigned_to WHERE b.id = ?",
             bugId
         );
-        return rows.isEmpty() ? null : rows.get(0);
+        if (rows.isEmpty()) return null;
+        assigneeSupport.enrich(rows);
+        return rows.get(0);
     }
 
     private Object orDefault(Object v, Object d) {

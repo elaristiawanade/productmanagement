@@ -76,7 +76,8 @@ public class DashboardController {
             "  COUNT(CASE WHEN bi.status IN ('todo','in_review') THEN 1 END) AS pending, " +
             "  COALESCE(SUM(bi.story_points), 0)                             AS total_points " +
             "FROM users u " +
-            "LEFT JOIN backlog_items bi ON bi.assignee_id = u.id " +
+            "LEFT JOIN backlog_item_assignees bia ON bia.user_id = u.id " +
+            "LEFT JOIN backlog_items bi ON bi.id = bia.backlog_item_id " +
             "  AND bi.status NOT IN ('done','backlog') " +
             "  AND bi.type NOT IN ('story','epic') " +
             "LEFT JOIN roles r ON r.id = u.role_id " +
@@ -100,7 +101,8 @@ public class DashboardController {
             "  COUNT(bi.id)                            AS total_items, " +
             "  COUNT(CASE WHEN bi.status = 'done' THEN 1 END) AS done_items " +
             "FROM users u " +
-            "LEFT JOIN backlog_items bi ON bi.assignee_id = u.id " +
+            "LEFT JOIN backlog_item_assignees bia ON bia.user_id = u.id " +
+            "LEFT JOIN backlog_items bi ON bi.id = bia.backlog_item_id " +
             "  AND ( " +
             "    bi.sprint_id IN (SELECT id FROM sprints WHERE status = 'active') " +
             "    OR bi.type = 'independent' " +
