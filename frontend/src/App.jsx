@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout     from './components/Layout';
 import Login      from './pages/Login';
+import ReportBug  from './pages/ReportBug';
 import Dashboard  from './pages/Dashboard';
 import Backlog    from './pages/Backlog';
 import Sprints    from './pages/Sprints';
@@ -15,6 +16,7 @@ import EpicBoard  from './pages/EpicBoard';
 import MyTask     from './pages/MyTask';
 import Profile    from './pages/Profile';
 import CLevel     from './pages/CLevel';
+import NotificationSettings from './pages/NotificationSettings';
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -34,6 +36,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
+      <Route path="/report-bug" element={<ReportBug />} />
       <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
         <Route index       element={<Dashboard />} />
         <Route path="backlog"      element={<Backlog />} />
@@ -48,6 +51,7 @@ function AppRoutes() {
         <Route path="c-level"      element={<CLevel />} />
         <Route path="import/jira"  element={<JiraImport />} />
         <Route path="profile"      element={<Profile />} />
+        <Route path="settings/notifications" element={<NotificationSettings />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -7,6 +7,7 @@ import client from '../api/client';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
+import AssigneeStack from '../components/AssigneeStack';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { format, parseISO, differenceInDays } from 'date-fns';
@@ -267,11 +268,8 @@ export default function Sprints() {
                             </div>
                             <p className="text-xs font-medium text-slate-700 leading-snug mb-2 line-clamp-2">{item.title}</p>
                             <div className="flex items-center justify-between">
-                              {item.assignee_name
-                                ? <div className="w-5 h-5 rounded-full text-white text-xs flex items-center justify-center font-bold"
-                                    style={{ backgroundColor: item.assignee_color || '#6366f1' }}>
-                                    {item.assignee_name.charAt(0)}
-                                  </div>
+                              {item.assignees?.length > 0
+                                ? <AssigneeStack assignees={item.assignees} showName={false} size="xs" />
                                 : <span />}
                               <span className="text-xs font-semibold text-slate-400">{item.story_points}pt</span>
                             </div>

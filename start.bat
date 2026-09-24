@@ -13,6 +13,12 @@ set APP_JWT_EXPIRATION=604800000
 set APP_CORS_ORIGIN=http://localhost:4000
 set UPLOAD_DIR=./uploads
 set TEAMS_WEBHOOK_URL=
+set MAIL_NOTIFICATIONS_ENABLED=false
+set MAIL_HOST=smtp.office365.com
+set MAIL_PORT=587
+set MAIL_USERNAME=
+set MAIL_PASSWORD=
+set MAIL_FROM=
 
 echo Starting Product Tracker on port %SERVER_PORT%...
 echo Access: http://localhost:%SERVER_PORT%

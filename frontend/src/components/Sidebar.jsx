@@ -30,6 +30,7 @@ const NAV_MAIN = [
 
 const NAV_BOTTOM = [
   { to: '/import/jira', icon: FileDown, label: 'Import Jira', roles: ['super_admin','manager','po'] },
+  { to: '/settings/notifications', icon: Settings, label: 'Notification Settings', roles: ['super_admin'] },
 ];
 
 export default function Sidebar({ collapsed, onToggle }) {

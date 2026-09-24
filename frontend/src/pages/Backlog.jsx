@@ -6,6 +6,8 @@ import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import LinkInsertButton from '../components/LinkInsertButton';
+import SearchableSelect from '../components/SearchableSelect';
+import AssigneeStack from '../components/AssigneeStack';
 import { renderWithLinks } from '../utils/linkify';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -416,7 +418,7 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
     estimated_hours: item?.estimated_hours || '',
     status: item?.status || 'backlog',
     sprint_id: item?.sprint_id || '',
-    assignee_id: item?.assignee_id || '',
+    assignee_ids: (item?.assignees || []).map(a => a.id),
     acceptance_criteria: item?.acceptance_criteria || '',
     notes: item?.notes || '',
     deadline: item?.deadline ? item.deadline.split('T')[0] : '',
@@ -550,6 +552,10 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
     setSaving(true);
     try {
       const payload = { ...form };
+      // Backend stores the first pick as the legacy `assignee_id` column, rest via additional_assignee_ids
+      payload.assignee_id = payload.assignee_ids[0] || '';
+      payload.additional_assignee_ids = payload.assignee_ids.slice(1);
+      delete payload.assignee_ids;
       if (payload.type === 'epic') payload.parent_id = null;
       if (payload.type === 'independent') { payload.sprint_id = null; payload.parent_id = null; }
       if (item?.id) {
@@ -613,12 +619,15 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
       {(form.type === 'task' || form.type === 'bug') && (
         <div className="col-span-2">
           <F label="Parent User Story" required>
-            <select className="select border-indigo-300 focus:border-indigo-500" value={form.parent_id}
-              onChange={e => setForm(f => ({ ...f, parent_id: e.target.value }))} required>
-              <option value="">— Pilih user story —</option>
-              {stories.length === 0 && <option disabled value="">Tidak ada story di produk ini</option>}
-              {stories.map(s => <option key={s.id} value={s.id}>{s.code} — {s.title}</option>)}
-            </select>
+            <SearchableSelect
+              className="border-indigo-300"
+              value={form.parent_id}
+              onChange={v => setForm(f => ({ ...f, parent_id: v }))}
+              options={stories.map(s => ({ value: String(s.id), label: `${s.code} — ${s.title}` }))}
+              placeholder="— Pilih user story —"
+              searchPlaceholder="Cari user story..."
+              emptyMessage="Tidak ada story di produk ini"
+            />
           </F>
           <p className="text-xs text-indigo-500 mt-1 flex items-center gap-1">
             <Link2 className="w-3 h-3" />{form.type === 'task' ? 'Task' : 'Bug'} harus terhubung ke tepat 1 user story
@@ -628,13 +637,16 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
       {form.type === 'story' && (
         <div className="col-span-2">
           <F label="Parent Epic">
-            <select className="select border-purple-300 focus:border-purple-500" value={form.parent_id}
-              onChange={e => setForm(f => ({ ...f, parent_id: e.target.value }))}>
-              <option value="">— Tanpa epic (standalone story) —</option>
-              {epicsBacklog.length === 0
-                ? <option disabled value="">Tidak ada epic di produk ini</option>
-                : epicsBacklog.map(e => <option key={e.id} value={e.id}>{e.code} — {e.title}</option>)}
-            </select>
+            <SearchableSelect
+              className="border-purple-300"
+              value={form.parent_id}
+              onChange={v => setForm(f => ({ ...f, parent_id: v }))}
+              options={epicsBacklog.map(e => ({ value: String(e.id), label: `${e.code} — ${e.title}` }))}
+              placeholder="— Tanpa epic (standalone story) —"
+              emptyOptionLabel="— Tanpa epic (standalone story) —"
+              searchPlaceholder="Cari epic..."
+              emptyMessage="Tidak ada epic di produk ini"
+            />
           </F>
           <p className="text-xs text-purple-500 mt-1 flex items-center gap-1">
             <Link2 className="w-3 h-3" />Story dapat dihubungkan ke satu epic
@@ -717,10 +729,10 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
         )}
       </F>
       <F label="Assignee">
-        <select className="select" value={form.assignee_id} onChange={e => setForm(f => ({ ...f, assignee_id: e.target.value }))}>
-          <option value="">Unassigned</option>
-          {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-        </select>
+        <MultiSelect label="assignee"
+          options={users.map(u => ({ v: u.id, l: u.name }))}
+          selected={form.assignee_ids}
+          onChange={vals => setForm(f => ({ ...f, assignee_ids: vals }))} />
       </F>
       <F label="Deadline">
         <input type="date" className="input" value={form.deadline}
@@ -1116,7 +1128,7 @@ export default function Backlog() {
                   <th className="text-center px-3 py-2.5 w-20">Pts</th>
                   <th className="text-left px-3 py-2.5 w-32">Produk</th>
                   <th className="text-left px-3 py-2.5 w-28">Sprint</th>
-                  <th className="text-left px-3 py-2.5 w-28">Assignee</th>
+                  <th className="text-left px-3 py-2.5 w-40">Assignee</th>
                   <th className="text-left px-3 py-2.5 w-24">Deadline</th>
                   <th className="text-center px-3 py-2.5 w-16">Aksi</th>
                 </tr>
@@ -1187,15 +1199,9 @@ export default function Backlog() {
                       {item.type === 'independent' ? <span className="text-orange-500">⚡ independent</span> : (item.sprint_name || '—')}
                     </td>
                     <td className="px-3 py-3">
-                      {item.assignee_name ? (
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-5 h-5 rounded-full text-white text-xs flex items-center justify-center font-medium"
-                            style={{ backgroundColor: item.assignee_color || '#6366f1' }}>
-                            {item.assignee_name.charAt(0)}
-                          </div>
-                          <span className="text-xs text-slate-600 truncate max-w-[80px]">{item.assignee_name}</span>
-                        </div>
-                      ) : <span className="text-xs text-slate-400">—</span>}
+                      {item.assignees?.length > 0
+                        ? <AssigneeStack assignees={item.assignees} />
+                        : <span className="text-xs text-slate-400">—</span>}
                     </td>
                     <td className="px-3 py-3 text-xs">
                       {item.deadline

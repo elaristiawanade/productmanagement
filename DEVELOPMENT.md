@@ -148,6 +148,8 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v14.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v15.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v16.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v17.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v18.sql"
 ```
 
 > **Penting:** `migration_v10.sql` menambahkan kolom `users.department`, yang di-query
@@ -165,7 +167,37 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 
 ---
 
-## 8. Struktur Direktori
+## 8. Notifikasi Email (Testing Lokal)
+
+Fitur Notifikasi Email (lihat PRD 3.13 & 3.14) dikonfigurasi lewat halaman **Notification Settings**
+di aplikasi (Super Admin only) — bukan lagi cuma lewat `.env`. Config tersimpan di tabel `app_settings`
+dan aktif langsung tanpa restart backend.
+
+**Testing tanpa akun SMTP asli (Mailpit):**
+
+Stack Docker (`docker-compose.yml`) menyertakan service `mailpit` — SMTP catcher lokal, tidak butuh
+kredensial apa pun. Setelah `docker compose up`, buka halaman Notification Settings dan isi:
+
+| Field | Nilai |
+|---|---|
+| SMTP Host | `mailpit` |
+| Port | `1025` |
+| SMTP Auth | tidak dicentang |
+| STARTTLS | tidak dicentang |
+
+Simpan, lalu pakai tombol **Kirim Email Tes** — hasilnya bisa dilihat di **http://localhost:8025**.
+Email dari trigger asli (assignment, status/stage berubah, mention) juga akan muncul di sana selama
+config mengarah ke Mailpit.
+
+Untuk SMTP asli (mis. Office365/Outlook), ganti Host/Port/Username/Password/From lewat halaman yang
+sama, dan aktifkan kembali SMTP Auth + STARTTLS. Kalau autentikasi ditolak dengan pesan
+`SmtpClientAuthentication is disabled for the Mailbox`, itu bukan bug — Microsoft mematikan SMTP AUTH
+secara default di kebanyakan mailbox baru; perlu diaktifkan dari sisi admin akun/tenant Microsoft-nya
+(lihat https://aka.ms/smtp_auth_disabled).
+
+---
+
+## 9. Struktur Direktori
 
 ```
 product-tracker/
@@ -187,7 +219,9 @@ product-tracker/
 │       ├── migration_v13.sql
 │       ├── migration_v14.sql
 │       ├── migration_v15.sql
-│       └── migration_v16.sql
+│       ├── migration_v16.sql
+│       ├── migration_v17.sql
+│       └── migration_v18.sql
 ├── backend-java/          # Spring Boot API (port 4000)
 │   ├── src/
 │   ├── pom.xml

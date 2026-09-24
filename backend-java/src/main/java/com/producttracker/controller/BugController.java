@@ -1,6 +1,8 @@
 package com.producttracker.controller;
 
 import com.producttracker.config.BugHelper;
+import com.producttracker.service.AssigneeSupport;
+import com.producttracker.service.EmailService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -8,8 +10,12 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping("/api/bugs")
@@ -20,6 +26,14 @@ public class BugController {
 
     @Autowired
     private BugHelper bugHelper;
+
+    @Autowired
+    private EmailService email;
+
+    @Autowired
+    private AssigneeSupport assigneeSupport;
+
+    private static final Pattern MENTION_PATTERN = Pattern.compile("@\\[([^\\]]+)\\]");
 
     private ResponseEntity<?> forbidden() {
         return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses ke modul Bugs Incident"));
@@ -51,7 +65,8 @@ public class BugController {
             "  MAX(bp.created_at)    AS last_update, " +
             "  (SELECT u3.name FROM bug_progress_updates bp3 " +
             "     LEFT JOIN users u3 ON u3.id = bp3.updated_by " +
-            "     WHERE bp3.bug_id = b.id ORDER BY bp3.created_at DESC LIMIT 1) AS last_updated_by_name " +
+            "     WHERE bp3.bug_id = b.id ORDER BY bp3.created_at DESC LIMIT 1) AS last_updated_by_name, " +
+            "  " + assigneeSupport.assigneesJsonSelect("bug_assignees", "bug_id", "b") + " " +
             "FROM bugs b " +
             "LEFT JOIN backlog_items bi ON bi.id = b.backlog_item_id " +
             "LEFT JOIN products      p  ON p.id  = b.product_id " +
@@ -62,6 +77,7 @@ public class BugController {
             "GROUP BY b.id, bi.code, bi.title, p.name, p.code, ru.name, au.name " +
             "ORDER BY b.product_id, b.code",
             params.toArray());
+        assigneeSupport.enrich(rows);
         return ResponseEntity.ok(rows);
     }
 
@@ -81,7 +97,8 @@ public class BugController {
             );
             String pCode = pRows.isEmpty() ? "BUG" : (String) pRows.get(0).get("code");
             List<Map<String, Object>> last = jdbc.queryForList(
-                "SELECT code FROM bugs WHERE product_id=? AND code LIKE ? ORDER BY code DESC LIMIT 1",
+                "SELECT code FROM bugs WHERE product_id=? AND code LIKE ? " +
+                "ORDER BY CAST(SUBSTRING(code FROM '\\d+$') AS INTEGER) DESC LIMIT 1",
                 productId, pCode + "-%"
             );
             int lastNum = 0;
@@ -109,7 +126,23 @@ public class BugController {
                 user != null ? user.get("id") : null,
                 toLong(body.get("assigned_to"))
             );
-            return ResponseEntity.status(201).body(row);
+
+            Long newBugId = toLong(row.get("id"));
+            Long assignedTo = toLong(body.get("assigned_to"));
+            List<Long> additionalIds = assigneeSupport.parseIdList(body.get("additional_assignee_ids"));
+            assigneeSupport.sync("bug_assignees", "bug_id", newBugId, assignedTo, additionalIds);
+
+            Long actorId = user != null ? toLong(user.get("id")) : null;
+            String actorName = user != null ? str(user.get("name")) : "System";
+            Map<String, Object> detail = bugDetail(newBugId);
+            if (detail != null) {
+                notifyBugAssignees(detail, actorId,
+                    "Kamu di-assign ke bug " + row.get("code"),
+                    "Bug \"" + row.get("title") + "\" telah di-assign kepadamu oleh " + actorName,
+                    "/bugs?bug=" + newBugId, actorName);
+            }
+
+            return ResponseEntity.status(201).body(detail != null ? detail : row);
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
         }
@@ -119,6 +152,10 @@ public class BugController {
     public ResponseEntity<?> updateBug(@AuthenticationPrincipal Object principal,
                                         @PathVariable Long id, @RequestBody Map<String, Object> body) {
         if (!bugHelper.canAccess(principal)) return forbidden();
+
+        Map<String, Object> before = bugDetail(id);
+        if (before == null) return ResponseEntity.status(404).body(Map.of("error", "Bug tidak ditemukan"));
+
         int updated = jdbc.update(
             "UPDATE bugs SET title=?,description=?,steps_to_reproduce=?,severity=?,priority=?,assigned_to=?,backlog_item_id=? WHERE id=?",
             body.get("title"), body.get("description"), body.get("steps_to_reproduce"),
@@ -126,8 +163,26 @@ public class BugController {
             toLong(body.get("assigned_to")), toLong(body.get("backlog_item_id")), id
         );
         if (updated == 0) return ResponseEntity.status(404).body(Map.of("error", "Bug tidak ditemukan"));
-        Map<String, Object> row = jdbc.queryForMap("SELECT * FROM bugs WHERE id=?", id);
-        return ResponseEntity.ok(row);
+
+        Long newAssignedTo = toLong(body.get("assigned_to"));
+        List<Long> additionalIds = assigneeSupport.parseIdList(body.get("additional_assignee_ids"));
+        assigneeSupport.sync("bug_assignees", "bug_id", id, newAssignedTo, additionalIds);
+
+        Map<String, Object> detail = bugDetail(id);
+        if (detail == null) return ResponseEntity.status(404).body(Map.of("error", "Bug tidak ditemukan"));
+
+        Map<String, Object> user = toMap(principal);
+        Long actorId = user != null ? toLong(user.get("id")) : null;
+        String actorName = user != null ? str(user.get("name")) : "System";
+
+        if (!assigneeSupport.extractIds(before).equals(assigneeSupport.extractIds(detail))) {
+            notifyBugAssignees(detail, actorId,
+                "Kamu di-assign ke bug " + detail.get("code"),
+                "Bug \"" + detail.get("title") + "\" telah di-assign kepadamu oleh " + actorName,
+                "/bugs?bug=" + id, actorName);
+        }
+
+        return ResponseEntity.ok(detail);
     }
 
     @DeleteMapping("/{id}")
@@ -178,6 +233,8 @@ public class BugController {
         Long bugId = toLong(body.get("bug_id"));
         String stage = (String) body.get("stage");
         Map<String, Object> user = toMap(principal);
+        Map<String, Object> beforeBug = bugDetail(bugId);
+        String oldStage = beforeBug != null ? str(beforeBug.get("stage")) : null;
         try {
             Map<String, Object> row = jdbc.queryForMap(
                 "INSERT INTO bug_progress_updates (bug_id, stage, note, updated_by) VALUES (?,?,?,?) RETURNING *",
@@ -187,6 +244,32 @@ public class BugController {
                 "UPDATE bugs SET stage=?, closed_at = CASE WHEN ?='done' THEN NOW() ELSE NULL END WHERE id=?",
                 stage, stage, bugId
             );
+
+            if (beforeBug != null) {
+                Long actorId = user != null ? toLong(user.get("id")) : null;
+                String actorName = user != null ? str(user.get("name")) : "System";
+                Object rawAssignees = beforeBug.get("assignees");
+                if (rawAssignees instanceof List) {
+                    for (Object o : (List<?>) rawAssignees) {
+                        if (!(o instanceof Map)) continue;
+                        Map<?, ?> a = (Map<?, ?>) o;
+                        Long uid = assigneeSupport.toLong(a.get("id"));
+                        if (uid == null || uid.equals(actorId)) continue;
+                        createNotification(uid, "status_change",
+                            "Status bug " + beforeBug.get("code") + " berubah",
+                            "Bug \"" + beforeBug.get("title") + "\" berubah stage dari \"" + oldStage +
+                                "\" menjadi \"" + stage + "\" — oleh " + actorName,
+                            "/bugs?bug=" + bugId);
+                        String em = a.get("email") != null ? a.get("email").toString() : "";
+                        if (!em.isBlank()) {
+                            email.notifyStatusChange(em, "Bug Incident",
+                                str(beforeBug.get("code")), str(beforeBug.get("title")), oldStage, stage, actorName,
+                                "/bugs?bug=" + bugId);
+                        }
+                    }
+                }
+            }
+
             return ResponseEntity.status(201).body(row);
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
@@ -287,13 +370,17 @@ public class BugController {
         }
         Map<String, Object> user = toMap(principal);
 
-        List<Map<String, Object>> exists = jdbc.queryForList("SELECT id FROM bugs WHERE id = ?", id);
+        List<Map<String, Object>> exists = jdbc.queryForList("SELECT id, code FROM bugs WHERE id = ?", id);
         if (exists.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "Bug tidak ditemukan"));
 
+        Long commenterId = user != null ? toLong(user.get("id")) : null;
         Map<String, Object> row = jdbc.queryForMap(
             "INSERT INTO bug_activities (bug_id, user_id, type, content) VALUES (?,?,'comment',?) RETURNING id",
-            id, user != null ? toLong(user.get("id")) : null, content.trim()
+            id, commenterId, content.trim()
         );
+
+        notifyMentions(id, str(exists.get(0).get("code")), commenterId, content.trim());
+
         List<Map<String, Object>> full = jdbc.queryForList(
             "SELECT a.id, a.type, a.content, a.created_at, " +
             "       u.name AS user_name, u.avatar_color AS user_avatar_color, u.id AS user_id " +
@@ -328,6 +415,73 @@ public class BugController {
         return ResponseEntity.ok(Map.of("message", "Komentar dihapus"));
     }
 
+    private void notifyMentions(Long bugId, String bugCode, Long commenterId, String content) {
+        Matcher m = MENTION_PATTERN.matcher(content);
+        Set<String> names = new HashSet<>();
+        while (m.find()) names.add(m.group(1));
+        if (names.isEmpty()) return;
+
+        List<Map<String, Object>> commenterRows = commenterId != null
+            ? jdbc.queryForList("SELECT name FROM users WHERE id = ?", commenterId) : List.of();
+        String commenterName = commenterRows.isEmpty() ? "Seseorang" : str(commenterRows.get(0).get("name"));
+        String snippet = content.length() > 200 ? content.substring(0, 200) + "..." : content;
+
+        for (String name : names) {
+            List<Map<String, Object>> rows = jdbc.queryForList("SELECT id, email FROM users WHERE name = ?", name);
+            if (rows.isEmpty()) continue;
+            Long mentionedId = ((Number) rows.get(0).get("id")).longValue();
+            if (mentionedId.equals(commenterId)) continue;
+
+            createNotification(mentionedId, "mention",
+                commenterName + " menyebut kamu di " + bugCode,
+                snippet,
+                "/bugs?bug=" + bugId);
+
+            email.notifyMention(str(rows.get(0).get("email")), commenterName, snippet,
+                "Bug Incident", bugCode, "/bugs?bug=" + bugId);
+        }
+    }
+
+    private void createNotification(Long userId, String type, String title, String message, String link) {
+        try {
+            jdbc.update(
+                "INSERT INTO notifications (user_id, type, title, message, link) VALUES (?,?,?,?,?)",
+                userId, type, title, message, link
+            );
+        } catch (Exception ignored) {}
+    }
+
+    /** Notifies (in-app + email) every current assignee of a bug, except the actor who made the change. */
+    private void notifyBugAssignees(Map<String, Object> detail, Long excludeUserId,
+                                     String notifTitle, String notifMessage, String link, String actorName) {
+        Object rawAssignees = detail.get("assignees");
+        if (!(rawAssignees instanceof List)) return;
+        for (Object o : (List<?>) rawAssignees) {
+            if (!(o instanceof Map)) continue;
+            Map<?, ?> a = (Map<?, ?>) o;
+            Long uid = assigneeSupport.toLong(a.get("id"));
+            if (uid == null || uid.equals(excludeUserId)) continue;
+            createNotification(uid, "assignment", notifTitle, notifMessage, link);
+            String em = a.get("email") != null ? a.get("email").toString() : "";
+            if (!em.isBlank()) {
+                email.notifyAssignment(em, "Bug Incident", str(detail.get("code")), str(detail.get("title")),
+                    actorName, link);
+            }
+        }
+    }
+
+    private Map<String, Object> bugDetail(Long bugId) {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+            "SELECT b.*, au.name AS assigned_to_name, au.email AS assigned_to_email, " +
+            "  " + assigneeSupport.assigneesJsonSelect("bug_assignees", "bug_id", "b") + " " +
+            "FROM bugs b LEFT JOIN users au ON au.id = b.assigned_to WHERE b.id = ?",
+            bugId
+        );
+        if (rows.isEmpty()) return null;
+        assigneeSupport.enrich(rows);
+        return rows.get(0);
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> toMap(Object o) {
         return o instanceof Map ? (Map<String, Object>) o : null;
@@ -336,6 +490,8 @@ public class BugController {
     private Object orDefault(Object v, Object d) {
         return v != null ? v : d;
     }
+
+    private String str(Object v) { return v == null ? "" : v.toString(); }
 
     private Long toLong(Object v) {
         if (v == null) return null;

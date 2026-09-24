@@ -214,7 +214,8 @@ public class LeaderNotesController {
     private void createLinkedTask(String department, String title, Long createdBy, Long sourceNoteId) {
         String prefix = departmentHelper.codePrefix(department);
         List<Map<String, Object>> lastRows = jdbc.queryForList(
-            "SELECT code FROM leader_tasks WHERE code LIKE ? ORDER BY code DESC LIMIT 1", prefix + "-%"
+            "SELECT code FROM leader_tasks WHERE code LIKE ? " +
+            "ORDER BY CAST(SUBSTRING(code FROM '\\d+$') AS INTEGER) DESC LIMIT 1", prefix + "-%"
         );
         int lastNum = 0;
         if (!lastRows.isEmpty()) {

@@ -204,7 +204,8 @@ public class ImportController {
 
     private String generateCode(String productCode, Long productId) {
         List<Map<String, Object>> last = jdbc.queryForList(
-            "SELECT code FROM backlog_items WHERE product_id=? AND code LIKE ? ORDER BY code DESC LIMIT 1",
+            "SELECT code FROM backlog_items WHERE product_id=? AND code LIKE ? " +
+            "ORDER BY CAST(SUBSTRING(code FROM '\\d+$') AS INTEGER) DESC LIMIT 1",
             productId, productCode + "-%"
         );
         int num = 0;

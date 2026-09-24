@@ -75,6 +75,7 @@ public class SecurityConfig {
             .authorizeRequests(auth -> auth
                 .antMatchers("/api/auth/login").permitAll()
                 .antMatchers("/api/attachments/file/**").permitAll()
+                .antMatchers("/api/public/**").permitAll()
                 // Static frontend assets — always accessible
                 .antMatchers("/", "/index.html", "/error", "/favicon.ico",
                              "/assets/**", "/*.js", "/*.css", "/*.png", "/*.svg").permitAll()

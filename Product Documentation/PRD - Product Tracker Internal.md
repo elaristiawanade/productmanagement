@@ -3,8 +3,8 @@
 
 | | |
 |---|---|
-| **Versi** | 2.2 |
-| **Tanggal** | 09 September 2026 |
+| **Versi** | 2.5 |
+| **Tanggal** | 11 September 2026 |
 | **Status** | Live — Production |
 | **Pemilik** | Tim Internal |
 
@@ -37,6 +37,8 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 | **QA Engineer** | Penguji | Kelola test case, test run, eksekusi pengujian, dan modul Bugs Incident (3.9) |
 
 **Aturan akses produk:** Developer dan QA hanya melihat item dari produk tempat mereka terdaftar sebagai member. Exception: semua user selalu dapat melihat item yang di-assign langsung ke mereka (My Tasks).
+
+**Pelapor eksternal (bukan role sistem):** Sejak versi 2.5, karyawan kantor yang **tidak punya akun** Product Tracker sama sekali bisa melaporkan bug lewat form publik tanpa login (lihat 3.15) — bukan salah satu dari 5 role di atas, tidak masuk tabel `users`, dan tidak punya akses ke bagian manapun dari aplikasi selain form itu sendiri.
 
 ---
 
@@ -79,6 +81,7 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 **Fitur Backlog:**
 - CRUD item dengan 5 tipe di atas
 - Hierarki parent-child: Task/Bug ← Story ← Epic
+- **Dropdown pencarian untuk field Parent:** field **Parent User Story** (Task/Bug) dan **Parent Epic** (Story) berupa dropdown dengan kotak pencarian di dalamnya — ketik untuk filter berdasarkan kode/judul, bukan sekadar daftar panjang untuk di-scroll. Pola yang sama juga dipakai untuk field Backlog Item di form Bug (3.9) dan Test Case (3.8)
 - **Story Points auto-cascade:** SP pada Task otomatis dijumlahkan ke Story parent → lalu ke Epic grandparent. Berlaku untuk create, update, dan delete
 - **Epic SP read-only:** Form Epic menampilkan SP sebagai kalkulasi otomatis (tidak bisa diinput manual)
 - **Story Points hints:** Panduan skala SP (1–13) ditampilkan langsung di form untuk membantu estimasi
@@ -206,7 +209,7 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 **Tujuan:** Manajemen test case dan eksekusi pengujian.
 
 **Fitur:**
-- CRUD test case dengan link ke backlog item
+- CRUD test case dengan link ke backlog item — field **Backlog Item** (wajib) memakai dropdown dengan kotak pencarian (pola sama seperti 3.2 & 3.9), memudahkan pencarian saat daftar backlog item sudah banyak
 - Test run management (kumpulan test case untuk satu sesi pengujian)
 - Eksekusi test case: `pass`, `fail`, `skip`, `blocked`
 - QA dashboard: statistik coverage, pass rate, item yang belum di-test
@@ -220,7 +223,8 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 **Akses:** Modul ini **tidak terlihat/tidak bisa diakses** oleh role selain **Super Admin** dan **QA Engineer** secara default — baik dari sisi menu (disembunyikan) maupun API (setiap endpoint menolak dengan `403` untuk role lain). Role lain bisa diberi akses lewat permission baru `access_bugs` di tab **Roles & Permissions** (Users & Roles, 3.10) — pola yang sama seperti `access_c_level` untuk C-Level Dashboard (lihat [PRD - C-Level Dashboard.md](./PRD%20-%20C-Level%20Dashboard.md), Bagian 10). Saat ini role **Developer** sudah diberi permission `access_bugs`, sehingga punya akses penuh yang setara Super Admin/QA Engineer di modul ini (termasuk tombol Aksi di tabel Bugs, yang sebelumnya sempat ter-hardcode hanya untuk Super Admin/QA).
 
 **Fitur:**
-- **Bugs** — CRUD data bug: judul, deskripsi, langkah reproduksi, severity & prioritas (`critical/high/medium/low`), assignee. **Tidak wajib** terhubung ke Backlog Item (beda dari Test Case QA yang wajib) — bug bisa berdiri sendiri untuk insiden yang belum tentu jadi backlog item
+- **Bugs** — CRUD data bug: judul, deskripsi, langkah reproduksi, severity & prioritas (`critical/high/medium/low`), assignee. **Tidak wajib** terhubung ke Backlog Item (beda dari Test Case QA yang wajib) — bug bisa berdiri sendiri untuk insiden yang belum tentu jadi backlog item. Field Backlog Item di form Buat/Edit Bug memakai dropdown dengan kotak pencarian (pola sama seperti 3.2 & 3.8)
+- **Incident Author** — tiap bug menampilkan siapa yang melaporkan/membuat bug tersebut, sebagai kolom terpisah di tabel Bugs (di samping kolom Assigned To). Otomatis diisi dari user yang sedang login saat bug dibuat — **read-only**, tidak ada field untuk memilih/mengubah Incident Author secara manual di form
 - **Progress** — riwayat progres perbaikan bug, dicatat sebagai log/histori (bukan satu angka yang ditimpa) setiap kali statusnya diupdate, lengkap dengan catatan dan siapa yang mengupdate
 - **Aktivitas & Komentar** — tiap bug punya thread komentar (dibuka dari modal Edit Bug), dengan @mention (ketik `@` untuk dropdown user, badge indigo `@Nama`) dan log perubahan sistem, mengikuti pola yang sama seperti Backlog Item (3.2). Hapus komentar sendiri; Super Admin bisa hapus komentar siapa pun. Log perubahan tidak bisa dihapus
 - **Bugs Dashboard** — statistik total bug, jumlah open (termasuk `open`/`in_progress`/`reopen`), jumlah ready to test, resolution rate, breakdown per produk dan per stage, **grafik tren bug Dibuka vs Ditutup** (line chart) dengan toggle **Mingguan (8 minggu terakhir) / Bulanan (6 bulan terakhir) / Tahunan (3 tahun terakhir)** (dihitung dari `created_at` dan `closed_at`; bucket tanpa data tetap tampil sebagai 0 agar garis tidak putus), serta dua panel bersebelahan: **Recent Activity** (10 update progress/stage terbaru lintas bug) dan **Recent Comments** (10 komentar terbaru lintas bug)
@@ -291,13 +295,60 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 
 ### 3.13 Notifikasi
 
-**Tujuan:** Memberitahu user tentang perubahan yang relevan.
+**Tujuan:** Memberitahu user tentang perubahan yang relevan, lewat tiga jalur: bell in-app, email personal, dan (opsional) channel Microsoft Teams.
+
+**Notifikasi In-App (Bell):**
+- Bell notifikasi di header, dengan badge jumlah belum dibaca
+- Dipicu saat: item di-assign ke user (Backlog, Bugs Incident, Leader Task), status/stage item berubah (Bugs Incident), atau user di-mention di komentar (Backlog, Bugs Incident)
+- Tandai satu/semua sebagai dibaca
+
+**Notifikasi Email:**
+- Email personal ke `users.email` milik user yang relevan (assignee, atau yang di-mention) — **bukan** broadcast ke satu alamat tetap
+- Trigger: assignment & update (Backlog), status berubah (Backlog — jalur email saja, tidak ada notifikasi bell untuk event ini), assignment & stage berubah (Bugs Incident), assignment (Leader Task), mention di komentar (Backlog & Bugs Incident, format `@[Nama]`)
+- User yang melakukan aksi terhadap item miliknya sendiri (mis. assignee mengubah status task yang di-assign ke dirinya sendiri) tidak menerima email untuk aksi tsb
+- Pengiriman asynchronous & best-effort — kegagalan kirim tidak pernah menggagalkan request API yang memicunya, dicatat di backend log
+- **Global, dikontrol Super Admin** — bukan preferensi per-user. Selama fitur dinyalakan Super Admin (lihat 3.14), semua user otomatis menerima email untuk event yang relevan buat mereka; user biasa tidak punya kontrol/preferensi individual atas fitur ini
+- Isi email: heading ringkas + tabel detail (modul, judul, perubahan, siapa yang melakukan) + tombol link balik ke item terkait di aplikasi
+
+**Microsoft Teams Webhook (opsional):**
+- Satu webhook channel global (bukan per-user), dikonfigurasi lewat env var `TEAMS_WEBHOOK_URL`
+- Trigger: item Backlog dibuat, diupdate, atau status berubah — modul lain (Bugs Incident, Leader Task) belum terhubung ke Teams
+
+---
+
+### 3.14 Notification Settings (Admin only)
+
+**Tujuan:** Memberi Super Admin kontrol penuh atas fitur Notifikasi Email (3.13) langsung dari aplikasi — tanpa perlu edit file konfigurasi server atau restart aplikasi.
+
+**Akses:** Halaman ini (`/settings/notifications`) hanya muncul di sidebar dan hanya bisa diakses untuk role **Super Admin** — dijaga di frontend (item menu disembunyikan untuk role lain) maupun backend (setiap endpoint API menolak dengan `403` untuk role selain Super Admin).
 
 **Fitur:**
-- Bell notifikasi di header
-- Notifikasi saat item di-assign ke user
-- Notifikasi saat status item berubah
-- Integrasi Microsoft Teams webhook (opsional, untuk notifikasi ke channel)
+- Toggle nyala/mati fitur notifikasi email secara keseluruhan
+- Form konfigurasi SMTP: Host, Port, Username, Password, From Address, SMTP Auth, STARTTLS
+- Password tidak pernah ditampilkan balik setelah disimpan (field kosong saat submit ulang = tidak diubah)
+- **Kirim Email Tes** — kirim satu email percobaan ke alamat manapun, hasil sukses/gagal (termasuk pesan error dari server SMTP, mis. autentikasi ditolak) ditampilkan langsung di halaman
+- Perubahan config **langsung aktif tanpa restart backend** — disimpan ke tabel `app_settings`, dibaca ulang setiap kali ada email yang mau dikirim
+
+**Catatan implementasi:** Sebelum halaman ini pernah dibuka/disimpan, sistem fallback ke nilai env var lama (`MAIL_HOST`, `MAIL_PORT`, dst. — lihat Bagian 8) — jadi deployment yang belum pernah menyentuh halaman ini tetap berjalan seperti semula, tidak ada breaking change.
+
+---
+
+### 3.15 Lapor Bug Publik (Landing Page Ticketing)
+
+**Tujuan:** Membuka pelaporan bug/insiden ke **seluruh karyawan kantor**, bukan cuma tim internal yang punya akun Product Tracker — misalnya orang Accounting yang menemukan bug di aplikasi accounting mereka. Tiket yang masuk lewat sini langsung jadi data yang sama dengan modul Bugs Incident (3.9), bukan sistem terpisah/staging.
+
+**Akses:** Halaman `/report-bug` dan tiga endpoint pendukungnya (`GET /api/public/products`, `POST /api/public/bugs`, `POST /api/public/bugs/:id/attachments`) **tidak memerlukan login sama sekali** — satu-satunya bagian dari aplikasi yang bisa diakses tanpa JWT selain halaman Login itu sendiri. Ini disengaja: fitur ditujukan untuk siapa pun di jaringan kantor yang sama, bukan cuma user terdaftar. Lihat Bagian 7 (Keamanan) untuk batasan/asumsi trust model-nya.
+
+**Fitur:**
+- Form berisi: pilih aplikasi/produk (dropdown), nama pelapor, email pelapor, judul bug, deskripsi, langkah reproduksi, tingkat keparahan (severity), dan lampiran screenshot opsional (image only, maks 10MB — sama seperti lampiran Bugs Incident biasa)
+- **Tidak ada field Prioritas** — pelapor publik tidak diminta menilai prioritas, backend selalu set `medium`, tim internal yang menentukan ulang saat triase
+- **Assignment otomatis** — begitu pelapor pilih produk, tiket langsung di-assign ke Product Owner produk tsb (`products.owner_id`). Kalau produk belum punya owner, tiket tetap dibuat tapi tidak ter-assign ke siapa pun (tidak ada notifikasi terkirim) — Admin/QA meng-assign manual belakangan dari Bugs Incident seperti biasa
+- **Identitas pelapor bukan akun** — nama & email pelapor disimpan sebagai teks bebas (kolom `bugs.reporter_name`/`reporter_email`), bukan referensi ke tabel `users`. Kolom `reported_by` (yang biasanya diisi user login) dibiarkan `NULL` untuk tiket dari jalur ini
+- Setelah submit, pelapor melihat konfirmasi berisi kode tiket (mis. `DEMO-011`) — tidak ada redirect ke halaman lain, karena pelapor memang bukan user yang bisa masuk ke area manapun di aplikasi
+- Di tabel Bugs (3.9), kolom **Incident Author** untuk tiket dari jalur ini menampilkan `reporter_name`/`reporter_email` sebagai fallback (karena `reported_by_name` kosong) — tim internal tetap bisa tahu siapa pelapornya meski bukan user terdaftar
+- Notifikasi assignment (bell + email, lihat 3.13) tetap terpicu normal ke Product Owner yang ke-assign, dengan atribusi **"System (Laporan Publik)"** sebagai pihak yang melakukan assignment (bukan nama pelapor) — karena assignment-nya otomatis oleh sistem, bukan tindakan manual pelapor
+
+**Catatan implementasi:** Kode bug (`{KODE_PRODUK}-NNN`) di-generate dengan logika yang sama persis seperti `POST /api/bugs` biasa. Lampiran screenshot dari jalur publik hanya bisa diunggah ke tiket yang juga dibuat lewat jalur publik (`bugs.reported_by IS NULL`) — endpoint `POST /api/public/bugs/:id/attachments` menolak dengan `403` kalau `:id` menunjuk ke tiket internal, supaya pengunjung anonim tidak bisa menambah lampiran ke tiket siapa pun dengan menebak-nebak ID. Produk yang ditampilkan di dropdown hanya yang berstatus `active`.
 
 ---
 
@@ -352,6 +403,17 @@ QA Engineer / Super Admin / Developer buat Bug (produk wajib, backlog item opsio
     → Bugs Dashboard: pantau total bug, open (termasuk reopen), ready to test, resolution rate, Recent Activity & Recent Comments
 ```
 
+### Alur Lapor Bug Publik
+```
+Karyawan tanpa akun buka /report-bug (tanpa login)
+    → Pilih aplikasi/produk, isi nama & email, judul, deskripsi, langkah reproduksi, severity
+    → (Opsional) lampirkan screenshot
+    → Submit → tiket langsung masuk ke tabel bugs yang sama dengan Bugs Incident (3.9), stage 'open'
+    → Assign otomatis ke Product Owner produk tsb (kalau ada)
+    → Tim internal (Super Admin/QA/Developer) lihat tiket di Bugs Incident seperti tiket biasa
+    → Lanjut alur Update Progress normal (lihat Alur Bugs Incident di atas)
+```
+
 ---
 
 ## 5. Arsitektur Teknis
@@ -379,10 +441,11 @@ QA Engineer / Super Admin / Developer buat Bug (produk wajib, backlog item opsio
 | `item_activities` | Log perubahan dan komentar per backlog item |
 | `qa_test_cases` | Test case dengan link ke backlog item |
 | `qa_test_runs` | Sesi pengujian |
-| `bugs` | Data bug/incident; link ke backlog item opsional; kolom `stage` menyimpan stage terkini (`open/in_progress/ready_to_test/reopen/done`, free-text — tidak ada CHECK constraint), `closed_at` terisi otomatis saat stage `done` |
+| `bugs` | Data bug/incident; link ke backlog item opsional; kolom `stage` menyimpan stage terkini (`open/in_progress/ready_to_test/reopen/done`, free-text — tidak ada CHECK constraint), `closed_at` terisi otomatis saat stage `done`. Kolom `reported_by` (FK `users`, otomatis diisi dari user pembuat saat create, ditampilkan sebagai kolom **Incident Author** di tabel Bugs) sudah ada sejak `migration_v12.sql` — baru ditampilkan di UI mulai versi 2.4. Kolom `reporter_name`/`reporter_email` (`migration_v18.sql`, versi 2.5) menyimpan identitas pelapor sebagai teks bebas untuk tiket dari jalur Lapor Bug Publik (3.15) — dipakai saat `reported_by` bernilai `NULL` |
 | `bug_progress_updates` | Histori perubahan stage bug (append-only log, tidak ada `updated_at`) |
 | `bug_activities` | Komentar & log perubahan per bug (`type`: `comment`/`change_log`), mirror `item_activities` milik Backlog |
 | `notifications` | Notifikasi per user |
+| `app_settings` | Key-value store untuk setting yang bisa diubah lewat UI tanpa restart — saat ini dipakai untuk config SMTP (`mail.*`), lihat 3.14 |
 
 ### Port
 
@@ -428,7 +491,7 @@ DELETE /api/attachments/:id            Hapus lampiran
 GET    /api/attachments/file/:filename Serve file lampiran (akses langsung ke file)
 ```
 
-**Format mention:** `@[Nama Lengkap]` — disimpan sebagai teks, dirender sebagai badge indigo di UI.
+**Format mention:** `@[Nama Lengkap]` — disimpan sebagai teks, dirender sebagai badge indigo di UI. Setiap nama yang cocok persis dengan `users.name` (selain komentator sendiri) menerima notifikasi bell tipe `mention` + email (lihat 3.13).
 
 **Field `estimated_hours`:** Wajib untuk tipe `independent`, diabaikan untuk tipe lain. Nilai disimpan sebagai `NUMERIC(6,1)`.
 
@@ -496,10 +559,20 @@ GET/POST          /api/bugs/progress       List & buat entry progress (params: b
 GET               /api/bugs/dashboard      Statistik bug (total, open, ready to test, resolution rate, breakdown,
                                             recentActivity, recentComments — masing-masing 10 terbaru; params: product_id)
 GET/POST          /api/bugs/:id/attachments List & upload lampiran gambar bug (max 10MB, image only, multipart/form-data)
-GET/POST          /api/bugs/:id/activities List & tambah komentar bug (mirror endpoint activities Backlog Item)
+GET/POST          /api/bugs/:id/activities List & tambah komentar bug (mirror endpoint activities Backlog Item, termasuk dukungan @[Nama] mention)
 DELETE            /api/bugs/activities/:id Hapus komentar bug (pemilik sendiri atau Super Admin; log perubahan tidak bisa dihapus)
 ```
-**Akses:** Semua endpoint di atas membalas `403` untuk role selain Super Admin/QA Engineer, kecuali role tsb diberi permission `access_bugs` (saat ini juga diberikan ke role Developer). Lampiran gambar bug memakai endpoint `DELETE /api/attachments/:id` dan `GET /api/attachments/file/:filename` yang sama dengan lampiran Backlog Item. Filter "Sembunyikan Closed/Done" dan sort kolom tidak punya parameter backend sendiri — keduanya murni client-side di atas response `GET /api/bugs`.
+**Akses:** Semua endpoint di atas membalas `403` untuk role selain Super Admin/QA Engineer, kecuali role tsb diberi permission `access_bugs` (saat ini juga diberikan ke role Developer). Lampiran gambar bug memakai endpoint `DELETE /api/attachments/:id` dan `GET /api/attachments/file/:filename` yang sama dengan lampiran Backlog Item. Filter "Sembunyikan Closed/Done" dan sort kolom tidak punya parameter backend sendiri — keduanya murni client-side di atas response `GET /api/bugs`. Sejak versi 2.5, list ini juga berisi tiket yang dibuat lewat jalur publik (3.15) — tidak ada endpoint/parameter terpisah untuk membedakannya, cukup dilihat dari `reported_by` yang `NULL`.
+
+### Public (tanpa autentikasi)
+```
+GET  /api/public/products              List produk aktif (id, code, name saja) — untuk dropdown form Lapor Bug Publik
+POST /api/public/bugs                  Buat tiket bug publik (body: product_id, title, description,
+                                        steps_to_reproduce, severity, reporter_name, reporter_email)
+POST /api/public/bugs/:id/attachments  Upload lampiran gambar ke tiket publik (max 10MB, image only,
+                                        multipart/form-data) — menolak 403 kalau :id bukan tiket publik
+```
+**Akses:** Tidak memerlukan JWT sama sekali — lihat 3.15 dan Bagian 7 (Keamanan). Endpoint lain di luar tiga ini (`/api/bugs`, `/api/products`, dst.) tetap memerlukan login seperti biasa.
 
 ### Dashboard
 ```
@@ -533,6 +606,15 @@ GET/POST          /api/roles        List & buat role
 PUT/DELETE        /api/roles/:id    Update & hapus role
 ```
 
+### Settings (Super Admin only)
+```
+GET  /api/settings/mail        Ambil config SMTP saat ini (password tidak pernah dikembalikan — hanya password_set: true/false)
+PUT  /api/settings/mail        Simpan config SMTP (host, port, username, password, from, smtp_auth, smtp_starttls;
+                                password kosong/tidak dikirim = tidak diubah)
+POST /api/settings/mail/test   Kirim satu email tes ke alamat di body {to}, balas {success, error}
+```
+**Akses:** Semua endpoint di atas membalas `403` untuk role selain Super Admin.
+
 ---
 
 ## 7. Keamanan
@@ -545,6 +627,7 @@ PUT/DELETE        /api/roles/:id    Update & hapus role
 - Input file di-parse server-side; format xlsx divalidasi via magic bytes ZIP
 - Email dinormalisasi ke lowercase sebelum disimpan
 - Self-update profil dibatasi hanya ke field yang aman (nama, email, avatar) — role tidak bisa diubah sendiri
+- **`/api/public/**` (3.15) sengaja tanpa autentikasi** — dirancang untuk deployment LAN kantor saja (semua pengakses ada di jaringan WiFi yang sama), bukan internet-facing. Tidak ada rate limiting/CAPTCHA di versi ini karena volumenya diperkirakan rendah; kalau nanti trafiknya naik atau deployment berubah jadi internet-facing, ini perlu ditinjau ulang. Satu-satunya guard yang ada: upload lampiran publik menolak (`403`) kalau target tiketnya bukan tiket yang juga dibuat lewat jalur publik, supaya pengunjung anonim tidak bisa menambah file ke tiket internal manapun dengan menebak ID
 
 ---
 
@@ -575,7 +658,21 @@ SPRING_DATASOURCE_PASSWORD=<password>
 APP_JWT_SECRET=<random-string-panjang>
 APP_CORS_ORIGIN=http://<server-ip>:3000
 TEAMS_WEBHOOK_URL=<optional>
+
+# Email notification — hanya dipakai sebagai fallback awal (sebelum halaman
+# Notification Settings, 3.14, pernah dibuka/disimpan sekali oleh Super Admin;
+# setelah itu config production sebenarnya disimpan di tabel app_settings)
+MAIL_NOTIFICATIONS_ENABLED=false
+MAIL_HOST=smtp.office365.com
+MAIL_PORT=587
+MAIL_USERNAME=<optional>
+MAIL_PASSWORD=<optional>
+MAIL_FROM=<optional>
+MAIL_SMTP_AUTH=true
+MAIL_SMTP_STARTTLS=true
 ```
+
+**Mailpit (khusus local development):** `docker-compose.yml` menyertakan service `mailpit` (SMTP catcher, UI di `localhost:8025`) untuk menguji pengiriman email tanpa perlu akun SMTP asli. Untuk deployment production, arahkan config di halaman Notification Settings (3.14) ke SMTP provider sungguhan — service `mailpit` boleh dihapus dari stack production kalau tidak dipakai.
 
 ### Database Migrations
 
@@ -595,6 +692,8 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | `migration_v14.sql` | Tabel `bug_activities` (komentar + log perubahan bug), mirror `leader_task_activities` |
 | `migration_v15.sql` | Re-code bug existing dari `BUG-001` ke format `{KODE_PRODUK}-001` |
 | `migration_v16.sql` | Sederhanakan stage Bugs Incident jadi 4 tahap (`open, in_progress, ready_to_test, done`), tambah kolom `bugs.closed_at` |
+| `migration_v17.sql` | Tabel `app_settings` (key-value store) — dipakai pertama kali untuk config SMTP Notification Settings (3.14) |
+| `migration_v18.sql` | Kolom `bugs.reporter_name`, `bugs.reporter_email` (nullable) — identitas pelapor untuk tiket dari Lapor Bug Publik (3.15) |
 
 ---
 
@@ -634,3 +733,10 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | 04 Sep 2026 | 2.0 | Backlog (3.2): **Lampiran** sekarang menerima PDF, Word, Excel, PowerPoint, ZIP, CSV, dan TXT — sebelumnya gambar saja. Preview inline untuk gambar/PDF/TXT/CSV (CSV dirender sebagai tabel), tipe lain dibuka/diunduh di tab baru |
 | 09 Sep 2026 | 2.1 | Bugs Incident (3.9): tambah **sort kolom** di tabel Bugs (klik header Severity/Prioritas/Stage/Tanggal Incident/Tanggal Closed/Update Terakhir, siklus klik: default → kebalikan → asli). Tambah **grafik tren Dibuka vs Ditutup** di Bugs Dashboard dengan toggle Mingguan (8 minggu) / Bulanan (6 bulan) / Tahunan (3 tahun). Keduanya dihitung client-side dari data yang sudah dimuat — tidak ada perubahan skema database atau endpoint baru |
 | 09 Sep 2026 | 2.2 | Bugs Incident (3.9): tambah stage **`reopen`** ("Re-Open", untuk bug yang gagal retest QA dan perlu diperbaiki ulang) — dihitung sebagai open di ringkasan dashboard, tidak ada validasi transisi (semua stage bisa dipilih kapan pun, sama seperti stage lain). Tambah toggle **"Sembunyikan Closed/Done"** (default aktif) di filter bar tab Bugs. Tambah panel **Recent Comments** di Bugs Dashboard, bersebelahan dengan Recent Activity — endpoint `GET /api/bugs/dashboard` sekarang juga mengembalikan `recentComments` (10 komentar terbaru lintas bug). Tidak ada perubahan skema database |
+| 10 Sep 2026 | 2.3 | Tambah **Notifikasi Email** (3.13): email personal ke assignee/yang di-mention saat assignment & update (Backlog), status berubah (Backlog), assignment & stage berubah (Bugs Incident, modul yang sebelumnya sama sekali tidak punya notifikasi), assignment (Leader Task), dan mention di komentar (Backlog & Bugs Incident — pipeline mention backend dibangun dari nol, sebelumnya UI-nya ada tapi tidak pernah memicu apa pun). Global, dikontrol Super Admin — bukan preferensi per-user |
+| 10 Sep 2026 | 2.3 | Tambah halaman **Notification Settings** (3.14, Super Admin only): toggle nyala/mati + form config SMTP + tombol Kirim Email Tes, tersimpan di database dan aktif langsung tanpa restart backend. `migration_v17.sql`: tabel `app_settings` |
+| 10 Sep 2026 | 2.3 | Fix: generate kode otomatis (Backlog, Bugs Incident, Leader Task, Import Jira) memakai `ORDER BY code DESC` yang sort sebagai teks bukan angka — menyebabkan kode bentrok begitu ada campuran format lama (tidak zero-padded, mis. seed data `DEMO-6`) dan format baru (`DEMO-007`). Diperbaiki di 5 controller (`ORDER BY` sekarang berdasarkan angka trailing kode, bukan teks) |
+| 10 Sep 2026 | 2.4 | Bugs Incident (3.9): tambah kolom **Incident Author** di tabel Bugs — menampilkan nama user yang membuat bug (`reported_by`), read-only (otomatis diisi dari user yang login saat create, tidak ada field untuk mengubahnya manual). Tidak ada perubahan skema database — kolom `reported_by` sudah ada sejak `migration_v12.sql` dan `reported_by_name` sudah dikembalikan `GET /api/bugs` sebelumnya, hanya belum ditampilkan di tabel |
+| 10 Sep 2026 | 2.4 | Backlog (3.2), QA (3.8), Bugs Incident (3.9): field pemilihan backlog item (Parent User Story & Parent Epic di form Backlog; Backlog Item di form Test Case & Bug) diganti dari dropdown native jadi dropdown dengan kotak pencarian — komponen baru `SearchableSelect`, filter berdasarkan kode/judul secara client-side dari data yang sudah dimuat. Mempermudah pencarian saat daftar backlog item sudah banyak. Tidak ada perubahan skema database atau endpoint baru |
+| 11 Sep 2026 | 2.5 | Tambah modul **Lapor Bug Publik** (3.15) — form `/report-bug` tanpa login untuk karyawan kantor yang tidak punya akun Product Tracker, jadi bagian dari deployment LAN yang sama (bukan sistem/domain terpisah). Tiket masuk langsung ke tabel `bugs` yang sama dengan Bugs Incident (3.9): produk dipilih dari dropdown, auto-assign ke Product Owner produk tsb, identitas pelapor (nama+email) disimpan sebagai teks bebas (`reported_by` tetap `NULL`), lampiran screenshot opsional. Endpoint baru tanpa autentikasi: `GET /api/public/products`, `POST /api/public/bugs`, `POST /api/public/bugs/:id/attachments` (lihat Bagian 6 & 7 untuk detail akses/keamanan). `migration_v18.sql`: kolom `bugs.reporter_name`, `bugs.reporter_email` |
+| 11 Sep 2026 | 2.5 | Bugs Incident (3.9): tabel Bugs sekarang default sort **Tanggal Incident terbaru di atas** (sebelumnya urutan asli dari backend, per produk lalu kode) — supaya tiket yang baru dibuat/dilaporkan (termasuk dari Lapor Bug Publik) langsung terlihat tanpa perlu klik sort dulu. Klik header kolom lain tetap berfungsi seperti biasa. Tidak ada perubahan skema database atau endpoint baru, murni default state client-side |
