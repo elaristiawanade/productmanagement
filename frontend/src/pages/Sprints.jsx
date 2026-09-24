@@ -268,7 +268,7 @@ export default function Sprints() {
                             </div>
                             <p className="text-xs font-medium text-slate-700 leading-snug mb-2 line-clamp-2">{item.title}</p>
                             <div className="flex items-center justify-between">
-                              {item.assignee_name
+                              {item.assignees?.length > 0
                                 ? <AssigneeStack assignees={item.assignees} showName={false} size="xs" />
                                 : <span />}
                               <span className="text-xs font-semibold text-slate-400">{item.story_points}pt</span>

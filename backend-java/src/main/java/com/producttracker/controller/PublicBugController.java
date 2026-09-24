@@ -98,14 +98,16 @@ public class PublicBugController {
             Long newBugId = toLong(row.get("id"));
             assigneeSupport.sync("bug_assignees", "bug_id", newBugId, ownerId, List.of());
             Map<String, Object> detail = bugDetail(newBugId);
-            if (ownerId != null) {
+            if (ownerId != null && detail != null) {
                 createNotification(ownerId, "assignment",
                     "Bug publik baru " + row.get("code"),
                     "Bug \"" + row.get("title") + "\" dilaporkan oleh " + reporterName + " (" + reporterEmail + ")",
                     "/bugs?bug=" + newBugId);
-                email.notifyAssignment(detail != null ? str(detail.get("assigned_to_email")) : null,
-                    "Bug Incident", str(row.get("code")), str(row.get("title")), "System (Laporan Publik)",
-                    "/bugs?bug=" + newBugId);
+                String ownerEmail = str(detail.get("assigned_to_email"));
+                if (!ownerEmail.isBlank()) {
+                    email.notifyAssignment(ownerEmail, "Bug Incident", str(row.get("code")), str(row.get("title")),
+                        "System (Laporan Publik)", "/bugs?bug=" + newBugId);
+                }
             }
 
             return ResponseEntity.status(201).body(detail != null ? detail : row);

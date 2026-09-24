@@ -168,20 +168,21 @@ public class BugController {
         List<Long> additionalIds = assigneeSupport.parseIdList(body.get("additional_assignee_ids"));
         assigneeSupport.sync("bug_assignees", "bug_id", id, newAssignedTo, additionalIds);
 
-        Map<String, Object> row = jdbc.queryForMap("SELECT * FROM bugs WHERE id=?", id);
+        Map<String, Object> detail = bugDetail(id);
+        if (detail == null) return ResponseEntity.status(404).body(Map.of("error", "Bug tidak ditemukan"));
+
         Map<String, Object> user = toMap(principal);
         Long actorId = user != null ? toLong(user.get("id")) : null;
         String actorName = user != null ? str(user.get("name")) : "System";
 
-        Map<String, Object> detail = bugDetail(id);
-        if (detail != null && !assigneeSupport.extractIds(before).equals(assigneeSupport.extractIds(detail))) {
+        if (!assigneeSupport.extractIds(before).equals(assigneeSupport.extractIds(detail))) {
             notifyBugAssignees(detail, actorId,
-                "Kamu di-assign ke bug " + row.get("code"),
-                "Bug \"" + row.get("title") + "\" telah di-assign kepadamu oleh " + actorName,
+                "Kamu di-assign ke bug " + detail.get("code"),
+                "Bug \"" + detail.get("title") + "\" telah di-assign kepadamu oleh " + actorName,
                 "/bugs?bug=" + id, actorName);
         }
 
-        return ResponseEntity.ok(detail != null ? detail : row);
+        return ResponseEntity.ok(detail);
     }
 
     @DeleteMapping("/{id}")

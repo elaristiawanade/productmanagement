@@ -103,7 +103,7 @@ function DrilldownPanel({ drill, onClose }) {
                     <p className="text-sm text-slate-700 truncate font-medium">{item.title}</p>
                     <p className="text-xs text-slate-400 mt-0.5">
                       <span style={{ color: item.product_color }}>{item.product_name}</span>
-                      {item.assignee_name && <> · {item.assignee_name}</>}
+                      {item.assignees?.length > 0 && <> · {item.assignees.map(a => a.name).join(', ')}</>}
                       {item.sprint_name   && <> · {item.sprint_name}</>}
                       {item.deadline      && <> · {format(parseISO(item.deadline), 'dd MMM yyyy')}</>}
                       {item.is_delayed    && <span className="text-red-500 ml-1">· terlambat</span>}
