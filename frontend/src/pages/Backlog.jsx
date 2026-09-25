@@ -7,6 +7,8 @@ import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import LinkInsertButton from '../components/LinkInsertButton';
 import SearchableSelect from '../components/SearchableSelect';
+import SearchableMultiSelect from '../components/SearchableMultiSelect';
+import StatusStepper from '../components/StatusStepper';
 import AssigneeStack from '../components/AssigneeStack';
 import { renderWithLinks } from '../utils/linkify';
 import { useAuth } from '../context/AuthContext';
@@ -729,9 +731,10 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
         )}
       </F>
       <F label="Assignee">
-        <MultiSelect label="assignee"
+        <SearchableMultiSelect label="assignee"
           options={users.map(u => ({ v: u.id, l: u.name }))}
           selected={form.assignee_ids}
+          searchPlaceholder="Cari nama assignee..."
           onChange={vals => setForm(f => ({ ...f, assignee_ids: vals }))} />
       </F>
       <F label="Deadline">
@@ -1029,9 +1032,10 @@ export default function Backlog() {
             onChange={vals => { setFilters(f => ({ ...f, [key]: vals })); setPage(1); }} />
         ))}
         {/* Assignee filter */}
-        <MultiSelect label="Assignee" minWidth={140}
+        <SearchableMultiSelect label="Assignee" minWidth={160}
           options={users.map(u => ({ v: u.id, l: u.name }))}
           selected={filters.assignee_id}
+          searchPlaceholder="Cari nama assignee..."
           onChange={vals => { setFilters(f => ({ ...f, assignee_id: vals })); setPage(1); }} />
         {/* Deadline range */}
         <div className="flex items-center gap-1.5">
@@ -1183,14 +1187,11 @@ export default function Backlog() {
                     </td>
                     <td className="px-3 py-3 text-center"><PriorityBadge priority={item.priority} /></td>
                     <td className="px-3 py-3 text-center">
-                      <select
-                        className="text-xs border-0 bg-transparent focus:ring-0 cursor-pointer"
-                        value={item.status}
-                        onChange={e => quickStatus(item.id, e.target.value)}
+                      <StatusStepper
+                        status={item.status}
+                        onChange={s => quickStatus(item.id, s)}
                         disabled={!hasRole('super_admin','manager','po','developer','qa')}
-                      >
-                        {STATUSES.map(s => <option key={s} value={s}>{s.replace('_',' ')}</option>)}
-                      </select>
+                      />
                     </td>
                     <td className="px-3 py-3 text-center font-semibold text-slate-600">
                       {item.type === 'independent'

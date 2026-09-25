@@ -1,4 +1,4 @@
-const STATUS_MAP = {
+export const STATUS_MAP = {
   todo:        { label: 'To Do',       cls: 'bg-slate-100 text-slate-600' },
   in_progress: { label: 'In Progress', cls: 'bg-blue-100 text-blue-700'  },
   in_review:   { label: 'In Review',   cls: 'bg-amber-100 text-amber-700' },

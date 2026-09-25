@@ -10,6 +10,7 @@ import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import LinkInsertButton from '../components/LinkInsertButton';
 import SearchableSelect from '../components/SearchableSelect';
+import SearchableMultiSelect from '../components/SearchableMultiSelect';
 import AssigneeStack from '../components/AssigneeStack';
 import { renderWithLinks } from '../utils/linkify';
 import { useAuth } from '../context/AuthContext';
@@ -472,9 +473,10 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
       </div>
       <div className="col-span-2">
         <label className="label">Assigned To</label>
-        <MultiSelect label="assignee"
+        <SearchableMultiSelect label="assignee"
           options={users.map(u => ({ v: u.id, l: u.name }))}
           selected={form.assignee_ids}
+          searchPlaceholder="Cari nama assignee..."
           onChange={vals => setForm(f => ({ ...f, assignee_ids: vals }))} />
       </div>
       {/* Attachments — queued locally until the bug is created, uploaded live once it exists */}
@@ -1052,9 +1054,10 @@ export default function BugsIncident() {
                     selected={bugFilters[key]}
                     onChange={vals => setBugFilters(f => ({ ...f, [key]: vals }))} />
                 ))}
-                <MultiSelect label="Assignee" minWidth={140}
+                <SearchableMultiSelect label="Assignee" minWidth={160}
                   options={users.map(u => ({ v: u.id, l: u.name }))}
                   selected={bugFilters.assigned_to}
+                  searchPlaceholder="Cari nama assignee..."
                   onChange={vals => setBugFilters(f => ({ ...f, assigned_to: vals }))} />
                 <button type="button" onClick={() => setHideClosed(h => !h)}
                   className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1.5 shrink-0
