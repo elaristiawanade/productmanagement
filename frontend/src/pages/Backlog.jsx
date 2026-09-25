@@ -993,6 +993,11 @@ export default function Backlog() {
     load();
   };
 
+  const quickSprint = async (id, sprintId) => {
+    await client.patch(`/backlog/${id}/sprint`, { sprint_id: sprintId || null });
+    load();
+  };
+
   const TYPE_COLORS = {
     story:       'text-blue-600 bg-blue-50',
     bug:         'text-red-600 bg-red-50',
@@ -1196,7 +1201,21 @@ export default function Backlog() {
                       <span className="text-xs font-medium" style={{ color: item.product_color }}>{item.product_code}</span>
                     </td>
                     <td className="px-3 py-3 text-xs text-slate-500">
-                      {item.type === 'independent' ? <span className="text-orange-500">⚡ independent</span> : (item.sprint_name || '—')}
+                      {item.type === 'independent' ? (
+                        <span className="text-orange-500">⚡ independent</span>
+                      ) : (
+                        <select
+                          className="text-xs border-0 bg-transparent focus:ring-0 cursor-pointer"
+                          value={item.sprint_id || ''}
+                          onChange={e => quickSprint(item.id, e.target.value)}
+                          disabled={!hasRole('super_admin','manager','po','developer','qa')}
+                        >
+                          <option value="">Backlog (no sprint)</option>
+                          {sprints.filter(s => s.product_id === item.product_id).map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                      )}
                     </td>
                     <td className="px-3 py-3">
                       {item.assignees?.length > 0

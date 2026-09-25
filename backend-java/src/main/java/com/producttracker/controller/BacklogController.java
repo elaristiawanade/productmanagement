@@ -436,6 +436,45 @@ public class BacklogController {
         return ResponseEntity.ok(Map.of("id", id, "status", newStatus));
     }
 
+    // ─── PATCH SPRINT ──────────────────────────────────────────────────────
+
+    @PatchMapping("/{id}/sprint")
+    public ResponseEntity<?> patchSprint(@PathVariable Long id,
+                                          @AuthenticationPrincipal Object principal,
+                                          @RequestBody Map<String, Object> body) {
+        Map<String, Object> actorPatch = toMap(principal);
+        if (actorPatch == null) return ResponseEntity.status(401).build();
+        if (!canWriteBacklog(principal) && !PermissionHelper.hasPermission(principal, "update_assigned")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki izin untuk mengubah sprint item"));
+        }
+
+        List<Map<String, Object>> rows = jdbc.queryForList(
+            "SELECT bi.type, bi.sprint_id, s.name AS sprint_name FROM backlog_items bi " +
+            "LEFT JOIN sprints s ON s.id = bi.sprint_id WHERE bi.id=?", id
+        );
+        if (rows.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "Item tidak ditemukan"));
+        if ("independent".equals(str(rows.get(0).get("type")))) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Item independent tidak terikat sprint"));
+        }
+        String oldSprintName = str(rows.get(0).get("sprint_name"));
+
+        Long newSprintId = toLong(body.get("sprint_id"));
+        int updated = jdbc.update("UPDATE backlog_items SET sprint_id=? WHERE id=?", newSprintId, id);
+        if (updated == 0) return ResponseEntity.status(404).body(Map.of("error", "Item tidak ditemukan"));
+
+        String newSprintName = "";
+        if (newSprintId != null) {
+            List<Map<String, Object>> sRows = jdbc.queryForList("SELECT name FROM sprints WHERE id=?", newSprintId);
+            if (!sRows.isEmpty()) newSprintName = str(sRows.get(0).get("name"));
+        }
+
+        Map<String, Object> actor = toMap(principal);
+        String actorName = actor != null ? str(actor.get("name")) : "System";
+        logActivity(id, null, "Sprint: \"" + oldSprintName + "\" → \"" + newSprintName + "\" — oleh " + actorName);
+
+        return ResponseEntity.ok(Map.of("id", id, "sprint_id", newSprintId, "sprint_name", newSprintName));
+    }
+
     // ─── DELETE ────────────────────────────────────────────────────────────
 
     @DeleteMapping("/{id}")
