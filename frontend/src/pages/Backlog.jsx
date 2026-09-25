@@ -8,7 +8,6 @@ import PriorityBadge from '../components/PriorityBadge';
 import LinkInsertButton from '../components/LinkInsertButton';
 import SearchableSelect from '../components/SearchableSelect';
 import SearchableMultiSelect from '../components/SearchableMultiSelect';
-import StatusStepper from '../components/StatusStepper';
 import AssigneeStack from '../components/AssigneeStack';
 import { renderWithLinks } from '../utils/linkify';
 import { useAuth } from '../context/AuthContext';
@@ -1187,11 +1186,14 @@ export default function Backlog() {
                     </td>
                     <td className="px-3 py-3 text-center"><PriorityBadge priority={item.priority} /></td>
                     <td className="px-3 py-3 text-center">
-                      <StatusStepper
-                        status={item.status}
-                        onChange={s => quickStatus(item.id, s)}
+                      <select
+                        className="text-xs border-0 bg-transparent focus:ring-0 cursor-pointer"
+                        value={item.status}
+                        onChange={e => quickStatus(item.id, e.target.value)}
                         disabled={!hasRole('super_admin','manager','po','developer','qa')}
-                      />
+                      >
+                        {STATUSES.map(s => <option key={s} value={s}>{s.replace('_',' ')}</option>)}
+                      </select>
                     </td>
                     <td className="px-3 py-3 text-center font-semibold text-slate-600">
                       {item.type === 'independent'
