@@ -232,22 +232,38 @@ public class BugController {
         }
         Long bugId = toLong(body.get("bug_id"));
         String stage = (String) body.get("stage");
+        String note = body.get("note") != null ? body.get("note").toString().trim() : "";
         Map<String, Object> user = toMap(principal);
         Map<String, Object> beforeBug = bugDetail(bugId);
         String oldStage = beforeBug != null ? str(beforeBug.get("stage")) : null;
+        Long actorId = user != null ? toLong(user.get("id")) : null;
+        String actorName = user != null ? str(user.get("name")) : "System";
         try {
             Map<String, Object> row = jdbc.queryForMap(
                 "INSERT INTO bug_progress_updates (bug_id, stage, note, updated_by) VALUES (?,?,?,?) RETURNING *",
-                bugId, stage, body.get("note"), user != null ? user.get("id") : null
+                bugId, stage, body.get("note"), actorId
             );
             jdbc.update(
                 "UPDATE bugs SET stage=?, closed_at = CASE WHEN ?='done' THEN NOW() ELSE NULL END WHERE id=?",
                 stage, stage, bugId
             );
 
+            // Surface the stage change (and, if written, the closing note) in the bug's own
+            // Activity/Comments feed — bug_progress_updates alone only shows on the separate
+            // Progress tab, which made closing notes look like they vanished.
+            jdbc.update(
+                "INSERT INTO bug_activities (bug_id, user_id, type, content) VALUES (?,?,'change_log',?)",
+                bugId, actorId,
+                "Stage diubah dari \"" + oldStage + "\" menjadi \"" + stage + "\" — oleh " + actorName
+            );
+            if (!note.isEmpty()) {
+                jdbc.update(
+                    "INSERT INTO bug_activities (bug_id, user_id, type, content) VALUES (?,?,'comment',?)",
+                    bugId, actorId, note
+                );
+            }
+
             if (beforeBug != null) {
-                Long actorId = user != null ? toLong(user.get("id")) : null;
-                String actorName = user != null ? str(user.get("name")) : "System";
                 Object rawAssignees = beforeBug.get("assignees");
                 if (rawAssignees instanceof List) {
                     for (Object o : (List<?>) rawAssignees) {

@@ -582,11 +582,24 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
 function BugProgressForm({ bug, onSave, onClose }) {
   const [form, setForm] = useState({ bug_id: bug.id, stage: bug.stage || 'open', note: '' });
   const [saving, setSaving] = useState(false);
+  const [history, setHistory] = useState([]);
+
+  const loadHistory = useCallback(async () => {
+    try {
+      const res = await client.get(`/bugs/progress?bug_id=${bug.id}`);
+      setHistory(res.data || []);
+    } catch { /**/ }
+  }, [bug.id]);
+
+  useEffect(() => { loadHistory(); }, [loadHistory]);
+
   const save = async (e) => {
     e.preventDefault(); setSaving(true);
     try {
       await client.post('/bugs/progress', form);
       toast.success('Progress disimpan');
+      setForm(f => ({ ...f, note: '' }));
+      loadHistory();
       onSave();
     } catch {} finally { setSaving(false); }
   };
@@ -611,6 +624,27 @@ function BugProgressForm({ bug, onSave, onClose }) {
         <label className="label">Catatan</label>
         <textarea className="input h-20 resize-none" value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder="Update progress perbaikan..." />
       </div>
+
+      {history.length > 0 && (
+        <div>
+          <label className="label">Riwayat Progress</label>
+          <div className="max-h-40 overflow-y-auto space-y-2 border border-slate-100 rounded-lg p-2.5">
+            {history.map(h => (
+              <div key={h.id} className="text-xs">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <StatusBadge status={h.stage} size="xs" />
+                  <span className="text-slate-400">
+                    {h.created_at ? formatDistanceToNow(parseISO(h.created_at), { addSuffix: true, locale: localeId }) : ''}
+                  </span>
+                  <span className="text-slate-400">· {h.updated_by_name || 'System'}</span>
+                </div>
+                {h.note && <p className="text-slate-600 bg-slate-50 rounded px-2 py-1">{h.note}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
         <button type="button" className="btn-secondary" onClick={onClose}>Batal</button>
         <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Progress'}</button>
