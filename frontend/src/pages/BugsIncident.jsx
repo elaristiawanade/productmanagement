@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
-import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff } from 'lucide-react';
+import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff, AlertTriangle, XCircle } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
@@ -739,6 +739,8 @@ export default function BugsIncident() {
   const [trendPeriod,  setTrendPeriod] = useState('month');
   const [modal,        setModal]       = useState({ open: false, type: '', data: null });
   const [loading,      setLoading]     = useState(true);
+  const [importing,    setImporting]   = useState(false);
+  const importInputRef = useRef(null);
   const [perPageBugs,     setPerPageBugs]     = useState(10);
   const [pageBugs,        setPageBugs]        = useState(1);
   const [perPageProgress, setPerPageProgress] = useState(10);
@@ -836,6 +838,27 @@ export default function BugsIncident() {
     a.download = `bugs_export_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleImportCSV = async (e) => {
+    const file = e.target.files?.[0];
+    if (importInputRef.current) importInputRef.current.value = '';
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.csv')) { toast.error('Hanya file .csv yang diterima'); return; }
+
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await client.post('/import/bugs', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      toast.success(`Import selesai: ${res.data.created} bug dibuat`);
+      setModal({ open: true, type: 'import-result', data: res.data });
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Gagal mengimport CSV');
+    } finally {
+      setImporting(false);
+    }
   };
 
   const STAGE_COLORS = { open: '#ef4444', in_progress: '#3b82f6', ready_to_test: '#f59e0b', reopen: '#a855f7', done: '#10b981' };
@@ -1066,6 +1089,17 @@ export default function BugsIncident() {
                   {hideClosed ? 'Closed/Done disembunyikan' : 'Tampilkan Closed/Done'}
                 </button>
                 <div className="ml-auto flex items-center gap-2">
+                  {canAccess && (
+                    <>
+                      <input ref={importInputRef} type="file" accept=".csv" className="hidden" onChange={handleImportCSV} />
+                      <button className="btn-secondary" onClick={() => importInputRef.current?.click()} disabled={importing}>
+                        {importing
+                          ? <span className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                          : <Upload className="w-4 h-4" />}
+                        Import CSV
+                      </button>
+                    </>
+                  )}
                   <button className="btn-secondary" onClick={exportBugsCSV} disabled={filteredBugs.length === 0}>
                     <Download className="w-4 h-4" /> Export CSV
                   </button>
@@ -1271,6 +1305,42 @@ export default function BugsIncident() {
         {modal.data && <BugProgressForm bug={modal.data}
           onSave={() => { setModal({ ...modal, open: false }); load(); }}
           onClose={() => setModal({ ...modal, open: false })} />}
+      </Modal>
+
+      <Modal open={modal.open && modal.type === 'import-result'} onClose={() => setModal({ ...modal, open: false })}
+        title="Hasil Import Bugs" size="sm">
+        {modal.data && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-lg bg-emerald-50 p-4 text-center">
+                <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto mb-1" />
+                <p className="text-2xl font-bold text-emerald-700">{modal.data.created}</p>
+                <p className="text-xs text-emerald-600">Bug dibuat</p>
+              </div>
+              <div className="rounded-lg bg-amber-50 p-4 text-center">
+                <AlertTriangle className="w-6 h-6 text-amber-500 mx-auto mb-1" />
+                <p className="text-2xl font-bold text-amber-700">{modal.data.skipped}</p>
+                <p className="text-xs text-amber-600">Di-skip</p>
+              </div>
+              <div className="rounded-lg bg-red-50 p-4 text-center">
+                <XCircle className="w-6 h-6 text-red-500 mx-auto mb-1" />
+                <p className="text-2xl font-bold text-red-700">{modal.data.errors?.length || 0}</p>
+                <p className="text-xs text-red-600">Error</p>
+              </div>
+            </div>
+            {modal.data.errors?.length > 0 && (
+              <div className="bg-red-50 rounded-lg p-3 space-y-1 max-h-48 overflow-y-auto">
+                <p className="text-xs font-semibold text-red-700">Detail Error:</p>
+                {modal.data.errors.map((e, i) => (
+                  <p key={i} className="text-xs text-red-600">• {e}</p>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <button className="btn-secondary" onClick={() => setModal({ ...modal, open: false })}>Tutup</button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );
