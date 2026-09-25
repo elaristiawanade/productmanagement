@@ -3,7 +3,7 @@
 
 | | |
 |---|---|
-| **Versi** | 2.6 |
+| **Versi** | 2.7 |
 | **Tanggal** | 25 September 2026 |
 | **Status** | Live — Production |
 | **Pemilik** | Tim Internal |
@@ -93,6 +93,7 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 - Status item: `backlog`, `todo`, `in_progress`, `in_review`, `done`, `blocked`
 - Prioritas: `low`, `medium`, `high`, `critical`
 - Assign ke developer, set due date, set sprint, hubungkan ke epic/feature
+- **Pindah sprint langsung dari tabel:** kolom **Sprint** di tabel Backlog berupa dropdown — pilih sprint lain (atau kembali ke "Backlog (no sprint)") tanpa buka form edit, pola quick-update yang sama seperti kolom Status. Item tipe `independent` tidak punya dropdown ini karena tidak terikat sprint. Perubahan tercatat di log aktivitas item; tidak mengirim notifikasi email (beda dari perubahan status)
 - Pagination dengan limit per halaman yang dapat dikonfigurasi
 - Import dari Jira (CSV)
 - **Lampiran** — unggah file ke backlog item: gambar (JPEG/PNG/GIF/WebP), PDF, Word, Excel, PowerPoint, ZIP, CSV, TXT (max 10MB per file, multi-file). Preview inline untuk gambar, PDF, TXT, dan CSV (dirender sebagai tabel) — tipe lain dibuka/diunduh di tab baru
@@ -479,6 +480,7 @@ GET    /api/backlog/:id           Detail satu item
 POST   /api/backlog               Buat item baru (auto-cascade SP ke parent)
 PUT    /api/backlog/:id           Update item (auto-cascade SP; type/parent_id fallback ke nilai DB)
 PATCH  /api/backlog/:id/status    Update status saja
+PATCH  /api/backlog/:id/sprint    Update sprint saja (400 jika item tipe independent)
 DELETE /api/backlog/:id           Hapus item (auto-cascade SP ke parent yang tersisa)
 
 GET    /api/backlog/:id/activities     Log perubahan + komentar
@@ -742,3 +744,4 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | 11 Sep 2026 | 2.5 | Tambah modul **Lapor Bug Publik** (3.15) — form `/report-bug` tanpa login untuk karyawan kantor yang tidak punya akun Product Tracker, jadi bagian dari deployment LAN yang sama (bukan sistem/domain terpisah). Tiket masuk langsung ke tabel `bugs` yang sama dengan Bugs Incident (3.9): produk dipilih dari dropdown, auto-assign ke Product Owner produk tsb, identitas pelapor (nama+email) disimpan sebagai teks bebas (`reported_by` tetap `NULL`), lampiran screenshot opsional. Endpoint baru tanpa autentikasi: `GET /api/public/products`, `POST /api/public/bugs`, `POST /api/public/bugs/:id/attachments` (lihat Bagian 6 & 7 untuk detail akses/keamanan). `migration_v18.sql`: kolom `bugs.reporter_name`, `bugs.reporter_email` |
 | 11 Sep 2026 | 2.5 | Bugs Incident (3.9): tabel Bugs sekarang default sort **Tanggal Incident terbaru di atas** (sebelumnya urutan asli dari backend, per produk lalu kode) — supaya tiket yang baru dibuat/dilaporkan (termasuk dari Lapor Bug Publik) langsung terlihat tanpa perlu klik sort dulu. Klik header kolom lain tetap berfungsi seperti biasa. Tidak ada perubahan skema database atau endpoint baru, murni default state client-side |
 | 25 Sep 2026 | 2.6 | Backlog (3.2), Bugs Incident (3.9): filter **Assignee** dan field **Assignee**/**Assigned To** di form Tambah/Edit diganti dari checklist polos (tanpa pencarian) jadi dropdown checklist dengan kotak pencarian — ketik nama untuk menyaring, tetap multi-select. Komponen baru `SearchableMultiSelect` (drop-in pengganti `MultiSelect` khusus untuk daftar assignee). Tidak ada perubahan skema database atau endpoint baru, murni komponen client-side |
+| 25 Sep 2026 | 2.7 | Backlog (3.2): kolom **Sprint** di tabel Backlog jadi dropdown — pindahkan item ke sprint lain (atau lepas ke "Backlog (no sprint)") langsung dari tabel, tanpa buka form edit, pola sama seperti quick-update Status. Item tipe `independent` tidak bisa diedit lewat kolom ini. Endpoint baru `PATCH /api/backlog/:id/sprint`, permission sama dengan quick-status. Perubahan tercatat di log aktivitas, tidak mengirim notifikasi email. Tidak ada perubahan skema database |

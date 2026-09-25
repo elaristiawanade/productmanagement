@@ -7,7 +7,7 @@ Sistem tracking internal product development berbasis web dengan React + Node.js
 | Modul | Deskripsi |
 |-------|-----------|
 | **Dashboard** | Cross-project overview: workload, delayed items, sprint velocity, status distribution |
-| **Backlog** | CRUD backlog items dengan filter (assignee bisa diketik untuk mencari nama), quick-status update, pagination |
+| **Backlog** | CRUD backlog items dengan filter (assignee bisa diketik untuk mencari nama), quick-status & quick-sprint update langsung dari tabel, pagination |
 | **Sprints** | Sprint board (Kanban), burndown chart, epic overview, sprint planning |
 | **Products** | Manajemen produk, epic, dan feature per produk |
 | **Users & Roles** | 5 role: Super Admin, Manager, PO, Developer, QA |
