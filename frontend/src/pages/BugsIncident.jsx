@@ -3,13 +3,14 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
-import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff } from 'lucide-react';
+import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff, AlertTriangle, XCircle } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import LinkInsertButton from '../components/LinkInsertButton';
 import SearchableSelect from '../components/SearchableSelect';
+import SearchableMultiSelect from '../components/SearchableMultiSelect';
 import AssigneeStack from '../components/AssigneeStack';
 import { renderWithLinks } from '../utils/linkify';
 import { useAuth } from '../context/AuthContext';
@@ -472,9 +473,10 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
       </div>
       <div className="col-span-2">
         <label className="label">Assigned To</label>
-        <MultiSelect label="assignee"
+        <SearchableMultiSelect label="assignee"
           options={users.map(u => ({ v: u.id, l: u.name }))}
           selected={form.assignee_ids}
+          searchPlaceholder="Cari nama assignee..."
           onChange={vals => setForm(f => ({ ...f, assignee_ids: vals }))} />
       </div>
       {/* Attachments — queued locally until the bug is created, uploaded live once it exists */}
@@ -582,11 +584,24 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
 function BugProgressForm({ bug, onSave, onClose }) {
   const [form, setForm] = useState({ bug_id: bug.id, stage: bug.stage || 'open', note: '' });
   const [saving, setSaving] = useState(false);
+  const [history, setHistory] = useState([]);
+
+  const loadHistory = useCallback(async () => {
+    try {
+      const res = await client.get(`/bugs/progress?bug_id=${bug.id}`);
+      setHistory(res.data || []);
+    } catch { /**/ }
+  }, [bug.id]);
+
+  useEffect(() => { loadHistory(); }, [loadHistory]);
+
   const save = async (e) => {
     e.preventDefault(); setSaving(true);
     try {
       await client.post('/bugs/progress', form);
       toast.success('Progress disimpan');
+      setForm(f => ({ ...f, note: '' }));
+      loadHistory();
       onSave();
     } catch {} finally { setSaving(false); }
   };
@@ -611,6 +626,27 @@ function BugProgressForm({ bug, onSave, onClose }) {
         <label className="label">Catatan</label>
         <textarea className="input h-20 resize-none" value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder="Update progress perbaikan..." />
       </div>
+
+      {history.length > 0 && (
+        <div>
+          <label className="label">Riwayat Progress</label>
+          <div className="max-h-40 overflow-y-auto space-y-2 border border-slate-100 rounded-lg p-2.5">
+            {history.map(h => (
+              <div key={h.id} className="text-xs">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <StatusBadge status={h.stage} size="xs" />
+                  <span className="text-slate-400">
+                    {h.created_at ? formatDistanceToNow(parseISO(h.created_at), { addSuffix: true, locale: localeId }) : ''}
+                  </span>
+                  <span className="text-slate-400">· {h.updated_by_name || 'System'}</span>
+                </div>
+                {h.note && <p className="text-slate-600 bg-slate-50 rounded px-2 py-1">{h.note}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
         <button type="button" className="btn-secondary" onClick={onClose}>Batal</button>
         <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Progress'}</button>
@@ -703,6 +739,8 @@ export default function BugsIncident() {
   const [trendPeriod,  setTrendPeriod] = useState('month');
   const [modal,        setModal]       = useState({ open: false, type: '', data: null });
   const [loading,      setLoading]     = useState(true);
+  const [importing,    setImporting]   = useState(false);
+  const importInputRef = useRef(null);
   const [perPageBugs,     setPerPageBugs]     = useState(10);
   const [pageBugs,        setPageBugs]        = useState(1);
   const [perPageProgress, setPerPageProgress] = useState(10);
@@ -800,6 +838,27 @@ export default function BugsIncident() {
     a.download = `bugs_export_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleImportCSV = async (e) => {
+    const file = e.target.files?.[0];
+    if (importInputRef.current) importInputRef.current.value = '';
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.csv')) { toast.error('Hanya file .csv yang diterima'); return; }
+
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await client.post('/import/bugs', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      toast.success(`Import selesai: ${res.data.created} bug dibuat`);
+      setModal({ open: true, type: 'import-result', data: res.data });
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Gagal mengimport CSV');
+    } finally {
+      setImporting(false);
+    }
   };
 
   const STAGE_COLORS = { open: '#ef4444', in_progress: '#3b82f6', ready_to_test: '#f59e0b', reopen: '#a855f7', done: '#10b981' };
@@ -1018,9 +1077,10 @@ export default function BugsIncident() {
                     selected={bugFilters[key]}
                     onChange={vals => setBugFilters(f => ({ ...f, [key]: vals }))} />
                 ))}
-                <MultiSelect label="Assignee" minWidth={140}
+                <SearchableMultiSelect label="Assignee" minWidth={160}
                   options={users.map(u => ({ v: u.id, l: u.name }))}
                   selected={bugFilters.assigned_to}
+                  searchPlaceholder="Cari nama assignee..."
                   onChange={vals => setBugFilters(f => ({ ...f, assigned_to: vals }))} />
                 <button type="button" onClick={() => setHideClosed(h => !h)}
                   className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1.5 shrink-0
@@ -1029,6 +1089,17 @@ export default function BugsIncident() {
                   {hideClosed ? 'Closed/Done disembunyikan' : 'Tampilkan Closed/Done'}
                 </button>
                 <div className="ml-auto flex items-center gap-2">
+                  {canAccess && (
+                    <>
+                      <input ref={importInputRef} type="file" accept=".csv" className="hidden" onChange={handleImportCSV} />
+                      <button className="btn-secondary" onClick={() => importInputRef.current?.click()} disabled={importing}>
+                        {importing
+                          ? <span className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                          : <Upload className="w-4 h-4" />}
+                        Import CSV
+                      </button>
+                    </>
+                  )}
                   <button className="btn-secondary" onClick={exportBugsCSV} disabled={filteredBugs.length === 0}>
                     <Download className="w-4 h-4" /> Export CSV
                   </button>
@@ -1234,6 +1305,42 @@ export default function BugsIncident() {
         {modal.data && <BugProgressForm bug={modal.data}
           onSave={() => { setModal({ ...modal, open: false }); load(); }}
           onClose={() => setModal({ ...modal, open: false })} />}
+      </Modal>
+
+      <Modal open={modal.open && modal.type === 'import-result'} onClose={() => setModal({ ...modal, open: false })}
+        title="Hasil Import Bugs" size="sm">
+        {modal.data && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-lg bg-emerald-50 p-4 text-center">
+                <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto mb-1" />
+                <p className="text-2xl font-bold text-emerald-700">{modal.data.created}</p>
+                <p className="text-xs text-emerald-600">Bug dibuat</p>
+              </div>
+              <div className="rounded-lg bg-amber-50 p-4 text-center">
+                <AlertTriangle className="w-6 h-6 text-amber-500 mx-auto mb-1" />
+                <p className="text-2xl font-bold text-amber-700">{modal.data.skipped}</p>
+                <p className="text-xs text-amber-600">Di-skip</p>
+              </div>
+              <div className="rounded-lg bg-red-50 p-4 text-center">
+                <XCircle className="w-6 h-6 text-red-500 mx-auto mb-1" />
+                <p className="text-2xl font-bold text-red-700">{modal.data.errors?.length || 0}</p>
+                <p className="text-xs text-red-600">Error</p>
+              </div>
+            </div>
+            {modal.data.errors?.length > 0 && (
+              <div className="bg-red-50 rounded-lg p-3 space-y-1 max-h-48 overflow-y-auto">
+                <p className="text-xs font-semibold text-red-700">Detail Error:</p>
+                {modal.data.errors.map((e, i) => (
+                  <p key={i} className="text-xs text-red-600">• {e}</p>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <button className="btn-secondary" onClick={() => setModal({ ...modal, open: false })}>Tutup</button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

@@ -7,6 +7,7 @@ import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import LinkInsertButton from '../components/LinkInsertButton';
 import SearchableSelect from '../components/SearchableSelect';
+import SearchableMultiSelect from '../components/SearchableMultiSelect';
 import AssigneeStack from '../components/AssigneeStack';
 import { renderWithLinks } from '../utils/linkify';
 import { useAuth } from '../context/AuthContext';
@@ -729,9 +730,10 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
         )}
       </F>
       <F label="Assignee">
-        <MultiSelect label="assignee"
+        <SearchableMultiSelect label="assignee"
           options={users.map(u => ({ v: u.id, l: u.name }))}
           selected={form.assignee_ids}
+          searchPlaceholder="Cari nama assignee..."
           onChange={vals => setForm(f => ({ ...f, assignee_ids: vals }))} />
       </F>
       <F label="Deadline">
@@ -993,6 +995,11 @@ export default function Backlog() {
     load();
   };
 
+  const quickSprint = async (id, sprintId) => {
+    await client.patch(`/backlog/${id}/sprint`, { sprint_id: sprintId || null });
+    load();
+  };
+
   const TYPE_COLORS = {
     story:       'text-blue-600 bg-blue-50',
     bug:         'text-red-600 bg-red-50',
@@ -1024,9 +1031,10 @@ export default function Backlog() {
             onChange={vals => { setFilters(f => ({ ...f, [key]: vals })); setPage(1); }} />
         ))}
         {/* Assignee filter */}
-        <MultiSelect label="Assignee" minWidth={140}
+        <SearchableMultiSelect label="Assignee" minWidth={160}
           options={users.map(u => ({ v: u.id, l: u.name }))}
           selected={filters.assignee_id}
+          searchPlaceholder="Cari nama assignee..."
           onChange={vals => { setFilters(f => ({ ...f, assignee_id: vals })); setPage(1); }} />
         {/* Deadline range */}
         <div className="flex items-center gap-1.5">
@@ -1196,7 +1204,21 @@ export default function Backlog() {
                       <span className="text-xs font-medium" style={{ color: item.product_color }}>{item.product_code}</span>
                     </td>
                     <td className="px-3 py-3 text-xs text-slate-500">
-                      {item.type === 'independent' ? <span className="text-orange-500">⚡ independent</span> : (item.sprint_name || '—')}
+                      {item.type === 'independent' ? (
+                        <span className="text-orange-500">⚡ independent</span>
+                      ) : (
+                        <select
+                          className="text-xs border-0 bg-transparent focus:ring-0 cursor-pointer"
+                          value={item.sprint_id || ''}
+                          onChange={e => quickSprint(item.id, e.target.value)}
+                          disabled={!hasRole('super_admin','manager','po','developer','qa')}
+                        >
+                          <option value="">Backlog (no sprint)</option>
+                          {sprints.filter(s => s.product_id === item.product_id).map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                      )}
                     </td>
                     <td className="px-3 py-3">
                       {item.assignees?.length > 0
