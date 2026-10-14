@@ -364,7 +364,7 @@ function StandupImport({ onDone }) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function Standup() {
-  const { user, hasRole } = useAuth();
+  const { user, can } = useAuth();
   const [tab,         setTab]        = useState('standup');
   const [todayData,   setTodayData]  = useState(null);
   const [standups,    setStandups]   = useState([]);
@@ -376,8 +376,8 @@ export default function Standup() {
   const [perPage,     setPerPage]    = useState(10);
   const [page,        setPage]       = useState(1);
 
-  const isManagerOrAbove = hasRole('super_admin', 'manager');
-  const isPoOrAbove      = hasRole('super_admin', 'manager', 'po');
+  const isManagerOrAbove = can('standup', 'import');
+  const isPoOrAbove      = can('standup', 'edit_any');
 
   const loadToday = useCallback(async () => {
     try {

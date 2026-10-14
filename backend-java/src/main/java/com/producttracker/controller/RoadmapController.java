@@ -1,5 +1,6 @@
 package com.producttracker.controller;
 
+import com.producttracker.config.PermissionHelper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -54,7 +55,7 @@ public class RoadmapController {
                                      @RequestBody Map<String, Object> body) {
         Map<String, Object> actor = toMap(principal);
         if (actor == null) return ResponseEntity.status(401).build();
-        if (!isPoOrAbove(actor)) {
+        if (!PermissionHelper.can(principal, "roadmap", "create")) {
             return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses"));
         }
         if (body.get("product_id") == null || body.get("feature_name") == null) {
@@ -89,7 +90,7 @@ public class RoadmapController {
                                      @RequestBody Map<String, Object> body) {
         Map<String, Object> actor = toMap(principal);
         if (actor == null) return ResponseEntity.status(401).build();
-        if (!isPoOrAbove(actor)) {
+        if (!PermissionHelper.can(principal, "roadmap", "update")) {
             return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses"));
         }
         int updated = jdbc.update(
@@ -116,7 +117,7 @@ public class RoadmapController {
                                      @AuthenticationPrincipal Object principal) {
         Map<String, Object> actor = toMap(principal);
         if (actor == null) return ResponseEntity.status(401).build();
-        if (!isManagerOrAbove(actor)) {
+        if (!PermissionHelper.can(principal, "roadmap", "delete")) {
             return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses"));
         }
         int deleted = jdbc.update("DELETE FROM product_roadmap WHERE id=?", id);
@@ -125,16 +126,6 @@ public class RoadmapController {
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
-
-    private boolean isManagerOrAbove(Map<String, Object> user) {
-        Object rn = user.get("role_name");
-        return "super_admin".equals(rn) || "manager".equals(rn);
-    }
-
-    private boolean isPoOrAbove(Map<String, Object> user) {
-        Object rn = user.get("role_name");
-        return "super_admin".equals(rn) || "manager".equals(rn) || "po".equals(rn);
-    }
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> toMap(Object o) {

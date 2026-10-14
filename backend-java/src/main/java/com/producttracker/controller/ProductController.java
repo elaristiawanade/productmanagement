@@ -1,5 +1,6 @@
 package com.producttracker.controller;
 
+import com.producttracker.config.PermissionHelper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -44,7 +45,10 @@ public class ProductController {
     }
 
     @PostMapping
-    public ResponseEntity<?> create(@RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> create(@AuthenticationPrincipal Object principal, @RequestBody Map<String, Object> body) {
+        if (!PermissionHelper.can(principal, "products", "create")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk menambah produk"));
+        }
         String code = (String) body.get("code");
         String name = (String) body.get("name");
         if (code == null || name == null) {
@@ -82,7 +86,11 @@ public class ProductController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> update(@PathVariable Long id, @AuthenticationPrincipal Object principal,
+                                     @RequestBody Map<String, Object> body) {
+        if (!PermissionHelper.can(principal, "products", "update")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk mengubah produk"));
+        }
         try {
             int updated = jdbc.update(
                 "UPDATE products SET name=?, description=?, status=?, owner_id=?, repository_url=?, color=? WHERE id=?",
@@ -100,7 +108,10 @@ public class ProductController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> delete(@PathVariable Long id) {
+    public ResponseEntity<?> delete(@PathVariable Long id, @AuthenticationPrincipal Object principal) {
+        if (!PermissionHelper.can(principal, "products", "delete")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk menghapus produk"));
+        }
         int deleted = jdbc.update("DELETE FROM products WHERE id = ?", id);
         if (deleted == 0) return ResponseEntity.status(404).body(Map.of("error", "Produk tidak ditemukan"));
         return ResponseEntity.ok(Map.of("message", "Produk dihapus"));

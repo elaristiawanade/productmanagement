@@ -10,21 +10,29 @@ Sistem tracking internal product development berbasis web dengan React + Node.js
 | **Backlog** | CRUD backlog items dengan filter (assignee bisa diketik untuk mencari nama), quick-status & quick-sprint update langsung dari tabel, pagination |
 | **Sprints** | Sprint board (Kanban), burndown chart, epic overview, sprint planning |
 | **Products** | Manajemen produk, epic, dan feature per produk |
-| **Users & Roles** | 5 role: Super Admin, Manager, PO, Developer, QA |
+| **Users & Roles** | Role dibuat bebas lewat UI (bukan daftar tetap) — tiap role diberi hak akses lewat matrix **Modul × Aksi** (Buat/Ubah/Hapus/dll per modul, cuma aksi yang relevan yang tampil). 7 role default ter-seed: Super Admin, Manager, PO, Developer, QA, SME, Commissioner |
 | **QA Module** | Test case management, test execution, QA dashboard |
 | **Bugs Incident** | Bug tracking + histori progress perbaikan (open→in_progress→ready_to_test→reopen→done), komentar/@mention, tanggal incident/closed/update terakhir, kolom Incident Author (pelapor bug), filter sembunyikan closed/done, default sort tanggal incident terbaru di atas, **Import CSV** massal (format sama seperti Export CSV — duplikat kode di-skip, kode kosong auto-generate). Default Super Admin & QA Engineer; role lain (misal Developer) bisa diberi akses lewat permission `access_bugs` |
 | **Lapor Bug Publik** | Halaman `/report-bug` tanpa login — siapa pun di jaringan kantor (bukan cuma user terdaftar) bisa lapor bug lewat form: pilih aplikasi, judul, deskripsi, langkah reproduksi, severity, nama+email pelapor, screenshot opsional. Tiket masuk langsung ke Bugs Incident yang sama, auto-assign ke Product Owner produk terkait |
 | **Notifikasi Email** | Email personal ke assignee/yang di-mention saat assignment, status/stage berubah, atau mention (Backlog, Bugs Incident, Leader Task). Global, dikonfigurasi lewat halaman **Notification Settings** (Super Admin only) — toggle, config SMTP, kirim email tes, aktif tanpa restart |
 
-## Roles
+## Roles & Permissions
 
-| Role | Akses |
+Role bukan daftar tetap di kode — role apa pun bisa dibuat lewat halaman **Users & Roles → Roles & Permissions**, dan hak aksesnya ditentukan oleh matrix **Modul × Aksi** yang disimpan di `roles.permissions` (JSONB, bentuk `{"modul": {"aksi": true}}`). Backend menegakkan ini lewat `PermissionHelper.can(principal, module, action)`, frontend lewat `useAuth().can(module, action)` — satu sumber kebenaran untuk keduanya (tidak ada lagi role hardcode di kode).
+
+7 role default yang ter-seed (bisa diubah/dihapus kapan saja oleh Super Admin, kecuali `super_admin` sendiri yang selalu bypass semua pengecekan):
+
+| Role | Akses default |
 |------|-------|
-| Super Admin | Full access |
-| Manager | Read all, manage users, view reports |
-| Product Owner | Manage backlog, sprints, features |
-| Developer | View & update assigned items |
-| QA Engineer | Manage test cases & executions |
+| Super Admin | Bypass semua pengecekan (hardcode, bukan dari matrix) |
+| Manager | Hampir semua modul (create/update/delete), kecuali Bugs Incident & C-Level |
+| Product Owner | Backlog, Epics, Features, Sprints, QA (create/update), Roadmap, Import Jira |
+| Developer | Backlog (create/update/update_assigned), Epics |
+| QA Engineer | QA (penuh), Backlog (create/update), Bugs Incident |
+| SME | C-Level Dashboard (Leader Notes/Task) |
+| Commissioner | C-Level Dashboard (Leader Notes/Task) |
+
+Daftar lengkap modul & aksi yang tersedia: lihat `MODULE_CATALOG` di `frontend/src/pages/Users.jsx`.
 
 ## Quick Start (Docker)
 
@@ -125,11 +133,12 @@ CRUD /api/sprints?product_id=
 GET  /api/sprints/:id/burndown
 CRUD /api/users
 GET  /api/users/roles
+CRUD /api/roles               ← permissions: {"modul": {"aksi": true}} — lihat "Roles & Permissions" di atas
 CRUD /api/qa/test-cases
 CRUD /api/qa/test-runs
 GET  /api/qa/dashboard
 
-CRUD /api/bugs                ← Default: Super Admin & QA Engineer only (403 lainnya, kecuali diberi permission access_bugs)
+CRUD /api/bugs                ← Default: Super Admin & QA Engineer only (403 lainnya, kecuali role diberi aksi bugs.access)
 CRUD /api/bugs/progress       ← Histori progress perbaikan bug
 GET  /api/bugs/dashboard      ← summary, byProduct, byStage, recentActivity, recentComments
 GET/POST   /api/bugs/:id/activities   ← Komentar bug (mirror activities Backlog)

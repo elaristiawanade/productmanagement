@@ -182,7 +182,7 @@ public class BacklogController {
         }
         Map<String, Object> actorCheck = toMap(principal);
         if (actorCheck == null) return ResponseEntity.status(401).build();
-        if (!canWriteBacklog(principal)) {
+        if (!PermissionHelper.can(principal, "backlog", "create")) {
             return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki izin untuk menambah backlog item"));
         }
 
@@ -284,8 +284,8 @@ public class BacklogController {
         if (actorUpd == null) return ResponseEntity.status(401).build();
 
         // Check: can write backlog, OR has update_assigned AND is the assignee
-        if (!canWriteBacklog(principal)) {
-            if (PermissionHelper.hasPermission(principal, "update_assigned")) {
+        if (!PermissionHelper.can(principal, "backlog", "update")) {
+            if (PermissionHelper.can(principal, "backlog", "update_assigned")) {
                 Long actorId = PermissionHelper.getUserId(principal);
                 Long assignedCount = jdbc.queryForObject(
                     "SELECT COUNT(*) FROM backlog_item_assignees WHERE backlog_item_id = ? AND user_id = ?",
@@ -386,7 +386,7 @@ public class BacklogController {
         }
         Map<String, Object> actorPatch = toMap(principal);
         if (actorPatch == null) return ResponseEntity.status(401).build();
-        if (!canWriteBacklog(principal) && !PermissionHelper.hasPermission(principal, "update_assigned")) {
+        if (!PermissionHelper.can(principal, "backlog", "update") && !PermissionHelper.can(principal, "backlog", "update_assigned")) {
             return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki izin untuk mengubah status item"));
         }
 
@@ -444,7 +444,7 @@ public class BacklogController {
                                           @RequestBody Map<String, Object> body) {
         Map<String, Object> actorPatch = toMap(principal);
         if (actorPatch == null) return ResponseEntity.status(401).build();
-        if (!canWriteBacklog(principal) && !PermissionHelper.hasPermission(principal, "update_assigned")) {
+        if (!PermissionHelper.can(principal, "backlog", "update") && !PermissionHelper.can(principal, "backlog", "update_assigned")) {
             return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki izin untuk mengubah sprint item"));
         }
 
@@ -480,7 +480,7 @@ public class BacklogController {
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id,
                                      @AuthenticationPrincipal Object principal) {
-        if (!canDeleteBacklog(principal)) {
+        if (!PermissionHelper.can(principal, "backlog", "delete")) {
             return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki izin untuk menghapus backlog item"));
         }
         // Capture parent before delete so we can cascade SP after
@@ -681,24 +681,6 @@ public class BacklogController {
     private boolean isManagerOrAbove(Map<String, Object> user) {
         Object rn = user.get("role_name");
         return "super_admin".equals(rn) || "manager".equals(rn);
-    }
-
-    /** Create / edit backlog: managers, PO, developers by role, OR manage_backlog permission. */
-    private boolean canWriteBacklog(Object principal) {
-        String rn = PermissionHelper.getRoleName(principal);
-        if ("super_admin".equals(rn) || "manager".equals(rn) || "po".equals(rn) || "developer".equals(rn) || "qa".equals(rn)) {
-            return true;
-        }
-        return PermissionHelper.hasPermission(principal, "manage_backlog");
-    }
-
-    /** Delete backlog: only managers, PO and above by role, OR manage_backlog permission. */
-    private boolean canDeleteBacklog(Object principal) {
-        String rn = PermissionHelper.getRoleName(principal);
-        if ("super_admin".equals(rn) || "manager".equals(rn) || "po".equals(rn)) {
-            return true;
-        }
-        return PermissionHelper.hasPermission(principal, "manage_backlog");
     }
 
     private List<Long> getAssignedProductIds(Long userId) {

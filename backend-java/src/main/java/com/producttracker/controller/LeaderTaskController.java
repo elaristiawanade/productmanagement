@@ -366,7 +366,7 @@ public class LeaderTaskController {
             return ResponseEntity.status(403).body(Map.of("error", "Log perubahan tidak dapat dihapus"));
         }
         boolean isOwner = Objects.equals(toLong(rows.get(0).get("user_id")), toLong(actor.get("id")));
-        if (!isOwner && !"super_admin".equals(actor.get("role_name"))) {
+        if (!isOwner && !departmentHelper.canWrite(principal)) {
             return ResponseEntity.status(403).body(Map.of("error", "Hanya bisa menghapus komentar sendiri"));
         }
         jdbc.update("DELETE FROM leader_task_activities WHERE id = ?", id);

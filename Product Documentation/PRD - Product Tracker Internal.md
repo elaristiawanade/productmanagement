@@ -3,8 +3,8 @@
 
 | | |
 |---|---|
-| **Versi** | 2.7 |
-| **Tanggal** | 25 September 2026 |
+| **Versi** | 3.0 |
+| **Tanggal** | 14 Oktober 2026 |
 | **Status** | Live — Production |
 | **Pemilik** | Tim Internal |
 
@@ -26,17 +26,19 @@ Product Tracker adalah sistem manajemen pengembangan produk internal yang dibang
 
 ## 2. Pengguna & Peran
 
-Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
+Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus bebas lewat halaman **Users & Roles → Roles & Permissions** (3.10), dan hak aksesnya ditentukan oleh matrix **Modul × Aksi** per role (lihat 3.10 untuk detail model datanya). Tabel di bawah ini adalah **7 role default** yang ter-seed saat instalasi awal — bisa diedit atau dihapus kapan saja oleh Super Admin (kecuali role `super_admin` itu sendiri, yang selalu bypass semua pengecekan terlepas isi matrix-nya):
 
-| Role | Deskripsi | Hak Akses Utama |
+| Role | Deskripsi | Hak Akses Utama (default) |
 |---|---|---|
-| **Super Admin** | Akses penuh tanpa batasan | Semua modul + manajemen user + konfigurasi sistem |
-| **Manager** | Kepala tim / manajemen | Baca semua produk, manajemen user, laporan, import standup |
-| **Product Owner (PO)** | Pemilik produk | Kelola backlog, sprint, feature, epics untuk produk yang di-assign |
-| **Developer** | Anggota tim dev | Lihat & update item yang di-assign ke diri sendiri |
+| **Super Admin** | Akses penuh tanpa batasan | Semua modul + manajemen user + konfigurasi sistem (bypass hardcode, bukan dari matrix) |
+| **Manager** | Kepala tim / manajemen | Hampir semua modul (create/update/delete), manajemen user, import standup, kecuali Bugs Incident & C-Level |
+| **Product Owner (PO)** | Pemilik produk | Kelola backlog, sprint, feature, epics, QA (create/update), roadmap untuk produk yang di-assign |
+| **Developer** | Anggota tim dev | Buat/update backlog & epic; untuk item di luar itu hanya bisa update item yang di-assign ke diri sendiri |
 | **QA Engineer** | Penguji | Kelola test case, test run, eksekusi pengujian, dan modul Bugs Incident (3.9) |
+| **SME** | Subject Matter Expert lintas fungsi | C-Level Dashboard — Leader Notes & Leader Task (3.10 C-Level) |
+| **Commissioner** | Pengawas/komisaris | C-Level Dashboard — Leader Notes & Leader Task, setara SME |
 
-**Aturan akses produk:** Developer dan QA hanya melihat item dari produk tempat mereka terdaftar sebagai member. Exception: semua user selalu dapat melihat item yang di-assign langsung ke mereka (My Tasks).
+**Aturan akses produk:** Developer dan QA hanya melihat item dari produk tempat mereka terdaftar sebagai member. Exception: semua user selalu dapat melihat item yang di-assign langsung ke mereka (My Tasks). Ini adalah filter data (query-level), terpisah dari matrix Modul × Aksi di atas yang mengatur aksi (create/update/delete).
 
 **Pelapor eksternal (bukan role sistem):** Sejak versi 2.5, karyawan kantor yang **tidak punya akun** Product Tracker sama sekali bisa melaporkan bug lewat form publik tanpa login (lihat 3.15) — bukan salah satu dari 5 role di atas, tidak masuk tabel `users`, dan tidak punya akses ke bagian manapun dari aplikasi selain form itu sendiri.
 
@@ -252,17 +254,32 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 
 ### 3.10 Users & Roles (Admin only)
 
-**Tujuan:** Manajemen akun dan hak akses.
+**Tujuan:** Manajemen akun dan hak akses. Terdiri dari 3 tab: **Users**, **Roles & Permissions**, **Departemen**.
 
-**Fitur:**
+**Tab Users — Fitur:**
 - CRUD user (nama, email, role, warna avatar, status aktif)
 - Assign/ubah role
 - **Reset password** user oleh admin (tanpa perlu password lama)
 - Lihat dan kelola daftar produk yang di-assign ke user
 - **Soft delete** (`is_active = false`) — user tidak bisa login tapi data tetap ada
 - **Permanent delete** — hapus user beserta seluruh data terkait dari database (tidak bisa dibatalkan)
+- Aksi Buat/Ubah/Reset Password/Nonaktifkan/Hapus masing-masing digerbang aksi terpisah di tab Roles & Permissions (lihat di bawah) — bukan satu permission tunggal, supaya asimetri lama (mis. role yang bisa Edit profil user tapi tidak boleh Reset Password) bisa tetap diatur per aksi
 
-**Akses:** Super Admin, Manager
+**Tab Roles & Permissions — Fitur:**
+- **Role dibuat bebas** — bukan daftar tetap di kode. Tombol "Tambah Role" membuka form: nama (slug, tidak bisa diubah setelah dibuat), display name, dan tabel hak akses
+- **Matrix Modul × Aksi** — satu baris per modul (Backlog, Epic, Features, Products, Roadmap, Sprint, QA, Bugs Incident, C-Level Dashboard, Standup, Import Jira, Users, Roles, Departemen, Pengaturan), tiap baris cuma menampilkan checkbox untuk aksi yang benar-benar relevan untuk modul itu (bukan grid 5 kolom seragam untuk semua modul — mis. modul Bugs Incident cuma punya 1 aksi "Akses", modul Users punya 5: Buat/Ubah/Reset Password/Nonaktifkan/Hapus)
+- Role **`super_admin`** checkbox-nya di-disable (selalu akses penuh lewat bypass hardcode, bukan dari matrix — supaya tidak ada skenario Super Admin terkunci sendiri dari sistem akibat salah klik)
+- Perubahan tersimpan langsung berefek nyata di frontend (tombol/menu muncul-hilang) **dan** backend (`403` kalau dipanggil API langsung tanpa aksi yang sesuai) — satu sumber kebenaran untuk keduanya
+- List role menampilkan badge per modul yang dapat aksi (mis. "Backlog: Buat, Ubah, Hapus")
+- Hapus role diblokir kalau masih ada user yang pakai role tsb
+
+**Model data:** `roles.permissions` (JSONB) berbentuk nested `{"modul": {"aksi": true}}`, mis. `{"qa": {"create": true, "run": true}}`. Backend menegakkan lewat `PermissionHelper.can(principal, module, action)`, frontend lewat `useAuth().can(module, action)` — tidak ada lagi floor role hardcode di kode untuk modul-modul ini (lihat Riwayat Perubahan untuk detail migrasi dari model permission lama).
+
+**Tab Departemen — Fitur:**
+- CRUD departemen (kode, nama, prefix kode task, warna, urutan tampil) — dipakai untuk scope C-Level Dashboard (3.10), bukan bagian dari matrix Modul × Aksi (tidak ada "aksi" untuk Departemen sebagai record, cuma CRUD data referensi)
+- Atur anggota per departemen (menentukan Leader Notes/Task mana yang terlihat untuk user tsb)
+
+**Akses:** Aksi Buat/Ubah user digerbang aksi `users.create`/`users.update` (default: Super Admin, Manager). Reset Password/Nonaktifkan/Hapus user, dan semua aksi di tab Roles & Permissions + Departemen, default-nya cuma Super Admin — role lain bisa diberi akses ini lewat matrix Modul × Aksi itu sendiri.
 
 ---
 
@@ -611,9 +628,15 @@ POST /api/import/bugs    Import dari CSV ke Bugs Incident (multipart/form-data, 
 
 ### Roles (Admin only)
 ```
-GET/POST          /api/roles        List & buat role
-PUT/DELETE        /api/roles/:id    Update & hapus role
+GET                /api/roles        List semua role (termasuk permissions penuh tiap role)
+POST               /api/roles        Buat role. Body: {name, display_name, permissions}
+                                       permissions berbentuk nested {"modul": {"aksi": true}},
+                                       mis. {"qa": {"create": true, "run": true}}. Aksi: roles.create
+PUT                /api/roles/:id    Update display_name & permissions. Aksi: roles.update
+DELETE             /api/roles/:id    Hapus role (ditolak 409 kalau masih dipakai user). Aksi: roles.delete
 ```
+Daftar lengkap modul & aksi yang valid: lihat `MODULE_CATALOG` di `frontend/src/pages/Users.jsx`
+(sumber kebenaran untuk UI matrix, dibaca juga sebagai referensi oleh backend per endpoint).
 
 ### Settings (Super Admin only)
 ```
@@ -632,7 +655,8 @@ POST /api/settings/mail/test   Kirim satu email tes ke alamat di body {to}, bala
 - JWT token dengan expiry (konfigurasi via `JWT_SECRET` env var)
 - Token tidak valid / kedaluwarsa mengembalikan **HTTP 401** (bukan 403)
 - Axios interceptor di frontend: 401 di luar halaman login → redirect ke `/login`; 401 di halaman login → tampilkan pesan error (tidak redirect)
-- Setiap endpoint divalidasi role sebelum diproses
+- Setiap endpoint yang butuh otorisasi divalidasi lewat matrix **Modul × Aksi** (`PermissionHelper.can(principal, module, action)`, lihat 3.10) sebelum diproses — bukan lagi whitelist nama role hardcode. `super_admin` selalu bypass (hardcode, bukan dari matrix) sebagai jaring pengaman supaya tidak ada skenario Super Admin terkunci sendiri dari sistem
+- Modul/halaman yang sepenuhnya privat (Users & Roles, Bugs Incident, C-Level Dashboard, Settings, Import Jira) digerbang juga di level **route** frontend (redirect kalau tidak punya aksi yang sesuai), bukan cuma menyembunyikan link di sidebar — modul lain (Backlog, Sprints, Products, QA, dll.) tetap open-read untuk semua user login sesuai desain awal, cuma aksi tulis (create/update/delete) yang digerbang
 - Input file di-parse server-side; format xlsx divalidasi via magic bytes ZIP
 - Email dinormalisasi ke lowercase sebelum disimpan
 - Self-update profil dibatasi hanya ke field yang aman (nama, email, avatar) — role tidak bisa diubah sendiri
@@ -753,3 +777,4 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | 25 Sep 2026 | 2.7 | Backlog (3.2): kolom **Sprint** di tabel Backlog jadi dropdown — pindahkan item ke sprint lain (atau lepas ke "Backlog (no sprint)") langsung dari tabel, tanpa buka form edit, pola sama seperti quick-update Status. Item tipe `independent` tidak bisa diedit lewat kolom ini. Endpoint baru `PATCH /api/backlog/:id/sprint`, permission sama dengan quick-status. Perubahan tercatat di log aktivitas, tidak mengirim notifikasi email. Tidak ada perubahan skema database |
 | 25 Sep 2026 | 2.8 | Bugs Incident (3.9): tambah **Import CSV** — upload file CSV untuk bikin bug secara massal, format kolom persis sama dengan hasil **Export CSV** di tab yang sama (round-trip: export → edit di Excel → import balik — pakai "Save As → CSV UTF-8" saat edit di Excel, bukan "CSV" polos, biar karakter non-standar tidak rusak). Produk di-resolve per baris (satu file boleh lintas produk); kode kosong → auto-generate, kode yang sudah ada di produk yang sama → di-skip (create-only, bukan upsert). Assignee/Reported By dicocokkan ke akun user (nama/email) — Reported By yang tidak match akun manapun tetap tersimpan sebagai teks bebas alih-alih hilang. Tanggal Incident/Closed dari CSV dipakai kalau terisi & valid (penting untuk migrasi data bug historis). Parser CSV men-strip BOM UTF-8 di awal file supaya kolom pertama (`Kode`) dari hasil Export CSV kebaca benar — ikut membetulkan potensi masalah yang sama di `/api/import/jira`. Endpoint baru `POST /api/import/bugs`, akses ikut permission `access_bugs` (beda dari gate PO/Manager/Admin di Import Jira). Tidak ada notifikasi/email dikirim untuk bug hasil import, tidak ada perubahan skema database |
 | 28 Sep 2026 | 2.9 | Bugs Incident (3.9): **QA manual Import CSV** (2.8) selesai dilakukan di stack Docker lokal, lintas produk lama maupun produk baru — tidak ditemukan bug, semua sesuai spesifikasi di atas. Cakupan yang diverifikasi: auto-generate kode kosong mengambil nomor tertinggi yang berlaku **saat itu juga** (termasuk kode eksplisit dari baris sebelumnya di file yang sama, bukan cuma yang sudah ada di database sebelum import dimulai); dedup kode exact-match ter-**scope per produk** (kode yang sama di produk berbeda tidak dianggap duplikat) dan berlaku juga untuk duplikat di dalam satu file yang sama; baris dengan Judul kosong di-skip diam-diam, baris dengan Produk kosong/tidak ditemukan masuk daftar error; Severity/Prioritas/Stage tidak valid fallback ke default; Assigned To/Reported By ter-resolve lewat nama maupun email, dan kalau tidak match user manapun tetap NULL/tersimpan sebagai teks bebas tanpa error; Backlog Item dengan kode tidak ditemukan tetap NULL tanpa error; Tanggal Incident kosong atau format tidak valid fallback ke waktu proses import; header case-insensitive, menerima alias Inggris, urutan kolom bebas, dan tetap aman kalau ada kolom opsional yang hilang total dari header (bukan cuma nilainya kosong); error dari pelanggaran panjang kolom (exception generik, bukan validasi terkontrol) maupun dari baris CSV yang rusak strukturnya (koma tanpa quote) tertangkap per-baris tanpa menghentikan baris lain di file yang sama; karakter Unicode/simbol khusus tersimpan utuh lewat file BOM UTF-8; ekstensi selain `.csv` ditolak. Tidak ada perubahan kode atau skema database |
+| 14 Okt 2026 | 3.0 | **Users & Roles (3.10): ganti total sistem Roles & Permissions.** Bug yang jadi pemicu: Developer diberi izin "Kelola QA" lewat Roles & Permissions tapi tetap tidak bisa Add Test Case — investigasi membuktikan dari 17 permission key yang ada di UI lama, cuma 3 yang benar-benar dibaca kode (`manage_users`, `access_bugs`, `access_c_level`); semua modul lain (Backlog, Sprints, Products, QA, Features/Epics, Roadmap, Roles, Standup, Import, Departments, Settings) digerbang daftar role hardcode di kode — centang izin di UI lama tidak berefek apa pun. Diganti dengan matrix **Modul × Aksi** per role: `roles.permissions` (JSONB) sekarang nested `{"modul": {"aksi": true}}` (dulu flat `{"key": true}`), role dibuat bebas lewat UI baru (bukan 5 role tetap). Semua hardcode role-name di 22 controller backend dan 11 halaman frontend diganti ke `PermissionHelper.can(principal, module, action)` / `useAuth().can(module, action)` — tidak ada lagi floor role hardcode yang tersisa. Celah API lama yang tertutup tanpa pengecekan sama sekali (Epic/Feature/Product create-update-delete, Sprint create/update, semua aksi QA, Import Jira, User create/update/reset-password/deactivate) sekarang ditegakkan, meniru floor tombol UI yang sudah dipakai hari ini (tidak mengurangi akses siapa pun). Tambah **route-level blocking** nyata untuk 5 halaman full-private (Users, Bugs, C-Level, Settings, Import Jira) — sebelumnya cuma nav link disembunyikan, URL langsung tetap bisa diakses. Role SME diberi akses `c_level` (perbaikan bug lama: datanya sejak `migration_v10.sql` terlihat seperti SME seharusnya bisa akses Leader Notes/Task tapi key itu tidak pernah dibaca kode mana pun). 7 role default (termasuk SME/Commissioner yang sebelumnya tidak terdokumentasi di PRD) dimigrasikan otomatis supaya akses efektifnya persis sama seperti sebelum migrasi. `migration_v21.sql`: overwrite bentuk `roles.permissions` untuk 7 role; fix bug serialisasi JSON nested di `RoleController` (hand-rolled serializer lama cuma menangani value `String`/`Boolean`, akan merusak bentuk nested — diganti Jackson `ObjectMapper`) |

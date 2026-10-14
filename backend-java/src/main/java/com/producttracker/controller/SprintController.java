@@ -1,5 +1,6 @@
 package com.producttracker.controller;
 
+import com.producttracker.config.PermissionHelper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -52,7 +53,10 @@ public class SprintController {
     }
 
     @PostMapping
-    public ResponseEntity<?> create(@RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> create(@AuthenticationPrincipal Object principal, @RequestBody Map<String, Object> body) {
+        if (!PermissionHelper.can(principal, "sprints", "create")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk membuat sprint"));
+        }
         if (body.get("product_id") == null || body.get("name") == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "product_id dan name wajib"));
         }
@@ -98,7 +102,11 @@ public class SprintController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> update(@PathVariable Long id, @AuthenticationPrincipal Object principal,
+                                     @RequestBody Map<String, Object> body) {
+        if (!PermissionHelper.can(principal, "sprints", "update")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk mengubah sprint"));
+        }
         int updated = jdbc.update(
             "UPDATE sprints SET name=?,goal=?,start_date=?,end_date=?,capacity=?,committed_points=?,completed_points=?,status=? WHERE id=?",
             body.get("name"), body.get("goal"),
@@ -119,9 +127,8 @@ public class SprintController {
                                     @AuthenticationPrincipal Object principal) {
         Map<String, Object> user = toMap(principal);
         if (user == null) return ResponseEntity.status(401).build();
-        Object rn = user.get("role_name");
-        if (!"super_admin".equals(rn) && !"manager".equals(rn) && !"po".equals(rn)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Hanya Manager, PO, atau Super Admin yang bisa menghapus sprint"));
+        if (!PermissionHelper.can(principal, "sprints", "delete")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk menghapus sprint"));
         }
         int deleted = jdbc.update("DELETE FROM sprints WHERE id=?", id);
         if (deleted == 0) return ResponseEntity.status(404).body(Map.of("error", "Sprint tidak ditemukan"));
@@ -137,7 +144,11 @@ public class SprintController {
     }
 
     @PostMapping("/{id}/burndown")
-    public ResponseEntity<?> saveBurndown(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> saveBurndown(@PathVariable Long id, @AuthenticationPrincipal Object principal,
+                                           @RequestBody Map<String, Object> body) {
+        if (!PermissionHelper.can(principal, "sprints", "update")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk mengubah burndown"));
+        }
         Object day = body.get("day");
         Object actualRemaining = body.get("actual_remaining");
         if (day == null || actualRemaining == null) {

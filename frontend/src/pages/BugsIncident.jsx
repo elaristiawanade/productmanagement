@@ -109,7 +109,7 @@ function renderComment(text) {
 }
 
 function ActivitySection({ bugId, users = [] }) {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const [activities,   setActivities]  = useState([]);
   const [comment,      setComment]     = useState('');
   const [sending,      setSending]     = useState(false);
@@ -251,7 +251,7 @@ function ActivitySection({ bugId, users = [] }) {
                 <span className="text-xs text-slate-400">
                   {act.created_at ? formatDistanceToNow(parseISO(act.created_at), { addSuffix: true, locale: localeId }) : ''}
                 </span>
-                {act.type === 'comment' && (user?.id === act.user_id || user?.role === 'super_admin') && (
+                {act.type === 'comment' && (user?.id === act.user_id || can('bugs', 'access')) && (
                   <button onClick={() => deleteActivity(act.id)}
                     className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-red-500 ml-auto">
                     <X className="w-3 h-3" />
@@ -714,8 +714,8 @@ function MultiSelect({ label, options, selected, onChange, minWidth = 130 }) {
 }
 
 export default function BugsIncident() {
-  const { hasRole, hasPermission } = useAuth();
-  const canAccess = hasRole('super_admin') || hasPermission('access_bugs');
+  const { can } = useAuth();
+  const canAccess = can('bugs', 'access');
 
   const [tab,          setTab]         = useState('dashboard');
   const [products,     setProducts]    = useState([]);

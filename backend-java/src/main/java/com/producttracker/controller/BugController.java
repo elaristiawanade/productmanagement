@@ -422,8 +422,7 @@ public class BugController {
         Long ownerId = toLong(rows.get(0).get("user_id"));
         Long actorId = user != null ? toLong(user.get("id")) : null;
         boolean isOwner = ownerId != null && ownerId.equals(actorId);
-        boolean isSuperAdmin = "super_admin".equals(com.producttracker.config.PermissionHelper.getRoleName(principal));
-        if (!isOwner && !isSuperAdmin) {
+        if (!isOwner && !bugHelper.canAccess(principal)) {
             return ResponseEntity.status(403).body(Map.of("error", "Hanya bisa menghapus komentar sendiri"));
         }
 

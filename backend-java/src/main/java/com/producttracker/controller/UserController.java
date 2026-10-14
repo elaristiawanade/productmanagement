@@ -1,5 +1,6 @@
 package com.producttracker.controller;
 
+import com.producttracker.config.PermissionHelper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -116,7 +117,10 @@ public class UserController {
     }
 
     @PostMapping
-    public ResponseEntity<?> create(@RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> create(@AuthenticationPrincipal Object principal, @RequestBody Map<String, Object> body) {
+        if (!PermissionHelper.can(principal, "users", "create")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk membuat user"));
+        }
         String name     = (String) body.get("name");
         String email    = (String) body.get("email");
         String password = (String) body.get("password");
@@ -148,7 +152,11 @@ public class UserController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> update(@PathVariable Long id, @AuthenticationPrincipal Object principal,
+                                     @RequestBody Map<String, Object> body) {
+        if (!PermissionHelper.can(principal, "users", "update")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk mengubah user"));
+        }
         String email = (String) body.get("email");
         try {
             int updated = jdbc.update(
@@ -175,7 +183,11 @@ public class UserController {
     }
 
     @PutMapping("/{id}/password")
-    public ResponseEntity<?> resetPassword(@PathVariable Long id, @RequestBody Map<String, String> body) {
+    public ResponseEntity<?> resetPassword(@PathVariable Long id, @AuthenticationPrincipal Object principal,
+                                            @RequestBody Map<String, String> body) {
+        if (!PermissionHelper.can(principal, "users", "reset_password")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk reset password user"));
+        }
         String password = body.get("password");
         if (password == null || password.length() < 6) {
             return ResponseEntity.badRequest().body(Map.of("error", "Password minimal 6 karakter"));
@@ -246,6 +258,9 @@ public class UserController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deactivate(@PathVariable Long id, @AuthenticationPrincipal Object principal) {
+        if (!PermissionHelper.can(principal, "users", "deactivate")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk menonaktifkan user"));
+        }
         Map<String, Object> currentUser = toMap(principal);
         if (currentUser != null) {
             Long currentId = toLong(currentUser.get("id"));
@@ -262,8 +277,8 @@ public class UserController {
     public ResponseEntity<?> permanentDelete(@PathVariable Long id,
                                               @AuthenticationPrincipal Object principal) {
         Map<String, Object> actor = toMap(principal);
-        if (actor == null || !"super_admin".equals(actor.get("role_name"))) {
-            return ResponseEntity.status(403).body(Map.of("error", "Hanya super_admin yang bisa menghapus user secara permanen"));
+        if (actor == null || !PermissionHelper.can(principal, "users", "delete")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk menghapus user secara permanen"));
         }
         Long actorId = toLong(actor.get("id"));
         if (id.equals(actorId)) {

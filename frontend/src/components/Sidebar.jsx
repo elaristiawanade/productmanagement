@@ -13,28 +13,27 @@ const NAV_MAIN = [
   { to: '/products', icon: Package,         label: 'Products'     },
   { to: '/standup',  icon: ClipboardList,   label: 'Standup'      },
   { to: '/qa',       icon: TestTube2,       label: 'QA Module'    },
-  // Locked to Super Admin / QA Engineer by default; other roles only see it once granted
-  // the `access_bugs` permission (Users & Roles → Roles & Permissions).
+  // Gated by the `bugs.access` permission (Users & Roles → Roles & Permissions).
+  // super_admin always passes via can()'s hardcoded bypass.
   { to: '/bugs',     icon: Bug,             label: 'Bugs Incident',
-    show: (user, hasRole, hasPermission) => hasRole('super_admin') || hasPermission('access_bugs') },
-  // Locked to Super Admin / Commissioner by default; other roles only see it once granted
-  // the `access_c_level` permission (Users & Roles → Roles & Permissions).
+    show: (user, can) => can('bugs', 'access') },
+  // Gated by the `c_level.access` permission (Users & Roles → Roles & Permissions).
   { to: '/c-level',  icon: Crown,           label: 'C-Level Dashboard',
-    show: (user, hasRole, hasPermission) => hasRole('super_admin', 'commissioner') || hasPermission('access_c_level') },
-  // Not a plain `roles` check — Users & Roles is gated by the `manage_users` permission
-  // (Users & Roles → Roles & Permissions) so unchecking it for a role actually takes effect.
-  // `hasPermission` already grants Super Admin via its `permissions.all` bypass.
+    show: (user, can) => can('c_level', 'access') },
+  // Gated by the `users.update` permission (Users & Roles → Roles & Permissions).
   { to: '/users',    icon: Users,           label: 'Users & Roles',
-    show: (user, hasRole, hasPermission) => hasPermission('manage_users') },
+    show: (user, can) => can('users', 'update') },
 ];
 
 const NAV_BOTTOM = [
-  { to: '/import/jira', icon: FileDown, label: 'Import Jira', roles: ['super_admin','manager','po'] },
-  { to: '/settings/notifications', icon: Settings, label: 'Notification Settings', roles: ['super_admin'] },
+  { to: '/import/jira', icon: FileDown, label: 'Import Jira',
+    show: (user, can) => can('import', 'run') },
+  { to: '/settings/notifications', icon: Settings, label: 'Notification Settings',
+    show: (user, can) => can('settings', 'update') },
 ];
 
 export default function Sidebar({ collapsed, onToggle }) {
-  const { user, hasRole, hasPermission } = useAuth();
+  const { user, can } = useAuth();
 
   return (
     <aside
@@ -54,9 +53,8 @@ export default function Sidebar({ collapsed, onToggle }) {
 
       {/* Main Nav */}
       <nav className="flex-1 py-4 space-y-0.5 px-2 overflow-y-auto overflow-x-hidden">
-        {NAV_MAIN.map(({ to, icon: Icon, label, roles, show }) => {
-          if (roles && !hasRole(...roles)) return null;
-          if (show && !show(user, hasRole, hasPermission)) return null;
+        {NAV_MAIN.map(({ to, icon: Icon, label, show }) => {
+          if (show && !show(user, can)) return null;
           return (
             <NavLink key={to} to={to} end={to === '/'}
               className={({ isActive }) =>
@@ -72,8 +70,8 @@ export default function Sidebar({ collapsed, onToggle }) {
 
       {/* Bottom nav (Import, etc.) */}
       <div className="px-2 pb-2 space-y-0.5 border-t border-slate-800 pt-2">
-        {NAV_BOTTOM.map(({ to, icon: Icon, label, roles }) => {
-          if (roles && !hasRole(...roles)) return null;
+        {NAV_BOTTOM.map(({ to, icon: Icon, label, show }) => {
+          if (show && !show(user, can)) return null;
           return (
             <NavLink key={to} to={to}
               className={({ isActive }) =>

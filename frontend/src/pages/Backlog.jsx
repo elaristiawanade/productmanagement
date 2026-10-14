@@ -146,7 +146,7 @@ function renderComment(text) {
 }
 
 function ActivitySection({ itemId, users = [] }) {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const [activities,   setActivities]  = useState([]);
   const [comment,      setComment]     = useState('');
   const [sending,      setSending]     = useState(false);
@@ -288,7 +288,7 @@ function ActivitySection({ itemId, users = [] }) {
                 <span className="text-xs text-slate-400">
                   {act.created_at ? formatDistanceToNow(parseISO(act.created_at), { addSuffix: true, locale: localeId }) : ''}
                 </span>
-                {act.type === 'comment' && (user?.id === act.user_id || user?.role === 'super_admin') && (
+                {act.type === 'comment' && (user?.id === act.user_id || can('backlog', 'delete')) && (
                   <button onClick={() => deleteActivity(act.id)}
                     className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-red-500 ml-auto">
                     <X className="w-3 h-3" />
@@ -924,7 +924,7 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function Backlog() {
-  const { hasRole } = useAuth();
+  const { can } = useAuth();
   const [searchParams] = useSearchParams();
   const [items, setItems]       = useState([]);
   const [total, setTotal]       = useState(0);
@@ -1054,14 +1054,14 @@ export default function Backlog() {
           )}
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {hasRole('super_admin', 'manager', 'po') && (
+          {can('import', 'run') && (
             <Link to="/import/jira"
               className="btn-secondary flex items-center gap-1.5 text-sm">
               <FileDown className="w-4 h-4" />
               Import Jira
             </Link>
           )}
-          {hasRole('super_admin', 'manager', 'po', 'developer') && (
+          {can('backlog', 'create') && (
             <button className="btn-primary" onClick={() => setModal({ open: true, item: null })}>
               <Plus className="w-4 h-4" /> Tambah Item
             </button>
@@ -1190,7 +1190,7 @@ export default function Backlog() {
                         className="text-xs border-0 bg-transparent focus:ring-0 cursor-pointer"
                         value={item.status}
                         onChange={e => quickStatus(item.id, e.target.value)}
-                        disabled={!hasRole('super_admin','manager','po','developer','qa')}
+                        disabled={!(can('backlog', 'update') || can('backlog', 'update_assigned'))}
                       >
                         {STATUSES.map(s => <option key={s} value={s}>{s.replace('_',' ')}</option>)}
                       </select>
@@ -1211,7 +1211,7 @@ export default function Backlog() {
                           className="text-xs border-0 bg-transparent focus:ring-0 cursor-pointer"
                           value={item.sprint_id || ''}
                           onChange={e => quickSprint(item.id, e.target.value)}
-                          disabled={!hasRole('super_admin','manager','po','developer','qa')}
+                          disabled={!(can('backlog', 'update') || can('backlog', 'update_assigned'))}
                         >
                           <option value="">Backlog (no sprint)</option>
                           {sprints.filter(s => s.product_id === item.product_id).map(s => (
@@ -1234,12 +1234,12 @@ export default function Backlog() {
                     </td>
                     <td className="px-3 py-3 text-center">
                       <div className="flex items-center gap-1 justify-center">
-                        {hasRole('super_admin','manager','po','developer') && (
+                        {(can('backlog', 'update') || can('backlog', 'update_assigned')) && (
                           <button className="btn-ghost btn-sm p-1 rounded" onClick={() => setModal({ open: true, item })}>
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
                         )}
-                        {hasRole('super_admin','manager','po') && (
+                        {can('backlog', 'delete') && (
                           <button className="btn-ghost btn-sm p-1 rounded text-red-500 hover:bg-red-50" onClick={() => deleteItem(item.id)}>
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>

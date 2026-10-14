@@ -99,7 +99,7 @@ function SprintForm({ sprint, productId, onSave, onClose }) {
 }
 
 export default function Sprints() {
-  const { hasRole } = useAuth();
+  const { can } = useAuth();
   const [products,  setProducts]  = useState([]);
   const [selProduct, setSelProduct] = useState('');
   const [sprints,   setSprints]   = useState([]);
@@ -186,7 +186,7 @@ export default function Sprints() {
             </button>
           ))}
         </div>
-        {hasRole('super_admin','manager','po') && (
+        {can('sprints', 'create') && (
           <button className="btn-primary btn-sm ml-auto" onClick={() => setModal({ open: true, sprint: null })}>
             <Plus className="w-3.5 h-3.5" /> Sprint Baru
           </button>
@@ -202,7 +202,7 @@ export default function Sprints() {
                 <div className="flex items-center gap-3">
                   <h2 className="text-lg font-bold text-slate-800">{selSprint.name}</h2>
                   <StatusBadge status={selSprint.status} />
-                  {hasRole('super_admin','manager','po') && (
+                  {can('sprints', 'update') && (
                     <>
                       <button className="btn-ghost btn-sm p-1 rounded" title="Edit Sprint"
                         onClick={() => setModal({ open: true, sprint: selSprint })}>

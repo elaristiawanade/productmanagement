@@ -190,7 +190,7 @@ function ProductForm({ product, users, onSave, onClose }) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function Products() {
-  const { hasRole } = useAuth();
+  const { can } = useAuth();
   const [tab,      setTab]      = useState('products');
   const [products, setProducts] = useState([]);
   const [users,    setUsers]    = useState([]);
@@ -277,7 +277,7 @@ export default function Products() {
       {tab === 'products' && (
         <div className="space-y-5">
           <div className="flex justify-end">
-            {hasRole('super_admin','manager') && (
+            {can('products', 'create') && (
               <button className="btn-primary" onClick={() => setModal({ open: true, type: 'product', data: null, productId: null })}>
                 <Plus className="w-4 h-4" /> Tambah Produk
               </button>
@@ -323,17 +323,15 @@ export default function Products() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {hasRole('super_admin','manager','po') && (
-                      <>
-                        <button className="btn-ghost btn-sm p-1.5 rounded-lg" onClick={() => setModal({ open: true, type: 'product', data: product, productId: product.id })}>
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        {hasRole('super_admin') && (
-                          <button className="btn-ghost btn-sm p-1.5 rounded-lg text-red-500 hover:bg-red-50" onClick={() => deleteProduct(product.id)}>
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </>
+                    {can('products', 'update') && (
+                      <button className="btn-ghost btn-sm p-1.5 rounded-lg" onClick={() => setModal({ open: true, type: 'product', data: product, productId: product.id })}>
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    )}
+                    {can('products', 'delete') && (
+                      <button className="btn-ghost btn-sm p-1.5 rounded-lg text-red-500 hover:bg-red-50" onClick={() => deleteProduct(product.id)}>
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     )}
                     <button className="btn-ghost btn-sm p-1.5 rounded-lg" onClick={() => setExpanded(e => ({ ...e, [product.id]: !e[product.id] }))}>
                       {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -347,7 +345,7 @@ export default function Products() {
                     <div className="px-5 py-3 border-b border-slate-50">
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="text-sm font-semibold text-slate-600">Epics</h3>
-                        {hasRole('super_admin','manager','po') && (
+                        {can('epics', 'create') && (
                           <button className="btn-secondary btn-sm" onClick={() => setModal({ open: true, type: 'epic', data: null, productId: product.id })}>
                             <Plus className="w-3 h-3" /> Epic
                           </button>
@@ -364,8 +362,12 @@ export default function Products() {
                                 <PriorityBadge priority={epic.priority} />
                                 <span className="text-xs text-slate-400">{epic.item_count} items · {epic.done_points}/{epic.total_points}pts</span>
                                 <div className="flex gap-1">
-                                  <button className="btn-ghost btn-sm p-1 rounded" onClick={() => setModal({ open: true, type: 'epic', data: epic, productId: product.id })}><Pencil className="w-3 h-3" /></button>
-                                  <button className="btn-ghost btn-sm p-1 rounded text-red-500 hover:bg-red-50" onClick={() => deleteEpic(epic.id)}><Trash2 className="w-3 h-3" /></button>
+                                  {can('epics', 'update') && (
+                                    <button className="btn-ghost btn-sm p-1 rounded" onClick={() => setModal({ open: true, type: 'epic', data: epic, productId: product.id })}><Pencil className="w-3 h-3" /></button>
+                                  )}
+                                  {can('epics', 'delete') && (
+                                    <button className="btn-ghost btn-sm p-1 rounded text-red-500 hover:bg-red-50" onClick={() => deleteEpic(epic.id)}><Trash2 className="w-3 h-3" /></button>
+                                  )}
                                 </div>
                               </div>
                             ))}
@@ -377,7 +379,7 @@ export default function Products() {
                     <div className="px-5 py-3">
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="text-sm font-semibold text-slate-600">Features</h3>
-                        {hasRole('super_admin','manager','po') && (
+                        {can('features', 'create') && (
                           <button className="btn-secondary btn-sm" onClick={() => setModal({ open: true, type: 'feature', data: null, productId: product.id })}>
                             <Plus className="w-3 h-3" /> Feature
                           </button>
@@ -407,8 +409,12 @@ export default function Products() {
                                     <span className="text-xs text-slate-400">{pct2}%</span>
                                   </div>
                                   <div className="flex gap-1">
-                                    <button className="btn-ghost btn-sm p-1 rounded" onClick={() => setModal({ open: true, type: 'feature', data: f, productId: product.id })}><Pencil className="w-3 h-3" /></button>
-                                    <button className="btn-ghost btn-sm p-1 rounded text-red-500 hover:bg-red-50" onClick={() => deleteFeature(f.id)}><Trash2 className="w-3 h-3" /></button>
+                                    {can('features', 'update') && (
+                                      <button className="btn-ghost btn-sm p-1 rounded" onClick={() => setModal({ open: true, type: 'feature', data: f, productId: product.id })}><Pencil className="w-3 h-3" /></button>
+                                    )}
+                                    {can('features', 'delete') && (
+                                      <button className="btn-ghost btn-sm p-1 rounded text-red-500 hover:bg-red-50" onClick={() => deleteFeature(f.id)}><Trash2 className="w-3 h-3" /></button>
+                                    )}
                                   </div>
                                 </div>
                               );
@@ -442,7 +448,7 @@ export default function Products() {
               <option value="">Semua Status</option>
               {ROADMAP_STATUSES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
             </select>
-            {hasRole('super_admin','manager','po') && (
+            {can('roadmap', 'create') && (
               <button className="btn-primary ml-auto"
                 onClick={() => setModal({ open: true, type: 'roadmap', data: null, productId: null })}>
                 <Plus className="w-4 h-4" /> Tambah Item Roadmap
@@ -528,13 +534,13 @@ export default function Products() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1 justify-center">
-                          {hasRole('super_admin','manager','po') && (
+                          {can('roadmap', 'update') && (
                             <button className="btn-ghost btn-sm p-1.5 rounded-lg"
                               onClick={() => setModal({ open: true, type: 'roadmap', data: item, productId: item.product_id })}>
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
                           )}
-                          {hasRole('super_admin','manager') && (
+                          {can('roadmap', 'delete') && (
                             <button className="btn-ghost btn-sm p-1.5 rounded-lg text-red-500 hover:bg-red-50"
                               onClick={() => deleteRoadmapItem(item.id)}>
                               <Trash2 className="w-3.5 h-3.5" />

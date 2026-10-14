@@ -1,5 +1,6 @@
 package com.producttracker.controller;
 
+import com.producttracker.config.PermissionHelper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -53,6 +54,9 @@ public class EpicController {
     @PostMapping
     public ResponseEntity<?> create(@AuthenticationPrincipal Object principal,
                                      @RequestBody Map<String, Object> body) {
+        if (!PermissionHelper.can(principal, "epics", "create")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk menambah epic"));
+        }
         if (body.get("product_id") == null || body.get("code") == null || body.get("name") == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "product_id, code, name wajib"));
         }
@@ -78,7 +82,11 @@ public class EpicController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> update(@PathVariable Long id, @AuthenticationPrincipal Object principal,
+                                     @RequestBody Map<String, Object> body) {
+        if (!PermissionHelper.can(principal, "epics", "update")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk mengubah epic"));
+        }
         int updated = jdbc.update(
             "UPDATE epics SET name=?, description=?, status=?, priority=? WHERE id=?",
             body.get("name"), body.get("description"), body.get("status"), body.get("priority"), id
@@ -89,7 +97,10 @@ public class EpicController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> delete(@PathVariable Long id) {
+    public ResponseEntity<?> delete(@PathVariable Long id, @AuthenticationPrincipal Object principal) {
+        if (!PermissionHelper.can(principal, "epics", "delete")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk menghapus epic"));
+        }
         int deleted = jdbc.update("DELETE FROM epics WHERE id=?", id);
         if (deleted == 0) return ResponseEntity.status(404).body(Map.of("error", "Epic tidak ditemukan"));
         return ResponseEntity.ok(Map.of("message", "Epic dihapus"));

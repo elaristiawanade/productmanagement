@@ -1,6 +1,7 @@
 package com.producttracker.controller;
 
 import com.producttracker.config.BugHelper;
+import com.producttracker.config.PermissionHelper;
 import com.producttracker.service.AssigneeSupport;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
@@ -47,6 +48,10 @@ public class ImportController {
             @RequestParam("file") MultipartFile file,
             @RequestParam("product_id") Long productId,
             @AuthenticationPrincipal Object principal) {
+
+        if (!PermissionHelper.can(principal, "import", "run")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk import Jira"));
+        }
 
         // Verify product exists
         List<Map<String, Object>> pRows = jdbc.queryForList(

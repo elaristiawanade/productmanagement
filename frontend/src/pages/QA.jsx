@@ -151,7 +151,7 @@ function TestRunForm({ tc, sprints, onSave, onClose }) {
 }
 
 export default function QA() {
-  const { hasRole } = useAuth();
+  const { can } = useAuth();
   const [tab,          setTab]         = useState('dashboard');
   const [products,     setProducts]    = useState([]);
   const [testCases,    setTestCases]   = useState([]);
@@ -320,7 +320,7 @@ export default function QA() {
           {tab === 'cases' && (
             <div className="space-y-4">
               <div className="flex justify-end">
-                {hasRole('super_admin','manager','qa','po') && (
+                {can('qa', 'create') && (
                   <button className="btn-primary" onClick={() => setModal({ open: true, type: 'tc', data: null })}>
                     <Plus className="w-4 h-4" /> Buat Test Case
                   </button>
@@ -374,18 +374,18 @@ export default function QA() {
                           <td className="px-3 py-3 text-xs text-slate-500">{tc.product_code}</td>
                           <td className="px-3 py-3">
                             <div className="flex items-center gap-1 justify-center">
-                              {hasRole('super_admin','manager','qa') && (
+                              {can('qa', 'run') && (
                                 <button className="btn-ghost btn-sm p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50" title="Run Test"
                                   onClick={() => setModal({ open: true, type: 'run', data: tc })}>
                                   <Play className="w-3.5 h-3.5" />
                                 </button>
                               )}
-                              {hasRole('super_admin','manager','qa','po') && (
+                              {can('qa', 'update') && (
                                 <button className="btn-ghost btn-sm p-1.5 rounded-lg" onClick={() => setModal({ open: true, type: 'tc', data: tc })}>
                                   <Pencil className="w-3.5 h-3.5" />
                                 </button>
                               )}
-                              {hasRole('super_admin','qa') && (
+                              {can('qa', 'delete') && (
                                 <button className="btn-ghost btn-sm p-1.5 rounded-lg text-red-500 hover:bg-red-50" onClick={() => deleteTC(tc.id)}>
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>

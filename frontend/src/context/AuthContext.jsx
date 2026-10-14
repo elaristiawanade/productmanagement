@@ -36,16 +36,12 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
-  const hasRole = (...roles) => {
+  // Module x action permission matrix — see plan doc §4. super_admin always
+  // bypasses, mirroring the backend's hardcoded safety net.
+  const can = (module, action) => {
     if (!user) return false;
-    if (user.permissions?.all) return true;
-    return roles.includes(user.role);
-  };
-
-  const hasPermission = (permKey) => {
-    if (!user) return false;
-    if (user.permissions?.all) return true;
-    return !!user.permissions?.[permKey];
+    if (user.role === 'super_admin') return true;
+    return !!user.permissions?.[module]?.[action];
   };
 
   const refreshUser = async () => {
@@ -56,7 +52,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, hasRole, hasPermission, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, can, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
