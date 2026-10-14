@@ -1,9 +1,9 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts';
-import { Plus, Pencil, Trash2, Play, CheckCircle2, XCircle, AlertCircle, Clock } from 'lucide-react';
+import { Plus, Pencil, Trash2, Play, CheckCircle2, XCircle, AlertCircle, Clock, Download, Upload, AlertTriangle } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
@@ -166,6 +166,8 @@ export default function QA() {
   const [pageCases,    setPageCases]   = useState(1);
   const [perPageRuns,  setPerPageRuns] = useState(10);
   const [pageRuns,     setPageRuns]    = useState(1);
+  const [importing,    setImporting]   = useState(false);
+  const importInputRef = useRef(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -195,6 +197,49 @@ export default function QA() {
     if (!confirm('Hapus test case ini?')) return;
     await client.delete(`/qa/test-cases/${id}`);
     toast.success('Test case dihapus'); load();
+  };
+
+  const csvEscape = (val) => {
+    const s = val === null || val === undefined ? '' : String(val);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+
+  const exportTestCasesCSV = () => {
+    const headers = ['Kode', 'Judul', 'Deskripsi', 'Langkah', 'Expected Result', 'Status', 'Prioritas', 'Backlog Item', 'Produk'];
+    const rows = testCases.map(tc => [
+      tc.code, tc.title, tc.description, tc.steps, tc.expected_result, tc.status, tc.priority,
+      tc.item_code ? `[${tc.item_code}] ${tc.item_title || ''}` : '',
+      tc.product_code || tc.product_name || '',
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(csvEscape).join(',')).join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `test_cases_export_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportCSV = async (e) => {
+    const file = e.target.files?.[0];
+    if (importInputRef.current) importInputRef.current.value = '';
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.csv')) { toast.error('Hanya file .csv yang diterima'); return; }
+
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await client.post('/import/qa-test-cases', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      toast.success(`Import selesai: ${res.data.created} test case dibuat`);
+      setModal({ open: true, type: 'import-result', data: res.data });
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Gagal mengimport CSV');
+    } finally {
+      setImporting(false);
+    }
   };
 
   const PIE_COLORS = ['#10b981','#ef4444','#f59e0b','#94a3b8','#e2e8f0'];
@@ -319,7 +364,21 @@ export default function QA() {
           {/* TEST CASES TAB */}
           {tab === 'cases' && (
             <div className="space-y-4">
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
+                {can('qa', 'create') && (
+                  <>
+                    <input ref={importInputRef} type="file" accept=".csv" className="hidden" onChange={handleImportCSV} />
+                    <button className="btn-secondary" onClick={() => importInputRef.current?.click()} disabled={importing}>
+                      {importing
+                        ? <span className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                        : <Upload className="w-4 h-4" />}
+                      Import CSV
+                    </button>
+                  </>
+                )}
+                <button className="btn-secondary" onClick={exportTestCasesCSV} disabled={testCases.length === 0}>
+                  <Download className="w-4 h-4" /> Export CSV
+                </button>
                 {can('qa', 'create') && (
                   <button className="btn-primary" onClick={() => setModal({ open: true, type: 'tc', data: null })}>
                     <Plus className="w-4 h-4" /> Buat Test Case
@@ -507,6 +566,42 @@ export default function QA() {
         {modal.data && <TestRunForm tc={modal.data} sprints={sprints}
           onSave={() => { setModal({ ...modal, open: false }); load(); }}
           onClose={() => setModal({ ...modal, open: false })} />}
+      </Modal>
+
+      <Modal open={modal.open && modal.type === 'import-result'} onClose={() => setModal({ ...modal, open: false })}
+        title="Hasil Import Test Case" size="sm">
+        {modal.data && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-lg bg-emerald-50 p-4 text-center">
+                <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto mb-1" />
+                <p className="text-2xl font-bold text-emerald-700">{modal.data.created}</p>
+                <p className="text-xs text-emerald-600">Test case dibuat</p>
+              </div>
+              <div className="rounded-lg bg-amber-50 p-4 text-center">
+                <AlertTriangle className="w-6 h-6 text-amber-500 mx-auto mb-1" />
+                <p className="text-2xl font-bold text-amber-700">{modal.data.skipped}</p>
+                <p className="text-xs text-amber-600">Di-skip</p>
+              </div>
+              <div className="rounded-lg bg-red-50 p-4 text-center">
+                <XCircle className="w-6 h-6 text-red-500 mx-auto mb-1" />
+                <p className="text-2xl font-bold text-red-700">{modal.data.errors?.length || 0}</p>
+                <p className="text-xs text-red-600">Error</p>
+              </div>
+            </div>
+            {modal.data.errors?.length > 0 && (
+              <div className="bg-red-50 rounded-lg p-3 space-y-1 max-h-48 overflow-y-auto">
+                <p className="text-xs font-semibold text-red-700">Detail Error:</p>
+                {modal.data.errors.map((e, i) => (
+                  <p key={i} className="text-xs text-red-600">• {e}</p>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <button className="btn-secondary" onClick={() => setModal({ ...modal, open: false })}>Tutup</button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

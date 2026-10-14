@@ -42,6 +42,7 @@ public class ImportController {
 
     private static final Set<String> SEVERITY_VALUES = Set.of("critical", "high", "medium", "low");
     private static final Set<String> STAGE_VALUES    = Set.of("open", "in_progress", "ready_to_test", "reopen", "done");
+    private static final Set<String> TC_STATUS_VALUES = Set.of("draft", "active", "deprecated");
 
     @PostMapping("/jira")
     public ResponseEntity<?> importJira(
@@ -297,6 +298,132 @@ public class ImportController {
             "skipped", skipped,
             "errors",  errors
         ));
+    }
+
+    // ─── QA Test Cases CSV import ────────────────────────────────────────────
+    // Column format matches the "Export CSV" button on the Test Cases tab of
+    // QA.jsx, so an unmodified export can be re-imported as a no-op (every row
+    // skipped as a duplicate `code`) and a lightly-edited export (blanked
+    // codes, changed fields) creates only the new/changed rows.
+
+    @PostMapping("/qa-test-cases")
+    public ResponseEntity<?> importTestCases(
+            @RequestParam("file") MultipartFile file,
+            @AuthenticationPrincipal Object principal) {
+
+        if (!PermissionHelper.can(principal, "qa", "create")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk membuat test case"));
+        }
+
+        Long creatorId = currentUserId(principal);
+        int created = 0, skipped = 0;
+        List<String> errors = new ArrayList<>();
+
+        try {
+            Reader reader = csvReader(file);
+            CSVParser parser = CSVFormat.DEFAULT
+                .builder()
+                .setHeader()
+                .setSkipHeaderRecord(true)
+                .setIgnoreHeaderCase(true)
+                .setTrim(true)
+                .build()
+                .parse(reader);
+
+            for (CSVRecord rec : parser) {
+                try {
+                    String title = col(rec, "Judul", "Title");
+                    if (title.isBlank()) { skipped++; continue; }
+
+                    String produk = col(rec, "Produk", "Product");
+                    if (produk.isBlank()) {
+                        errors.add("Baris " + rec.getRecordNumber() + ": kolom Produk kosong");
+                        continue;
+                    }
+                    List<Map<String, Object>> prodRows = jdbc.queryForList(
+                        "SELECT id, code FROM products WHERE code ILIKE ? OR name ILIKE ? LIMIT 1",
+                        produk, produk
+                    );
+                    if (prodRows.isEmpty()) {
+                        errors.add("Baris " + rec.getRecordNumber() + ": produk '" + produk + "' tidak ditemukan");
+                        continue;
+                    }
+                    Long productId = toLong(prodRows.get(0).get("id"));
+
+                    String backlogCol = col(rec, "Backlog Item");
+                    Long backlogItemId = null;
+                    if (!backlogCol.isBlank()) {
+                        Matcher bm = Pattern.compile("^\\[(.+?)\\]").matcher(backlogCol);
+                        String itemCode = bm.find() ? bm.group(1).trim() : backlogCol;
+                        List<Map<String, Object>> biRows = jdbc.queryForList(
+                            "SELECT id FROM backlog_items WHERE product_id=? AND code=?",
+                            productId, itemCode
+                        );
+                        if (!biRows.isEmpty()) backlogItemId = toLong(biRows.get(0).get("id"));
+                    }
+                    if (backlogItemId == null) {
+                        errors.add("Baris " + rec.getRecordNumber() + ": kolom Backlog Item kosong atau tidak ditemukan");
+                        continue;
+                    }
+
+                    String code = col(rec, "Kode", "Code");
+                    if (code.isBlank()) {
+                        code = generateTestCaseCode(productId);
+                    } else {
+                        List<Map<String, Object>> existing = jdbc.queryForList(
+                            "SELECT id FROM qa_test_cases WHERE product_id=? AND code=?", productId, code
+                        );
+                        if (!existing.isEmpty()) { skipped++; continue; }
+                    }
+
+                    String description     = col(rec, "Deskripsi", "Description");
+                    String steps            = col(rec, "Langkah", "Langkah-langkah", "Steps");
+                    String expectedResult    = col(rec, "Expected Result", "Hasil yang Diharapkan");
+                    String status            = normalizeEnum(col(rec, "Status"), TC_STATUS_VALUES, "draft");
+                    String priority          = normalizeEnum(col(rec, "Prioritas", "Priority"), SEVERITY_VALUES, "medium");
+
+                    jdbc.update(
+                        "INSERT INTO qa_test_cases " +
+                        "(backlog_item_id, product_id, code, title, description, steps, expected_result, status, priority, created_by) " +
+                        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                        backlogItemId, productId, code, title,
+                        description.isBlank() ? null : description,
+                        steps.isBlank() ? null : steps,
+                        expectedResult.isBlank() ? null : expectedResult,
+                        status, priority, creatorId
+                    );
+                    created++;
+
+                } catch (Exception rowErr) {
+                    errors.add("Baris " + rec.getRecordNumber() + ": " + rowErr.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Gagal membaca CSV: " + e.getMessage()));
+        }
+
+        return ResponseEntity.ok(Map.of(
+            "created", created,
+            "skipped", skipped,
+            "errors",  errors
+        ));
+    }
+
+    // Mirrors QaController.createTestCase's auto-code logic so imported and
+    // manually-created test cases share the same TC-### sequence per product.
+    private String generateTestCaseCode(Long productId) {
+        List<Map<String, Object>> last = jdbc.queryForList(
+            "SELECT code FROM qa_test_cases WHERE product_id=? ORDER BY id DESC LIMIT 1", productId
+        );
+        int lastNum = 0;
+        if (!last.isEmpty()) {
+            String lastCode = (String) last.get(0).get("code");
+            if (lastCode != null) {
+                Matcher m = Pattern.compile("\\d+$").matcher(lastCode);
+                if (m.find()) lastNum = Integer.parseInt(m.group());
+            }
+        }
+        return "TC-" + String.format("%03d", lastNum + 1);
     }
 
     private String normalizeEnum(String value, Set<String> allowed, String fallback) {
