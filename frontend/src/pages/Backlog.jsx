@@ -474,14 +474,14 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
   useEffect(() => {
     if ((form.type === 'task' || form.type === 'bug') && form.product_id) {
       client.get('/backlog', { params: { product_id: form.product_id, type: 'story', limit: 200 } })
-        .then(r => setStories(r.data.items || []))
+        .then(r => setStories((r.data.items || []).filter(s => !item || s.id !== item.id)))
         .catch(() => setStories([]));
     } else {
       setStories([]);
     }
     if (form.type === 'story' && form.product_id) {
       client.get('/backlog', { params: { product_id: form.product_id, type: 'epic', limit: 200 } })
-        .then(r => setEpicsBacklog(r.data.items || []))
+        .then(r => setEpicsBacklog((r.data.items || []).filter(e => !item || e.id !== item.id)))
         .catch(() => setEpicsBacklog([]));
     } else {
       setEpicsBacklog([]);

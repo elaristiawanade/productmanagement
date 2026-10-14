@@ -191,6 +191,9 @@ public class BacklogController {
 
         ResponseEntity<?> valErr = validateTaskParent(type, parentId);
         if (valErr != null) return valErr;
+        if (parentId != null && wouldCreateCycle(-1L, parentId)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Parent item membentuk siklus (circular reference)"));
+        }
 
         String itemCode = (String) body.get("code");
         if (itemCode == null || itemCode.isBlank()) {
@@ -312,6 +315,9 @@ public class BacklogController {
 
         ResponseEntity<?> valErr = validateTaskParent(type, parentId);
         if (valErr != null) return valErr;
+        if (parentId != null && wouldCreateCycle(id, parentId)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Parent item membentuk siklus (circular reference)"));
+        }
 
         Map<String, Object> actor = toMap(principal);
         String actorName = actor != null ? str(actor.get("name")) : "System";
@@ -662,7 +668,12 @@ public class BacklogController {
      * then cascades up to the grandparent (Story → Epic chain).
      */
     private void recalcAncestorSp(Long parentId) {
-        if (parentId == null) return;
+        recalcAncestorSp(parentId, new HashSet<>());
+    }
+
+    // visited guards against a corrupted parent_id chain (cycle) causing infinite recursion / StackOverflowError
+    private void recalcAncestorSp(Long parentId, Set<Long> visited) {
+        if (parentId == null || !visited.add(parentId)) return;
         try {
             Long sumSp = jdbc.queryForObject(
                 "SELECT COALESCE(SUM(story_points), 0) FROM backlog_items WHERE parent_id = ?",
@@ -673,9 +684,24 @@ public class BacklogController {
                 "SELECT parent_id FROM backlog_items WHERE id = ?", parentId
             );
             if (!rows.isEmpty() && rows.get(0).get("parent_id") != null) {
-                recalcAncestorSp(toLong(rows.get(0).get("parent_id")));
+                recalcAncestorSp(toLong(rows.get(0).get("parent_id")), visited);
             }
         } catch (Exception ignored) {}
+    }
+
+    /** Walks the would-be parent chain to detect whether assigning newParentId to itemId would create a cycle. */
+    private boolean wouldCreateCycle(Long itemId, Long newParentId) {
+        Set<Long> visited = new HashSet<>();
+        Long current = newParentId;
+        while (current != null) {
+            if (current.equals(itemId) || !visited.add(current)) return true;
+            List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT parent_id FROM backlog_items WHERE id = ?", current
+            );
+            if (rows.isEmpty()) break;
+            current = toLong(rows.get(0).get("parent_id"));
+        }
+        return false;
     }
 
     private boolean isManagerOrAbove(Map<String, Object> user) {
