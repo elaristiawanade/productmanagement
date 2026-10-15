@@ -171,106 +171,107 @@ function ResetPasswordForm({ user, onClose }) {
   );
 }
 
-// ─── Permissions grouped by module ────────────────────────────────────────────
-const PERMISSION_GROUPS = [
-  {
-    group: 'Global',
-    color: 'purple',
-    items: [
-      { key: 'all',               label: 'Akses Penuh',        desc: 'Add / Edit / Delete di semua modul tanpa batasan (khusus Super Admin)' },
-      { key: 'read_all',          label: 'Baca Semua Data',    desc: 'Lihat data semua produk tanpa filter produk yang di-assign' },
-      { key: 'view_all_products', label: 'Lihat Semua Produk', desc: 'Bypass filter produk — bisa lihat semua produk meski tidak di-assign' },
-      { key: 'view_reports',      label: 'Lihat Reports',      desc: 'Akses analytics dan dashboard laporan' },
-    ],
-  },
-  {
-    group: 'Backlog',
-    color: 'blue',
-    items: [
-      { key: 'manage_backlog',  label: 'Kelola Backlog',           desc: 'Add / Edit / Delete backlog item (Story, Task, Bug, Epic)' },
-      { key: 'update_assigned', label: 'Edit Item Ditugaskan',     desc: 'Hanya bisa Edit dan ubah Status item yang di-assign; tidak bisa Add atau Delete' },
-    ],
-  },
-  {
-    group: 'Sprint',
-    color: 'indigo',
-    items: [
-      { key: 'manage_sprints', label: 'Kelola Sprint', desc: 'Add / Edit / Delete sprint dan kelola item dalam sprint' },
-    ],
-  },
-  {
-    group: 'Produk & Features',
-    color: 'emerald',
-    items: [
-      { key: 'manage_products', label: 'Kelola Produk',         desc: 'Add / Edit / Delete produk dan item roadmap' },
-      { key: 'manage_features', label: 'Kelola Features & Epics', desc: 'Add / Edit / Delete feature dan epic dalam produk' },
-    ],
-  },
-  {
-    group: 'User Management',
-    color: 'orange',
-    items: [
-      { key: 'manage_users', label: 'Kelola Users', desc: 'Add user baru, Edit profil & role, nonaktifkan user' },
-      { key: 'manage_roles', label: 'Kelola Roles', desc: 'Add / Edit / Delete roles dan konfigurasi permissions' },
-    ],
-  },
-  {
-    group: 'QA',
-    color: 'amber',
-    items: [
-      { key: 'manage_qa',   label: 'Kelola QA',  desc: 'Add / Edit / Delete test case dan jalankan test run' },
-      { key: 'report_bugs', label: 'Lapor Bug',   desc: 'Buat bug report dan defect dari hasil testing' },
-    ],
-  },
-  {
-    group: 'Bugs Incident',
-    color: 'red',
-    items: [
-      { key: 'access_bugs', label: 'Akses Bugs Incident',
-        desc: 'Lihat dan kelola modul Bugs Incident (dashboard, daftar bug, progress perbaikan) — default hanya QA Engineer' },
-    ],
-  },
-  {
-    group: 'C-Level Dashboard',
-    color: 'violet',
-    items: [
-      { key: 'access_c_level', label: 'Akses C-Level Dashboard',
-        desc: 'Lihat dan kelola Leader Notes, Leader Task, dan My Task di semua departemen (setara Commissioner)' },
-    ],
-  },
-  {
-    group: 'Lainnya',
-    color: 'slate',
-    items: [
-      { key: 'submit_standup', label: 'Submit Standup', desc: 'Kirim dan edit laporan standup harian' },
-      { key: 'import_data',    label: 'Import Data',    desc: 'Import data dari CSV atau Jira' },
-    ],
-  },
+// ─── Module x Action permission catalog ───────────────────────────────────────
+// Satu baris per modul; tiap modul cuma menampilkan aksi yang benar-benar
+// relevan untuknya (bukan grid kolom seragam) — lihat plan §2/§7.
+const MODULE_CATALOG = [
+  { module: 'backlog', label: 'Backlog', actions: [
+    { key: 'create', label: 'Buat' }, { key: 'update', label: 'Ubah' }, { key: 'delete', label: 'Hapus' },
+    { key: 'update_assigned', label: 'Edit Item Ditugaskan' },
+  ]},
+  { module: 'epics', label: 'Epic', actions: [
+    { key: 'create', label: 'Buat' }, { key: 'update', label: 'Ubah' }, { key: 'delete', label: 'Hapus' },
+  ]},
+  { module: 'features', label: 'Features', actions: [
+    { key: 'create', label: 'Buat' }, { key: 'update', label: 'Ubah' }, { key: 'delete', label: 'Hapus' },
+  ]},
+  { module: 'products', label: 'Products', actions: [
+    { key: 'create', label: 'Buat' }, { key: 'update', label: 'Ubah' }, { key: 'delete', label: 'Hapus' },
+  ]},
+  { module: 'roadmap', label: 'Roadmap', actions: [
+    { key: 'create', label: 'Buat' }, { key: 'update', label: 'Ubah' }, { key: 'delete', label: 'Hapus' },
+  ]},
+  { module: 'sprints', label: 'Sprint', actions: [
+    { key: 'create', label: 'Buat' }, { key: 'update', label: 'Ubah' }, { key: 'delete', label: 'Hapus' },
+  ]},
+  { module: 'qa', label: 'QA', actions: [
+    { key: 'create', label: 'Buat' }, { key: 'update', label: 'Ubah' },
+    { key: 'run', label: 'Jalankan Test' }, { key: 'delete', label: 'Hapus' },
+  ]},
+  { module: 'bugs', label: 'Bugs Incident', actions: [
+    { key: 'access', label: 'Akses' },
+  ]},
+  { module: 'c_level', label: 'C-Level Dashboard', actions: [
+    { key: 'access', label: 'Akses' },
+  ]},
+  { module: 'standup', label: 'Standup', actions: [
+    { key: 'edit_any', label: 'Edit Milik Orang Lain' }, { key: 'import', label: 'Import Data' },
+  ]},
+  { module: 'import', label: 'Import Jira', actions: [
+    { key: 'run', label: 'Jalankan Import' },
+  ]},
+  { module: 'users', label: 'Users', actions: [
+    { key: 'create', label: 'Buat' }, { key: 'update', label: 'Ubah' },
+    { key: 'reset_password', label: 'Reset Password' }, { key: 'deactivate', label: 'Nonaktifkan' },
+    { key: 'delete', label: 'Hapus' },
+  ]},
+  { module: 'roles', label: 'Roles', actions: [
+    { key: 'create', label: 'Buat' }, { key: 'update', label: 'Ubah' }, { key: 'delete', label: 'Hapus' },
+  ]},
+  { module: 'departments', label: 'Departemen', actions: [
+    { key: 'create', label: 'Buat' }, { key: 'update', label: 'Ubah' }, { key: 'delete', label: 'Hapus' },
+  ]},
+  { module: 'settings', label: 'Pengaturan', actions: [
+    { key: 'update', label: 'Ubah' },
+  ]},
 ];
 
-// Flat list for backward-compat with RoleForm checkboxes
-const PREDEFINED_PERMISSIONS = PERMISSION_GROUPS.flatMap(g => g.items);
+// Buang modul yang tidak punya aksi ter-centang sama sekali, supaya JSON yang
+// disimpan bersih (konsisten dengan perilaku lama: key yang tidak dicentang
+// tidak perlu ada di blob, bukan harus eksplisit false).
+function compactPermissions(checked) {
+  const out = {};
+  for (const { module, actions } of MODULE_CATALOG) {
+    const moduleChecked = {};
+    for (const a of actions) {
+      if (checked[module]?.[a.key]) moduleChecked[a.key] = true;
+    }
+    if (Object.keys(moduleChecked).length > 0) out[module] = moduleChecked;
+  }
+  return out;
+}
 
 // ─── RoleForm ─────────────────────────────────────────────────────────────────
 function RoleForm({ role, onSave, onClose }) {
   const [displayName, setDisplayName] = useState(role?.display_name || '');
   const [name, setName]               = useState(role?.name || '');
-  const [checked, setChecked]         = useState(() => {
-    const perms = role?.permissions || {};
-    return Object.fromEntries(PREDEFINED_PERMISSIONS.map(p => [p.key, !!perms[p.key]]));
-  });
-  const [saving, setSaving] = useState(false);
+  const isSuperAdmin                  = role?.name === 'super_admin';
+  const [checked, setChecked]         = useState(() => role?.permissions || {});
+  const [saving, setSaving]           = useState(false);
 
-  const toggle = (key) => setChecked(prev => ({ ...prev, [key]: !prev[key] }));
+  const toggle = (module, action) => setChecked(prev => ({
+    ...prev,
+    [module]: { ...prev[module], [action]: !prev[module]?.[action] },
+  }));
+
+  const toggleModuleAll = (module, actions) => {
+    const allChecked = actions.every(a => checked[module]?.[a.key]);
+    setChecked(prev => ({
+      ...prev,
+      [module]: Object.fromEntries(actions.map(a => [a.key, !allChecked])),
+    }));
+  };
+
+  const totalActive = MODULE_CATALOG.reduce(
+    (sum, { module, actions }) => sum + actions.filter(a => checked[module]?.[a.key]).length, 0
+  );
 
   const save = async () => {
     if (!displayName.trim()) { toast.error('Display name wajib'); return; }
     if (!role?.id && !name.trim()) { toast.error('Nama role wajib'); return; }
     setSaving(true);
     try {
-      const permissions = Object.fromEntries(
-        PREDEFINED_PERMISSIONS.filter(p => checked[p.key]).map(p => [p.key, true])
-      );
+      const permissions = compactPermissions(checked);
       if (role?.id) {
         await client.put(`/roles/${role.id}`, { display_name: displayName, permissions });
         toast.success('Role diperbarui');
@@ -302,42 +303,50 @@ function RoleForm({ role, onSave, onClose }) {
           placeholder="contoh: Senior Developer" />
       </div>
       <div>
-        <label className="label">Permissions</label>
-        <div className="space-y-2">
-          {PERMISSION_GROUPS.map(group => (
-            <div key={group.group} className="border border-slate-200 rounded-lg overflow-hidden">
-              <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{group.group}</span>
-                <button type="button"
-                  onClick={() => {
-                    const allChecked = group.items.every(p => checked[p.key]);
-                    const next = { ...checked };
-                    group.items.forEach(p => { next[p.key] = !allChecked; });
-                    setChecked(next);
-                  }}
-                  className="text-xs text-indigo-600 hover:text-indigo-800">
-                  {group.items.every(p => checked[p.key]) ? 'Hapus semua' : 'Pilih semua'}
-                </button>
-              </div>
-              <div className="divide-y divide-slate-100">
-                {group.items.map(p => (
-                  <label key={p.key}
-                    className="flex items-start gap-3 px-3 py-2.5 cursor-pointer hover:bg-slate-50 transition-colors">
-                    <input type="checkbox" className="w-4 h-4 mt-0.5 rounded accent-indigo-600 shrink-0"
-                      checked={!!checked[p.key]} onChange={() => toggle(p.key)} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-700">{p.label}</p>
-                      <p className="text-xs text-slate-400">{p.desc}</p>
-                    </div>
-                  </label>
+        <label className="label">Hak Akses per Modul</label>
+        {isSuperAdmin ? (
+          <div className="bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 text-sm text-purple-700 font-medium flex items-center gap-2">
+            <Shield className="w-4 h-4 shrink-0" />
+            Akses Penuh — Super Admin selalu bisa semua operasi, tidak bisa diubah lewat form ini
+          </div>
+        ) : (
+          <div className="border border-slate-200 rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                  <th className="text-left px-3 py-2 w-36">Modul</th>
+                  <th className="text-left px-3 py-2">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {MODULE_CATALOG.map(({ module, label, actions }) => (
+                  <tr key={module} className="align-top">
+                    <td className="px-3 py-2.5 font-medium text-slate-700">
+                      <button type="button" onClick={() => toggleModuleAll(module, actions)}
+                        className="text-left hover:text-indigo-600 transition-colors" title="Pilih/hapus semua aksi modul ini">
+                        {label}
+                      </button>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                        {actions.map(a => (
+                          <label key={a.key} className="flex items-center gap-1.5 cursor-pointer">
+                            <input type="checkbox" className="w-3.5 h-3.5 rounded accent-indigo-600"
+                              checked={!!checked[module]?.[a.key]} onChange={() => toggle(module, a.key)} />
+                            <span className="text-xs text-slate-600">{a.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
                 ))}
-              </div>
-            </div>
-          ))}
-        </div>
-        <p className="text-xs text-slate-400 mt-1.5">
-          {Object.values(checked).filter(Boolean).length} permission dipilih
-        </p>
+              </tbody>
+            </table>
+          </div>
+        )}
+        {!isSuperAdmin && (
+          <p className="text-xs text-slate-400 mt-1.5">{totalActive} aksi dipilih</p>
+        )}
       </div>
       <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
         <button type="button" className="btn-secondary" onClick={onClose}>Batal</button>
@@ -473,7 +482,7 @@ function DepartmentForm({ department, users, onSave, onClose, onMembersChanged }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function Users() {
-  const { hasRole, hasPermission, user: currentUser } = useAuth();
+  const { can, user: currentUser } = useAuth();
   const [users,    setUsers]    = useState([]);
   const [roles,    setRoles]    = useState([]);
   const [products, setProducts] = useState([]);
@@ -572,7 +581,7 @@ export default function Users() {
       {tab === 'users' && (
         <>
           <div className="flex justify-end">
-            {hasPermission('manage_users') && (
+            {can('users', 'create') && (
               <button className="btn-primary"
                 onClick={() => setModal({ open: true, type: 'user', data: null })}>
                 <Plus className="w-4 h-4" /> Tambah User
@@ -666,35 +675,33 @@ export default function Users() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1 justify-center">
-                          {hasPermission('manage_users') && (
-                            <>
-                              <button className="btn-ghost btn-sm p-1.5 rounded-lg" title="Edit"
-                                onClick={() => setModal({ open: true, type: 'user', data: u })}>
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                              {hasRole('super_admin') && (
-                                <>
-                                  <button className="btn-ghost btn-sm p-1.5 rounded-lg" title="Reset Password"
-                                    onClick={() => setModal({ open: true, type: 'reset', data: u })}>
-                                    <Key className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    className={`btn-ghost btn-sm p-1.5 rounded-lg ${u.is_active ? 'text-orange-500 hover:bg-orange-50' : 'text-emerald-500 hover:bg-emerald-50'}`}
-                                    title={u.is_active ? 'Nonaktifkan' : 'Aktifkan'}
-                                    onClick={() => toggleActive(u)}>
-                                    {u.is_active ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
-                                  </button>
-                                  {u.role_name !== 'super_admin' && u.id !== currentUser?.id && (
-                                    <button
-                                      className="btn-ghost btn-sm p-1.5 rounded-lg text-red-500 hover:bg-red-50"
-                                      title="Hapus Permanen"
-                                      onClick={() => setDeleteConfirm(u)}>
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
-                                </>
-                              )}
-                            </>
+                          {can('users', 'update') && (
+                            <button className="btn-ghost btn-sm p-1.5 rounded-lg" title="Edit"
+                              onClick={() => setModal({ open: true, type: 'user', data: u })}>
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {can('users', 'reset_password') && (
+                            <button className="btn-ghost btn-sm p-1.5 rounded-lg" title="Reset Password"
+                              onClick={() => setModal({ open: true, type: 'reset', data: u })}>
+                              <Key className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {can('users', 'deactivate') && (
+                            <button
+                              className={`btn-ghost btn-sm p-1.5 rounded-lg ${u.is_active ? 'text-orange-500 hover:bg-orange-50' : 'text-emerald-500 hover:bg-emerald-50'}`}
+                              title={u.is_active ? 'Nonaktifkan' : 'Aktifkan'}
+                              onClick={() => toggleActive(u)}>
+                              {u.is_active ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+                            </button>
+                          )}
+                          {can('users', 'delete') && u.role_name !== 'super_admin' && u.id !== currentUser?.id && (
+                            <button
+                              className="btn-ghost btn-sm p-1.5 rounded-lg text-red-500 hover:bg-red-50"
+                              title="Hapus Permanen"
+                              onClick={() => setDeleteConfirm(u)}>
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           )}
                         </div>
                       </td>
@@ -730,7 +737,7 @@ export default function Users() {
       {/* ── ROLES TAB ── */}
       {tab === 'roles' && (
         <div className="space-y-4">
-          {hasRole('super_admin') && (
+          {can('roles', 'create') && (
             <div className="flex justify-end">
               <button className="btn-primary"
                 onClick={() => setModal({ open: true, type: 'role', data: null })}>
@@ -742,7 +749,9 @@ export default function Users() {
             {roles.map(role => {
               const perms = role.permissions || {};
               const userCount = users.filter(u => u.role_name === role.name).length;
-              const totalActive = PREDEFINED_PERMISSIONS.filter(p => perms[p.key]).length;
+              const totalActive = MODULE_CATALOG.reduce(
+                (sum, { module, actions }) => sum + actions.filter(a => perms[module]?.[a.key]).length, 0
+              );
               return (
                 <div key={role.id} className="card p-5 flex flex-col">
                   <div className="flex items-start gap-3 mb-4">
@@ -754,13 +763,15 @@ export default function Users() {
                       <p className="text-xs text-slate-400 font-mono">{role.name}</p>
                       <p className="text-xs text-slate-400 mt-0.5">{totalActive} permission aktif · {userCount} user</p>
                     </div>
-                    {hasRole('super_admin') && (
+                    {(can('roles', 'update') || can('roles', 'delete')) && (
                       <div className="flex gap-1 shrink-0">
-                        <button className="btn-ghost btn-sm p-1.5 rounded-lg" title="Edit role"
-                          onClick={() => setModal({ open: true, type: 'role', data: role })}>
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        {role.name !== 'super_admin' && (
+                        {can('roles', 'update') && (
+                          <button className="btn-ghost btn-sm p-1.5 rounded-lg" title="Edit role"
+                            onClick={() => setModal({ open: true, type: 'role', data: role })}>
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {can('roles', 'delete') && role.name !== 'super_admin' && (
                           <button className="btn-ghost btn-sm p-1.5 rounded-lg text-red-500 hover:bg-red-50"
                             title="Hapus role" onClick={() => deleteRole(role)}>
                             <Trash2 className="w-3.5 h-3.5" />
@@ -770,22 +781,21 @@ export default function Users() {
                     )}
                   </div>
 
-                  {perms.all ? (
+                  {role.name === 'super_admin' ? (
                     <div className="flex-1 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 text-sm text-purple-700 font-medium flex items-center gap-2">
                       <Shield className="w-4 h-4 shrink-0" />
                       Akses Penuh — semua operasi diizinkan
                     </div>
                   ) : (
                     <div className="flex-1 space-y-2">
-                      {PERMISSION_GROUPS.filter(g => g.items.some(p => perms[p.key])).map(group => (
-                        <div key={group.group}>
-                          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">{group.group}</p>
+                      {MODULE_CATALOG.filter(({ module, actions }) => actions.some(a => perms[module]?.[a.key])).map(({ module, label, actions }) => (
+                        <div key={module}>
+                          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">{label}</p>
                           <div className="flex flex-wrap gap-1">
-                            {group.items.filter(p => perms[p.key]).map(p => (
-                              <span key={p.key}
-                                className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-full"
-                                title={p.desc}>
-                                {p.label}
+                            {actions.filter(a => perms[module]?.[a.key]).map(a => (
+                              <span key={a.key}
+                                className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-full">
+                                {a.label}
                               </span>
                             ))}
                           </div>
@@ -806,7 +816,7 @@ export default function Users() {
       {/* ── DEPARTEMEN TAB ── */}
       {tab === 'departments' && (
         <div className="space-y-4">
-          {hasRole('super_admin') && (
+          {can('departments', 'create') && (
             <div className="flex justify-end">
               <button className="btn-primary"
                 onClick={() => setModal({ open: true, type: 'department', data: null })}>
@@ -829,16 +839,20 @@ export default function Users() {
                       <p className="text-xs text-slate-400 font-mono">{dept.code} · prefix {dept.code_prefix}</p>
                       <p className="text-xs text-slate-400 mt-0.5">{userCount} user</p>
                     </div>
-                    {hasRole('super_admin') && (
+                    {(can('departments', 'update') || can('departments', 'delete')) && (
                       <div className="flex gap-1 shrink-0">
-                        <button className="btn-ghost btn-sm p-1.5 rounded-lg" title="Edit departemen"
-                          onClick={() => setModal({ open: true, type: 'department', data: dept })}>
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button className="btn-ghost btn-sm p-1.5 rounded-lg text-red-500 hover:bg-red-50"
-                          title="Hapus departemen" onClick={() => deleteDepartment(dept)}>
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {can('departments', 'update') && (
+                          <button className="btn-ghost btn-sm p-1.5 rounded-lg" title="Edit departemen"
+                            onClick={() => setModal({ open: true, type: 'department', data: dept })}>
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {can('departments', 'delete') && (
+                          <button className="btn-ghost btn-sm p-1.5 rounded-lg text-red-500 hover:bg-red-50"
+                            title="Hapus departemen" onClick={() => deleteDepartment(dept)}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>

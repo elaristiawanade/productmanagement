@@ -1,5 +1,6 @@
 package com.producttracker.controller;
 
+import com.producttracker.config.PermissionHelper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -34,7 +35,7 @@ public class StandupController {
         Map<String, Object> actor = toMap(principal);
         if (actor == null) return ResponseEntity.status(401).build();
 
-        boolean isManagerOrAbove = isManagerOrAbove(actor);
+        boolean canSeeRoster = PermissionHelper.can(principal, "standup", "import");
         Long actorId = toLong(actor.get("id"));
 
         StringBuilder sql = new StringBuilder(
@@ -48,8 +49,8 @@ public class StandupController {
 
         java.util.List<Object> params = new java.util.ArrayList<>();
 
-        // Default: show own standups. Manager may filter to another user via user_id param.
-        Long filterUserId = (isManagerOrAbove && user_id != null) ? user_id : actorId;
+        // Default: show own standups. Manager+ may filter to another user via user_id param.
+        Long filterUserId = (canSeeRoster && user_id != null) ? user_id : actorId;
         sql.append(" AND s.user_id = ?");
         params.add(filterUserId);
         if (date_from != null && !date_from.isBlank()) {
@@ -132,7 +133,7 @@ public class StandupController {
         Map<String, Object> actor = toMap(principal);
         if (actor == null) return ResponseEntity.status(401).build();
         Long actorId = toLong(actor.get("id"));
-        boolean canEditAll = isPoOrAbove(actor);
+        boolean canEditAll = PermissionHelper.can(principal, "standup", "edit_any");
 
         List<Map<String, Object>> rows = jdbc.queryForList(
             "SELECT user_id FROM standups WHERE id = ?", id
@@ -254,8 +255,8 @@ public class StandupController {
                                         @RequestParam("file") MultipartFile file) {
         Map<String, Object> actor = toMap(principal);
         if (actor == null) return ResponseEntity.status(401).build();
-        if (!isManagerOrAbove(actor)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Hanya manager ke atas yang bisa import data"));
+        if (!PermissionHelper.can(principal, "standup", "import")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk import data"));
         }
         if (file.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "File tidak boleh kosong"));
@@ -543,16 +544,6 @@ public class StandupController {
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────
-
-    private boolean isManagerOrAbove(Map<String, Object> user) {
-        Object rn = user.get("role_name");
-        return "super_admin".equals(rn) || "manager".equals(rn);
-    }
-
-    private boolean isPoOrAbove(Map<String, Object> user) {
-        Object rn = user.get("role_name");
-        return "super_admin".equals(rn) || "manager".equals(rn) || "po".equals(rn);
-    }
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> toMap(Object o) {

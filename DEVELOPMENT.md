@@ -150,6 +150,9 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v16.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v17.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v18.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v19.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v20.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v21.sql"
 ```
 
 > **Penting:** `migration_v10.sql` menambahkan kolom `users.department`, yang di-query
@@ -164,6 +167,14 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 > ```bash
 > docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v10.sql
 > ```
+
+> **Penting juga:** `migration_v21.sql` mengubah bentuk kolom `roles.permissions` dari flat
+> map (`{"manage_qa": true}`) jadi nested modul→aksi (`{"qa": {"create": true}}`) — lihat PRD
+> 3.10 "Roles & Permissions" dan `README.md` bagian "Roles & Permissions". Ini **overwrite
+> penuh** kolom `permissions` untuk 7 role default; kalau migrasi ini belum dijalankan setelah
+> `git pull`, `PermissionHelper.can()`/`AuthContext.can()` akan selalu mengembalikan `false`
+> untuk role selain `super_admin` (karena membaca key nested yang belum ada) — gejalanya mirip
+> catatan di atas: tombol/menu hilang tanpa error jelas.
 
 ---
 
@@ -221,7 +232,10 @@ product-tracker/
 │       ├── migration_v15.sql
 │       ├── migration_v16.sql
 │       ├── migration_v17.sql
-│       └── migration_v18.sql
+│       ├── migration_v18.sql
+│       ├── migration_v19.sql
+│       ├── migration_v20.sql
+│       └── migration_v21.sql
 ├── backend-java/          # Spring Boot API (port 4000)
 │   ├── src/
 │   ├── pom.xml

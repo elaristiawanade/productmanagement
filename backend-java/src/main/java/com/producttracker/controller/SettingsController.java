@@ -23,7 +23,7 @@ public class SettingsController {
 
     @GetMapping("/mail")
     public ResponseEntity<?> getMail(@AuthenticationPrincipal Object principal) {
-        if (!PermissionHelper.isSuperAdmin(principal)) return forbidden();
+        if (!PermissionHelper.can(principal, "settings", "update")) return forbidden();
 
         Map<String, String> cfg = settingsService.getMailConfig();
         Map<String, Object> body = new HashMap<>();
@@ -41,7 +41,7 @@ public class SettingsController {
     @PutMapping("/mail")
     public ResponseEntity<?> updateMail(@AuthenticationPrincipal Object principal,
                                          @RequestBody Map<String, Object> body) {
-        if (!PermissionHelper.isSuperAdmin(principal)) return forbidden();
+        if (!PermissionHelper.can(principal, "settings", "update")) return forbidden();
 
         Map<String, String> values = new HashMap<>();
         values.put("enabled", String.valueOf(body.get("enabled")));
@@ -60,7 +60,7 @@ public class SettingsController {
     @PostMapping("/mail/test")
     public ResponseEntity<?> testMail(@AuthenticationPrincipal Object principal,
                                        @RequestBody Map<String, Object> body) {
-        if (!PermissionHelper.isSuperAdmin(principal)) return forbidden();
+        if (!PermissionHelper.can(principal, "settings", "update")) return forbidden();
 
         String to = str(body.get("to"));
         String error = emailService.sendTest(to);

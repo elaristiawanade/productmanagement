@@ -1,5 +1,6 @@
 package com.producttracker.controller;
 
+import com.producttracker.config.PermissionHelper;
 import com.producttracker.service.EmailService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -78,8 +79,6 @@ public class ActivityController {
     public ResponseEntity<?> delete(@PathVariable Long id,
                                      @AuthenticationPrincipal Object principal) {
         Long userId = currentUserId(principal);
-        String roleName = currentRoleName(principal);
-        boolean isSuperAdmin = "super_admin".equals(roleName);
 
         List<Map<String, Object>> rows = jdbc.queryForList(
             "SELECT user_id, type FROM item_activities WHERE id = ?", id
@@ -93,7 +92,7 @@ public class ActivityController {
 
         Object ownerId = rows.get(0).get("user_id");
         boolean isOwner = ownerId != null && ownerId.toString().equals(String.valueOf(userId));
-        if (!isOwner && !isSuperAdmin) {
+        if (!isOwner && !PermissionHelper.can(principal, "backlog", "delete")) {
             return ResponseEntity.status(403).body(Map.of("error", "Hanya bisa menghapus komentar sendiri"));
         }
 
@@ -143,10 +142,4 @@ public class ActivityController {
         try { return Long.parseLong(id.toString()); } catch (Exception e) { return null; }
     }
 
-    @SuppressWarnings("unchecked")
-    private String currentRoleName(Object principal) {
-        if (!(principal instanceof Map)) return "";
-        Object rn = ((Map<String, Object>) principal).get("role_name");
-        return rn == null ? "" : rn.toString();
-    }
 }

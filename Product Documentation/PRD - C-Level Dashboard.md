@@ -333,3 +333,18 @@ Permission baru mengikuti pola JSONB `roles.permissions` yang sudah ada (lihat B
 - **Tidak ada endpoint API baru** — otorisasi tetap lewat `DepartmentHelper.canWrite()`/`visibleDepartments()` yang sudah dipakai `LeaderNotesController`/`LeaderTaskController` sejak Bagian 8.
 - Data departemen itu sendiri (tabel `departments`, `user_departments`, tab Departemen di Bagian 9) — tidak tersentuh. Perubahan ini murni di lapisan otorisasi C-Level, bukan pengelolaan departemen.
 - My Task (Bagian 3.3) tetap bypass filter departemen untuk task yang di-assign ke user — tidak terpengaruh oleh perubahan ini.
+
+---
+
+## 11. Update Implementasi — Migrasi ke Matrix Modul × Aksi (14 Oktober 2026)
+
+**Status: Diimplementasikan & sudah ditest.** Bagian dari penggantian total sistem Roles & Permissions di seluruh aplikasi (lihat PRD utama "Product Tracker Internal" 3.10 & Riwayat Perubahan v3.0) — bukan perubahan khusus C-Level, tapi C-Level ikut terdampak karena sebelumnya satu-satunya modul (selain Bugs Incident & Users) yang sudah punya permission key beneran dipakai (`access_c_level`).
+
+**Yang berubah untuk C-Level:**
+- Key permission `access_c_level` (flat, key tunggal di `roles.permissions`) diganti jadi `c_level: { access: true }` (nested, bagian dari matrix Modul × Aksi yang sama dipakai semua modul lain). Secara fungsional setara — tetap satu aksi all-or-nothing (`access`), bukan dipecah granular, karena `DepartmentHelper.canWrite()`/`visibleDepartments()` memang sudah all-or-nothing sejak Bagian 10.
+- `DepartmentHelper.canWrite()` disederhanakan jadi satu baris: `PermissionHelper.can(principal, "c_level", "access")` — `WRITE_ROLES` hardcode (`{super_admin, commissioner}`) dihapus total, karena `can()` sudah otomatis bypass untuk `super_admin` dan `commissioner` kini mendapat `c_level.access` dari data migrasi (bukan hardcode kode lagi).
+- `CLevel.jsx`: `canWrite = hasRole('super_admin','commissioner') || hasPermission('access_c_level')` diganti jadi `canWrite = can('c_level', 'access')`.
+- `Sidebar.jsx`: kondisi tampil menu disederhanakan jadi `show: (user, can) => can('c_level', 'access')`.
+- **Bug lama ikut diperbaiki**: role **SME** punya data `manage_leader_notes`/`manage_leader_tasks` di `roles.permissions` sejak Bagian 2.2/migration_v10, tapi key itu **tidak pernah dibaca** oleh `DepartmentHelper` (yang dari awal cuma cek `access_c_level`, bukan key lama itu) — jadi SME sebenarnya **tidak pernah benar-benar punya akses** C-Level Dashboard sejak Bagian 10 diterapkan, walau datanya terlihat seperti seharusnya bisa. Ini sekarang diperbaiki: SME diberi `c_level.access` di migrasi data baru (`migration_v21.sql`), jadi SME benar-benar bisa akses Leader Notes/Task seperti yang terlihat dari namanya sejak awal.
+
+**Yang sengaja TIDAK berubah:** model akses tetap all-or-nothing setara Commissioner (bukan tier parsial), tidak ada endpoint API baru, data departemen tidak tersentuh — persis prinsip 10.3, cuma bentuk penyimpanan permission-nya yang berubah.

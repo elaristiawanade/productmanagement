@@ -3,8 +3,8 @@
 
 | | |
 |---|---|
-| **Versi** | 2.5 |
-| **Tanggal** | 11 September 2026 |
+| **Versi** | 3.0 |
+| **Tanggal** | 14 Oktober 2026 |
 | **Status** | Live — Production |
 | **Pemilik** | Tim Internal |
 
@@ -26,17 +26,19 @@ Product Tracker adalah sistem manajemen pengembangan produk internal yang dibang
 
 ## 2. Pengguna & Peran
 
-Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
+Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus bebas lewat halaman **Users & Roles → Roles & Permissions** (3.10), dan hak aksesnya ditentukan oleh matrix **Modul × Aksi** per role (lihat 3.10 untuk detail model datanya). Tabel di bawah ini adalah **7 role default** yang ter-seed saat instalasi awal — bisa diedit atau dihapus kapan saja oleh Super Admin (kecuali role `super_admin` itu sendiri, yang selalu bypass semua pengecekan terlepas isi matrix-nya):
 
-| Role | Deskripsi | Hak Akses Utama |
+| Role | Deskripsi | Hak Akses Utama (default) |
 |---|---|---|
-| **Super Admin** | Akses penuh tanpa batasan | Semua modul + manajemen user + konfigurasi sistem |
-| **Manager** | Kepala tim / manajemen | Baca semua produk, manajemen user, laporan, import standup |
-| **Product Owner (PO)** | Pemilik produk | Kelola backlog, sprint, feature, epics untuk produk yang di-assign |
-| **Developer** | Anggota tim dev | Lihat & update item yang di-assign ke diri sendiri |
+| **Super Admin** | Akses penuh tanpa batasan | Semua modul + manajemen user + konfigurasi sistem (bypass hardcode, bukan dari matrix) |
+| **Manager** | Kepala tim / manajemen | Hampir semua modul (create/update/delete), manajemen user, import standup, kecuali Bugs Incident & C-Level |
+| **Product Owner (PO)** | Pemilik produk | Kelola backlog, sprint, feature, epics, QA (create/update), roadmap untuk produk yang di-assign |
+| **Developer** | Anggota tim dev | Buat/update backlog & epic; untuk item di luar itu hanya bisa update item yang di-assign ke diri sendiri |
 | **QA Engineer** | Penguji | Kelola test case, test run, eksekusi pengujian, dan modul Bugs Incident (3.9) |
+| **SME** | Subject Matter Expert lintas fungsi | C-Level Dashboard — Leader Notes & Leader Task (3.10 C-Level) |
+| **Commissioner** | Pengawas/komisaris | C-Level Dashboard — Leader Notes & Leader Task, setara SME |
 
-**Aturan akses produk:** Developer dan QA hanya melihat item dari produk tempat mereka terdaftar sebagai member. Exception: semua user selalu dapat melihat item yang di-assign langsung ke mereka (My Tasks).
+**Aturan akses produk:** Developer dan QA hanya melihat item dari produk tempat mereka terdaftar sebagai member. Exception: semua user selalu dapat melihat item yang di-assign langsung ke mereka (My Tasks). Ini adalah filter data (query-level), terpisah dari matrix Modul × Aksi di atas yang mengatur aksi (create/update/delete).
 
 **Pelapor eksternal (bukan role sistem):** Sejak versi 2.5, karyawan kantor yang **tidak punya akun** Product Tracker sama sekali bisa melaporkan bug lewat form publik tanpa login (lihat 3.15) — bukan salah satu dari 5 role di atas, tidak masuk tabel `users`, dan tidak punya akses ke bagian manapun dari aplikasi selain form itu sendiri.
 
@@ -81,7 +83,9 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 **Fitur Backlog:**
 - CRUD item dengan 5 tipe di atas
 - Hierarki parent-child: Task/Bug ← Story ← Epic
-- **Dropdown pencarian untuk field Parent:** field **Parent User Story** (Task/Bug) dan **Parent Epic** (Story) berupa dropdown dengan kotak pencarian di dalamnya — ketik untuk filter berdasarkan kode/judul, bukan sekadar daftar panjang untuk di-scroll. Pola yang sama juga dipakai untuk field Backlog Item di form Bug (3.9) dan Test Case (3.8)
+- **Dropdown pencarian untuk field Parent:** field **Parent User Story** (Task/Bug) dan **Parent Epic** (Story) berupa dropdown dengan kotak pencarian di dalamnya — ketik untuk filter berdasarkan kode/judul, bukan sekadar daftar panjang untuk di-scroll. Pola yang sama juga dipakai untuk field Backlog Item di form Bug (3.9) dan Test Case (3.8). Dropdown ini mengecualikan item yang sedang diedit dari daftar pilihannya sendiri — penting saat **mengubah Tipe item** (mis. Epic → Story), karena sebelum disimpan item tersebut masih berstatus tipe lama di database dan secara teknis bisa saja muncul sebagai kandidat parent untuk dirinya sendiri
+- **Validasi parent anti-siklus:** backend menolak (400 Bad Request, "Parent item membentuk siklus") `parent_id` yang mengarah ke diri sendiri atau membentuk rantai melingkar (mis. A→B→A) lewat chain beberapa parent. Ini juga melindungi kalkulasi **Story Points auto-cascade** di bawah — tanpa validasi ini, parent_id yang melingkar dapat membuat proses cascade SP rekursi tanpa henti (`StackOverflowError`) saat item mana pun di rantai itu di-update
+- **Dropdown pencarian multi-select untuk Assignee:** filter **Assignee** di toolbar Backlog, dan field **Assignee** di form Tambah/Edit item, berupa dropdown checklist dengan kotak pencarian — ketik nama untuk menyaring, tetap bisa pilih lebih dari satu orang (komponen `SearchableMultiSelect`, varian multi-select dari pola `SearchableSelect` di atas). Pola yang sama juga dipakai untuk filter Assignee dan field Assigned To di Bugs Incident (3.9)
 - **Story Points auto-cascade:** SP pada Task otomatis dijumlahkan ke Story parent → lalu ke Epic grandparent. Berlaku untuk create, update, dan delete
 - **Epic SP read-only:** Form Epic menampilkan SP sebagai kalkulasi otomatis (tidak bisa diinput manual)
 - **Story Points hints:** Panduan skala SP (1–13) ditampilkan langsung di form untuk membantu estimasi
@@ -92,6 +96,7 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 - Status item: `backlog`, `todo`, `in_progress`, `in_review`, `done`, `blocked`
 - Prioritas: `low`, `medium`, `high`, `critical`
 - Assign ke developer, set due date, set sprint, hubungkan ke epic/feature
+- **Pindah sprint langsung dari tabel:** kolom **Sprint** di tabel Backlog berupa dropdown — pilih sprint lain (atau kembali ke "Backlog (no sprint)") tanpa buka form edit, pola quick-update yang sama seperti kolom Status. Item tipe `independent` tidak punya dropdown ini karena tidak terikat sprint. Perubahan tercatat di log aktivitas item; tidak mengirim notifikasi email (beda dari perubahan status)
 - Pagination dengan limit per halaman yang dapat dikonfigurasi
 - Import dari Jira (CSV)
 - **Lampiran** — unggah file ke backlog item: gambar (JPEG/PNG/GIF/WebP), PDF, Word, Excel, PowerPoint, ZIP, CSV, TXT (max 10MB per file, multi-file). Preview inline untuk gambar, PDF, TXT, dan CSV (dirender sebagai tabel) — tipe lain dibuka/diunduh di tab baru
@@ -213,6 +218,7 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 - Test run management (kumpulan test case untuk satu sesi pengujian)
 - Eksekusi test case: `pass`, `fail`, `skip`, `blocked`
 - QA dashboard: statistik coverage, pass rate, item yang belum di-test
+- **Export & Import CSV** — tombol **Export CSV** dan **Import CSV** di tab Test Cases, pola sama seperti Bugs Incident (3.9). Export mengeluarkan kolom Kode, Judul, Deskripsi, Langkah, Expected Result, Status, Prioritas, Backlog Item, Produk (**tanpa** Run Count/Pass/Fail — angka itu agregat dari tabel `qa_test_runs`, bukan field test case, jadi tidak ikut diekspor supaya kolomnya tetap 1:1 importable). Cara pakai paling umum adalah round-trip: export → edit di Excel (pakai "Save As → CSV UTF-8", lihat catatan encoding di 3.9) → import balik. Kolom `Produk` di-resolve per baris; kolom `Backlog Item` (format `[KODE] Judul`, sama seperti hasil Export) **wajib** cocok dengan backlog item yang ada di produk tsb — beda dari Bugs Incident yang field ini opsional, di Test Case kolom `backlog_item_id` memang `NOT NULL` di skema, jadi baris dengan Backlog Item kosong atau kodenya tidak ditemukan masuk daftar error, bukan dibuat dengan nilai `NULL`. Kolom `Kode` kosong → auto-generate `TC-###` (algoritma sama persis dengan create manual, per produk); kode yang sudah ada di produk yang sama → baris di-skip (create-only, bukan upsert). Kolom `Status`/`Prioritas` yang tidak valid fallback ke default (`draft`/`medium`). Hasil akhir (dibuat/di-skip/error) ditampilkan di modal setelah proses selesai, tidak ada notifikasi/email terkirim. **Akses:** permission `qa.create` — sama seperti tombol "Buat Test Case"
 
 ---
 
@@ -230,8 +236,9 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 - **Bugs Dashboard** — statistik total bug, jumlah open (termasuk `open`/`in_progress`/`reopen`), jumlah ready to test, resolution rate, breakdown per produk dan per stage, **grafik tren bug Dibuka vs Ditutup** (line chart) dengan toggle **Mingguan (8 minggu terakhir) / Bulanan (6 bulan terakhir) / Tahunan (3 tahun terakhir)** (dihitung dari `created_at` dan `closed_at`; bucket tanpa data tetap tampil sebagai 0 agar garis tidak putus), serta dua panel bersebelahan: **Recent Activity** (10 update progress/stage terbaru lintas bug) dan **Recent Comments** (10 komentar terbaru lintas bug)
 - **Lampiran Gambar** — unggah screenshot/bukti visual pada bug (multi-gambar, max 10MB per file, JPEG/PNG/GIF/WebP), muncul setelah bug pertama kali disimpan (pola sama seperti lampiran Backlog Item, 3.2). Klik thumbnail untuk membuka preview gambar penuh layar
 - **Tracking tanggal** — tiap bug menampilkan **Tanggal Incident** (tanggal bug dibuat/dilaporkan), **Tanggal Closed** (otomatis terisi begitu stage masuk `done`, otomatis kosong lagi kalau stage dipindah keluar dari `done`), dan **Update Terakhir** (tanggal + nama user dari entry Progress paling baru, kosong kalau belum pernah ada update progress)
-- **Filter & pencarian** — cari berdasarkan judul/kode; filter multi-select stage, severity, prioritas, dan assignee; filter produk di level halaman (memuat ulang data dari server). Toggle **"Sembunyikan Closed/Done"** aktif secara default sehingga bug yang sudah selesai (`done`) tidak memenuhi list — klik untuk menampilkannya kembali; filter ini independen dari filter multi-select Stage. Export hasil filter ke CSV (mengikuti urutan sort yang aktif)
+- **Filter & pencarian** — cari berdasarkan judul/kode; filter multi-select stage, severity, prioritas, dan assignee (assignee bisa diketik untuk mencari nama — lihat pola `SearchableMultiSelect` di 3.2); filter produk di level halaman (memuat ulang data dari server). Toggle **"Sembunyikan Closed/Done"** aktif secara default sehingga bug yang sudah selesai (`done`) tidak memenuhi list — klik untuk menampilkannya kembali; filter ini independen dari filter multi-select Stage. Export hasil filter ke CSV (mengikuti urutan sort yang aktif)
 - **Sort kolom** — klik header kolom Severity, Prioritas, Stage, Tanggal Incident, Tanggal Closed, atau Update Terakhir untuk mengurutkan. Klik pertama: arah default kolom tsb (Severity/Prioritas dari Critical, Stage sesuai alur kerja Open→Done, tanggal dari yang terbaru); klik kedua: kebalikannya; klik ketiga: kembali ke urutan asli. Baris tanpa nilai (mis. bug yang belum closed) selalu ditampilkan paling bawah
+- **Import CSV** — tombol **Import CSV** di tab Bugs (sebelah Export CSV) untuk bikin bug secara massal dari file CSV. Format kolom persis sama dengan hasil **Export CSV** di atas, jadi cara pakai paling umum adalah round-trip: export → edit di Excel → import balik. **Catatan cara save di Excel:** pakai **File → Save As → "CSV UTF-8 (Comma delimited) (*.csv)"**, bukan opsi "CSV (Comma delimited)" polos — opsi terakhir itu defaultnya nulis ulang file pakai ANSI/Windows-1252, bukan UTF-8, meskipun ekstensinya tetap `.csv`. Kalau kepakai encoding yang salah, import tetap jalan normal, cuma karakter non-standar (nama dengan diakritik, dsb) di kolom terkait bisa tampil berantakan — bukan gagal total atau data hilang. Excel versi lama yang tidak punya opsi "CSV UTF-8" bisa pakai Google Sheets (**File → Download → Comma Separated Values**, selalu UTF-8) atau Notepad untuk perubahan kecil. Kolom `Produk` di-resolve **per baris** (satu file boleh berisi bug dari beberapa produk sekaligus, bukan satu produk per upload). Kolom `Kode` kosong → kode digenerate otomatis (mengikuti pola kode produk yang berjalan, sama seperti create manual); kode yang sudah ada **di produk yang sama** → baris tsb di-skip, bukan ditimpa (create-only, tidak ada mode upsert). Kolom `Assigned To`/`Reported By` dicocokkan ke akun user lewat nama/email — khusus `Reported By` yang tidak cocok akun manapun, teksnya tetap disimpan sebagai pelapor (pola sama seperti tiket dari Lapor Bug Publik, 3.15) alih-alih hilang begitu saja. Kolom `Tanggal Incident`/`Tanggal Closed` dipakai kalau terisi & formatnya valid — penting untuk migrasi data bug historis, bukan cuma tanggal saat file di-upload. Baris dengan produk yang tidak ditemukan dicatat di daftar error (bukan gagal diam-diam), baris lain di file yang sama tetap lanjut diproses. Hasil akhir (jumlah dibuat/di-skip/error, plus detail tiap error) ditampilkan di modal setelah proses selesai. Tidak ada notifikasi/email yang dikirim untuk bug hasil import (sama seperti Import Jira, 3.11) — menghindari spam notifikasi untuk migrasi data massal. **Akses:** sama seperti modul Bugs Incident (permission `access_bugs`), beda dari Import Jira (3.11) yang gate-nya PO/Manager/Admin
 
 **Stage bug** (dicatat sebagai histori di Progress, nilai stage terkini disimpan juga di data Bug untuk filter/tampilan cepat):
 
@@ -249,17 +256,32 @@ Sistem menggunakan 5 role hierarkis dengan hak akses berbeda:
 
 ### 3.10 Users & Roles (Admin only)
 
-**Tujuan:** Manajemen akun dan hak akses.
+**Tujuan:** Manajemen akun dan hak akses. Terdiri dari 3 tab: **Users**, **Roles & Permissions**, **Departemen**.
 
-**Fitur:**
+**Tab Users — Fitur:**
 - CRUD user (nama, email, role, warna avatar, status aktif)
 - Assign/ubah role
 - **Reset password** user oleh admin (tanpa perlu password lama)
 - Lihat dan kelola daftar produk yang di-assign ke user
 - **Soft delete** (`is_active = false`) — user tidak bisa login tapi data tetap ada
 - **Permanent delete** — hapus user beserta seluruh data terkait dari database (tidak bisa dibatalkan)
+- Aksi Buat/Ubah/Reset Password/Nonaktifkan/Hapus masing-masing digerbang aksi terpisah di tab Roles & Permissions (lihat di bawah) — bukan satu permission tunggal, supaya asimetri lama (mis. role yang bisa Edit profil user tapi tidak boleh Reset Password) bisa tetap diatur per aksi
 
-**Akses:** Super Admin, Manager
+**Tab Roles & Permissions — Fitur:**
+- **Role dibuat bebas** — bukan daftar tetap di kode. Tombol "Tambah Role" membuka form: nama (slug, tidak bisa diubah setelah dibuat), display name, dan tabel hak akses
+- **Matrix Modul × Aksi** — satu baris per modul (Backlog, Epic, Features, Products, Roadmap, Sprint, QA, Bugs Incident, C-Level Dashboard, Standup, Import Jira, Users, Roles, Departemen, Pengaturan), tiap baris cuma menampilkan checkbox untuk aksi yang benar-benar relevan untuk modul itu (bukan grid 5 kolom seragam untuk semua modul — mis. modul Bugs Incident cuma punya 1 aksi "Akses", modul Users punya 5: Buat/Ubah/Reset Password/Nonaktifkan/Hapus)
+- Role **`super_admin`** checkbox-nya di-disable (selalu akses penuh lewat bypass hardcode, bukan dari matrix — supaya tidak ada skenario Super Admin terkunci sendiri dari sistem akibat salah klik)
+- Perubahan tersimpan langsung berefek nyata di frontend (tombol/menu muncul-hilang) **dan** backend (`403` kalau dipanggil API langsung tanpa aksi yang sesuai) — satu sumber kebenaran untuk keduanya
+- List role menampilkan badge per modul yang dapat aksi (mis. "Backlog: Buat, Ubah, Hapus")
+- Hapus role diblokir kalau masih ada user yang pakai role tsb
+
+**Model data:** `roles.permissions` (JSONB) berbentuk nested `{"modul": {"aksi": true}}`, mis. `{"qa": {"create": true, "run": true}}`. Backend menegakkan lewat `PermissionHelper.can(principal, module, action)`, frontend lewat `useAuth().can(module, action)` — tidak ada lagi floor role hardcode di kode untuk modul-modul ini (lihat Riwayat Perubahan untuk detail migrasi dari model permission lama).
+
+**Tab Departemen — Fitur:**
+- CRUD departemen (kode, nama, prefix kode task, warna, urutan tampil) — dipakai untuk scope C-Level Dashboard (3.10), bukan bagian dari matrix Modul × Aksi (tidak ada "aksi" untuk Departemen sebagai record, cuma CRUD data referensi)
+- Atur anggota per departemen (menentukan Leader Notes/Task mana yang terlihat untuk user tsb)
+
+**Akses:** Aksi Buat/Ubah user digerbang aksi `users.create`/`users.update` (default: Super Admin, Manager). Reset Password/Nonaktifkan/Hapus user, dan semua aksi di tab Roles & Permissions + Departemen, default-nya cuma Super Admin — role lain bisa diberi akses ini lewat matrix Modul × Aksi itu sendiri.
 
 ---
 
@@ -476,8 +498,11 @@ GET    /api/backlog               List item
                                   hide_done=true → sembunyikan item status 'done' (default UI)
 GET    /api/backlog/:id           Detail satu item
 POST   /api/backlog               Buat item baru (auto-cascade SP ke parent)
+                                  400 jika parent_id akan membentuk siklus
 PUT    /api/backlog/:id           Update item (auto-cascade SP; type/parent_id fallback ke nilai DB)
+                                  400 jika parent_id akan membentuk siklus (termasuk ke diri sendiri)
 PATCH  /api/backlog/:id/status    Update status saja
+PATCH  /api/backlog/:id/sprint    Update sprint saja (400 jika item tipe independent)
 DELETE /api/backlog/:id           Hapus item (auto-cascade SP ke parent yang tersisa)
 
 GET    /api/backlog/:id/activities     Log perubahan + komentar
@@ -550,6 +575,7 @@ GET/POST          /api/qa/test-runs            List & buat test run
 PUT               /api/qa/test-runs/:id        Update test run (nama, status)
 GET               /api/qa/dashboard            Statistik QA (coverage, pass rate, dll.)
 ```
+**Import CSV test case:** lihat `POST /api/import/qa-test-cases` di bagian Import di bawah.
 
 ### Bugs Incident
 ```
@@ -597,14 +623,32 @@ PATCH  /api/notifications/read-all   Tandai semua notifikasi sebagai dibaca
 
 ### Import
 ```
-POST /api/jira    Import dari CSV export Jira (multipart/form-data)
+POST /api/import/jira    Import dari CSV export Jira ke Backlog (multipart/form-data, body: file, product_id).
+                          Akses: PO/Manager/Admin
+POST /api/import/bugs    Import dari CSV ke Bugs Incident (multipart/form-data, body: file) — format kolom sama
+                          seperti hasil Export CSV di tab Bugs (3.9); produk di-resolve per baris, duplikat kode
+                          (per produk) di-skip, kode kosong digenerate otomatis. Akses: sama seperti modul Bugs
+                          Incident (permission access_bugs), bukan gate PO/Manager/Admin seperti import Jira
+POST /api/import/qa-test-cases
+                          Import dari CSV ke QA Test Cases (multipart/form-data, body: file) — format kolom sama
+                          seperti hasil Export CSV di tab Test Cases (3.8); produk & Backlog Item di-resolve per
+                          baris, Backlog Item wajib ditemukan (baris tanpa match masuk daftar error, beda dari
+                          import bugs yang field ini opsional — qa_test_cases.backlog_item_id NOT NULL di skema).
+                          Duplikat kode (per produk) di-skip, kode kosong digenerate TC-### otomatis. Akses:
+                          permission qa.create
 ```
 
 ### Roles (Admin only)
 ```
-GET/POST          /api/roles        List & buat role
-PUT/DELETE        /api/roles/:id    Update & hapus role
+GET                /api/roles        List semua role (termasuk permissions penuh tiap role)
+POST               /api/roles        Buat role. Body: {name, display_name, permissions}
+                                       permissions berbentuk nested {"modul": {"aksi": true}},
+                                       mis. {"qa": {"create": true, "run": true}}. Aksi: roles.create
+PUT                /api/roles/:id    Update display_name & permissions. Aksi: roles.update
+DELETE             /api/roles/:id    Hapus role (ditolak 409 kalau masih dipakai user). Aksi: roles.delete
 ```
+Daftar lengkap modul & aksi yang valid: lihat `MODULE_CATALOG` di `frontend/src/pages/Users.jsx`
+(sumber kebenaran untuk UI matrix, dibaca juga sebagai referensi oleh backend per endpoint).
 
 ### Settings (Super Admin only)
 ```
@@ -623,7 +667,8 @@ POST /api/settings/mail/test   Kirim satu email tes ke alamat di body {to}, bala
 - JWT token dengan expiry (konfigurasi via `JWT_SECRET` env var)
 - Token tidak valid / kedaluwarsa mengembalikan **HTTP 401** (bukan 403)
 - Axios interceptor di frontend: 401 di luar halaman login → redirect ke `/login`; 401 di halaman login → tampilkan pesan error (tidak redirect)
-- Setiap endpoint divalidasi role sebelum diproses
+- Setiap endpoint yang butuh otorisasi divalidasi lewat matrix **Modul × Aksi** (`PermissionHelper.can(principal, module, action)`, lihat 3.10) sebelum diproses — bukan lagi whitelist nama role hardcode. `super_admin` selalu bypass (hardcode, bukan dari matrix) sebagai jaring pengaman supaya tidak ada skenario Super Admin terkunci sendiri dari sistem
+- Modul/halaman yang sepenuhnya privat (Users & Roles, Bugs Incident, C-Level Dashboard, Settings, Import Jira) digerbang juga di level **route** frontend (redirect kalau tidak punya aksi yang sesuai), bukan cuma menyembunyikan link di sidebar — modul lain (Backlog, Sprints, Products, QA, dll.) tetap open-read untuk semua user login sesuai desain awal, cuma aksi tulis (create/update/delete) yang digerbang
 - Input file di-parse server-side; format xlsx divalidasi via magic bytes ZIP
 - Email dinormalisasi ke lowercase sebelum disimpan
 - Self-update profil dibatasi hanya ke field yang aman (nama, email, avatar) — role tidak bisa diubah sendiri
@@ -740,3 +785,10 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | 10 Sep 2026 | 2.4 | Backlog (3.2), QA (3.8), Bugs Incident (3.9): field pemilihan backlog item (Parent User Story & Parent Epic di form Backlog; Backlog Item di form Test Case & Bug) diganti dari dropdown native jadi dropdown dengan kotak pencarian — komponen baru `SearchableSelect`, filter berdasarkan kode/judul secara client-side dari data yang sudah dimuat. Mempermudah pencarian saat daftar backlog item sudah banyak. Tidak ada perubahan skema database atau endpoint baru |
 | 11 Sep 2026 | 2.5 | Tambah modul **Lapor Bug Publik** (3.15) — form `/report-bug` tanpa login untuk karyawan kantor yang tidak punya akun Product Tracker, jadi bagian dari deployment LAN yang sama (bukan sistem/domain terpisah). Tiket masuk langsung ke tabel `bugs` yang sama dengan Bugs Incident (3.9): produk dipilih dari dropdown, auto-assign ke Product Owner produk tsb, identitas pelapor (nama+email) disimpan sebagai teks bebas (`reported_by` tetap `NULL`), lampiran screenshot opsional. Endpoint baru tanpa autentikasi: `GET /api/public/products`, `POST /api/public/bugs`, `POST /api/public/bugs/:id/attachments` (lihat Bagian 6 & 7 untuk detail akses/keamanan). `migration_v18.sql`: kolom `bugs.reporter_name`, `bugs.reporter_email` |
 | 11 Sep 2026 | 2.5 | Bugs Incident (3.9): tabel Bugs sekarang default sort **Tanggal Incident terbaru di atas** (sebelumnya urutan asli dari backend, per produk lalu kode) — supaya tiket yang baru dibuat/dilaporkan (termasuk dari Lapor Bug Publik) langsung terlihat tanpa perlu klik sort dulu. Klik header kolom lain tetap berfungsi seperti biasa. Tidak ada perubahan skema database atau endpoint baru, murni default state client-side |
+| 25 Sep 2026 | 2.6 | Backlog (3.2), Bugs Incident (3.9): filter **Assignee** dan field **Assignee**/**Assigned To** di form Tambah/Edit diganti dari checklist polos (tanpa pencarian) jadi dropdown checklist dengan kotak pencarian — ketik nama untuk menyaring, tetap multi-select. Komponen baru `SearchableMultiSelect` (drop-in pengganti `MultiSelect` khusus untuk daftar assignee). Tidak ada perubahan skema database atau endpoint baru, murni komponen client-side |
+| 25 Sep 2026 | 2.7 | Backlog (3.2): kolom **Sprint** di tabel Backlog jadi dropdown — pindahkan item ke sprint lain (atau lepas ke "Backlog (no sprint)") langsung dari tabel, tanpa buka form edit, pola sama seperti quick-update Status. Item tipe `independent` tidak bisa diedit lewat kolom ini. Endpoint baru `PATCH /api/backlog/:id/sprint`, permission sama dengan quick-status. Perubahan tercatat di log aktivitas, tidak mengirim notifikasi email. Tidak ada perubahan skema database |
+| 25 Sep 2026 | 2.8 | Bugs Incident (3.9): tambah **Import CSV** — upload file CSV untuk bikin bug secara massal, format kolom persis sama dengan hasil **Export CSV** di tab yang sama (round-trip: export → edit di Excel → import balik — pakai "Save As → CSV UTF-8" saat edit di Excel, bukan "CSV" polos, biar karakter non-standar tidak rusak). Produk di-resolve per baris (satu file boleh lintas produk); kode kosong → auto-generate, kode yang sudah ada di produk yang sama → di-skip (create-only, bukan upsert). Assignee/Reported By dicocokkan ke akun user (nama/email) — Reported By yang tidak match akun manapun tetap tersimpan sebagai teks bebas alih-alih hilang. Tanggal Incident/Closed dari CSV dipakai kalau terisi & valid (penting untuk migrasi data bug historis). Parser CSV men-strip BOM UTF-8 di awal file supaya kolom pertama (`Kode`) dari hasil Export CSV kebaca benar — ikut membetulkan potensi masalah yang sama di `/api/import/jira`. Endpoint baru `POST /api/import/bugs`, akses ikut permission `access_bugs` (beda dari gate PO/Manager/Admin di Import Jira). Tidak ada notifikasi/email dikirim untuk bug hasil import, tidak ada perubahan skema database |
+| 28 Sep 2026 | 2.9 | Bugs Incident (3.9): **QA manual Import CSV** (2.8) selesai dilakukan di stack Docker lokal, lintas produk lama maupun produk baru — tidak ditemukan bug, semua sesuai spesifikasi di atas. Cakupan yang diverifikasi: auto-generate kode kosong mengambil nomor tertinggi yang berlaku **saat itu juga** (termasuk kode eksplisit dari baris sebelumnya di file yang sama, bukan cuma yang sudah ada di database sebelum import dimulai); dedup kode exact-match ter-**scope per produk** (kode yang sama di produk berbeda tidak dianggap duplikat) dan berlaku juga untuk duplikat di dalam satu file yang sama; baris dengan Judul kosong di-skip diam-diam, baris dengan Produk kosong/tidak ditemukan masuk daftar error; Severity/Prioritas/Stage tidak valid fallback ke default; Assigned To/Reported By ter-resolve lewat nama maupun email, dan kalau tidak match user manapun tetap NULL/tersimpan sebagai teks bebas tanpa error; Backlog Item dengan kode tidak ditemukan tetap NULL tanpa error; Tanggal Incident kosong atau format tidak valid fallback ke waktu proses import; header case-insensitive, menerima alias Inggris, urutan kolom bebas, dan tetap aman kalau ada kolom opsional yang hilang total dari header (bukan cuma nilainya kosong); error dari pelanggaran panjang kolom (exception generik, bukan validasi terkontrol) maupun dari baris CSV yang rusak strukturnya (koma tanpa quote) tertangkap per-baris tanpa menghentikan baris lain di file yang sama; karakter Unicode/simbol khusus tersimpan utuh lewat file BOM UTF-8; ekstensi selain `.csv` ditolak. Tidak ada perubahan kode atau skema database |
+| 14 Okt 2026 | 3.0 | **Users & Roles (3.10): ganti total sistem Roles & Permissions.** Bug yang jadi pemicu: Developer diberi izin "Kelola QA" lewat Roles & Permissions tapi tetap tidak bisa Add Test Case — investigasi membuktikan dari 17 permission key yang ada di UI lama, cuma 3 yang benar-benar dibaca kode (`manage_users`, `access_bugs`, `access_c_level`); semua modul lain (Backlog, Sprints, Products, QA, Features/Epics, Roadmap, Roles, Standup, Import, Departments, Settings) digerbang daftar role hardcode di kode — centang izin di UI lama tidak berefek apa pun. Diganti dengan matrix **Modul × Aksi** per role: `roles.permissions` (JSONB) sekarang nested `{"modul": {"aksi": true}}` (dulu flat `{"key": true}`), role dibuat bebas lewat UI baru (bukan 5 role tetap). Semua hardcode role-name di 22 controller backend dan 11 halaman frontend diganti ke `PermissionHelper.can(principal, module, action)` / `useAuth().can(module, action)` — tidak ada lagi floor role hardcode yang tersisa. Celah API lama yang tertutup tanpa pengecekan sama sekali (Epic/Feature/Product create-update-delete, Sprint create/update, semua aksi QA, Import Jira, User create/update/reset-password/deactivate) sekarang ditegakkan, meniru floor tombol UI yang sudah dipakai hari ini (tidak mengurangi akses siapa pun). Tambah **route-level blocking** nyata untuk 5 halaman full-private (Users, Bugs, C-Level, Settings, Import Jira) — sebelumnya cuma nav link disembunyikan, URL langsung tetap bisa diakses. Role SME diberi akses `c_level` (perbaikan bug lama: datanya sejak `migration_v10.sql` terlihat seperti SME seharusnya bisa akses Leader Notes/Task tapi key itu tidak pernah dibaca kode mana pun). 7 role default (termasuk SME/Commissioner yang sebelumnya tidak terdokumentasi di PRD) dimigrasikan otomatis supaya akses efektifnya persis sama seperti sebelum migrasi. `migration_v21.sql`: overwrite bentuk `roles.permissions` untuk 7 role; fix bug serialisasi JSON nested di `RoleController` (hand-rolled serializer lama cuma menangani value `String`/`Boolean`, akan merusak bentuk nested — diganti Jackson `ObjectMapper`) |
+| 14 Okt 2026 | 3.1 | QA Module (3.8): tambah **Export CSV** & **Import CSV** di tab Test Cases, pola sama seperti Bugs Incident (2.8) — round-trip export → edit → import balik, format kolom Kode/Judul/Deskripsi/Langkah/Expected Result/Status/Prioritas/Backlog Item/Produk (tanpa Run Count/Pass/Fail, karena itu agregat dari `qa_test_runs`, bukan field test case). Beda dari import bugs: kolom **Backlog Item wajib ditemukan** — baris tanpa match masuk daftar error, bukan dibuat dengan `backlog_item_id` kosong (kolom ini `NOT NULL` di skema `qa_test_cases`, beda dari bugs yang nullable). Kode kosong → auto-generate `TC-###` (algoritma sama dengan create manual via `QaController`, per produk); kode yang sudah ada di produk yang sama → di-skip (create-only). Status/Prioritas tidak valid fallback ke `draft`/`medium`. Endpoint baru `POST /api/import/qa-test-cases`, akses permission `qa.create` (sama seperti tombol "Buat Test Case", bukan permission module terpisah). Diverifikasi manual di stack Docker lokal: export test case existing → import balik file yang sama persis menghasilkan 1 baris di-skip (duplikat kode), sesuai ekspektasi create-only. Tidak ada perubahan skema database |
+| 14 Okt 2026 | 3.2 | **Fix Backlog (3.2): `StackOverflowError` saat update item dengan `parent_id` melingkar.** Bug yang ditemukan: `recalcAncestorSp()` (cascade Story Points Task → Story → Epic) rekursi mengikuti rantai `parent_id` tanpa deteksi siklus — kalau sebuah item punya `parent_id` yang balik mengarah ke dirinya sendiri (langsung atau lewat beberapa item), update item mana pun di rantai itu bikin backend rekursi tak berhenti sampai crash (`NestedServletException` / `StackOverflowError`). Direproduksi: edit item bertipe Epic → ubah Tipe ke Story → pilih item itu sendiri di dropdown **Parent Epic** (saat itu masih tersimpan sebagai Epic di database sehingga ikut muncul di daftar pilihannya sendiri) → simpan. Diperbaiki di dua lapis: (1) backend — `recalcAncestorSp` sekarang pakai *visited set* jadi tidak crash lagi walau ada data lama yang sudah melingkar, dan `POST`/`PUT /api/backlog` menolak (`400`, "Parent item membentuk siklus") `parent_id` yang akan membentuk siklus baru, termasuk ke diri sendiri; (2) frontend — dropdown **Parent User Story**/**Parent Epic** di form Backlog sekarang mengecualikan item yang sedang diedit dari daftar pilihannya sendiri. Tidak ada perubahan skema database — perbaikan data lama yang sudah terlanjur melingkar dilakukan manual per kasus lewat query (lihat `deployment/diagnosa-backlog-cycle.sh`) |

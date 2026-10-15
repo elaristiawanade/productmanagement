@@ -7,6 +7,7 @@ import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import LinkInsertButton from '../components/LinkInsertButton';
 import SearchableSelect from '../components/SearchableSelect';
+import SearchableMultiSelect from '../components/SearchableMultiSelect';
 import AssigneeStack from '../components/AssigneeStack';
 import { renderWithLinks } from '../utils/linkify';
 import { useAuth } from '../context/AuthContext';
@@ -145,7 +146,7 @@ function renderComment(text) {
 }
 
 function ActivitySection({ itemId, users = [] }) {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const [activities,   setActivities]  = useState([]);
   const [comment,      setComment]     = useState('');
   const [sending,      setSending]     = useState(false);
@@ -287,7 +288,7 @@ function ActivitySection({ itemId, users = [] }) {
                 <span className="text-xs text-slate-400">
                   {act.created_at ? formatDistanceToNow(parseISO(act.created_at), { addSuffix: true, locale: localeId }) : ''}
                 </span>
-                {act.type === 'comment' && (user?.id === act.user_id || user?.role === 'super_admin') && (
+                {act.type === 'comment' && (user?.id === act.user_id || can('backlog', 'delete')) && (
                   <button onClick={() => deleteActivity(act.id)}
                     className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-red-500 ml-auto">
                     <X className="w-3 h-3" />
@@ -473,14 +474,14 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
   useEffect(() => {
     if ((form.type === 'task' || form.type === 'bug') && form.product_id) {
       client.get('/backlog', { params: { product_id: form.product_id, type: 'story', limit: 200 } })
-        .then(r => setStories(r.data.items || []))
+        .then(r => setStories((r.data.items || []).filter(s => !item || s.id !== item.id)))
         .catch(() => setStories([]));
     } else {
       setStories([]);
     }
     if (form.type === 'story' && form.product_id) {
       client.get('/backlog', { params: { product_id: form.product_id, type: 'epic', limit: 200 } })
-        .then(r => setEpicsBacklog(r.data.items || []))
+        .then(r => setEpicsBacklog((r.data.items || []).filter(e => !item || e.id !== item.id)))
         .catch(() => setEpicsBacklog([]));
     } else {
       setEpicsBacklog([]);
@@ -729,9 +730,10 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
         )}
       </F>
       <F label="Assignee">
-        <MultiSelect label="assignee"
+        <SearchableMultiSelect label="assignee"
           options={users.map(u => ({ v: u.id, l: u.name }))}
           selected={form.assignee_ids}
+          searchPlaceholder="Cari nama assignee..."
           onChange={vals => setForm(f => ({ ...f, assignee_ids: vals }))} />
       </F>
       <F label="Deadline">
@@ -922,7 +924,7 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function Backlog() {
-  const { hasRole } = useAuth();
+  const { can } = useAuth();
   const [searchParams] = useSearchParams();
   const [items, setItems]       = useState([]);
   const [total, setTotal]       = useState(0);
@@ -993,6 +995,11 @@ export default function Backlog() {
     load();
   };
 
+  const quickSprint = async (id, sprintId) => {
+    await client.patch(`/backlog/${id}/sprint`, { sprint_id: sprintId || null });
+    load();
+  };
+
   const TYPE_COLORS = {
     story:       'text-blue-600 bg-blue-50',
     bug:         'text-red-600 bg-red-50',
@@ -1024,9 +1031,10 @@ export default function Backlog() {
             onChange={vals => { setFilters(f => ({ ...f, [key]: vals })); setPage(1); }} />
         ))}
         {/* Assignee filter */}
-        <MultiSelect label="Assignee" minWidth={140}
+        <SearchableMultiSelect label="Assignee" minWidth={160}
           options={users.map(u => ({ v: u.id, l: u.name }))}
           selected={filters.assignee_id}
+          searchPlaceholder="Cari nama assignee..."
           onChange={vals => { setFilters(f => ({ ...f, assignee_id: vals })); setPage(1); }} />
         {/* Deadline range */}
         <div className="flex items-center gap-1.5">
@@ -1046,14 +1054,14 @@ export default function Backlog() {
           )}
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {hasRole('super_admin', 'manager', 'po') && (
+          {can('import', 'run') && (
             <Link to="/import/jira"
               className="btn-secondary flex items-center gap-1.5 text-sm">
               <FileDown className="w-4 h-4" />
               Import Jira
             </Link>
           )}
-          {hasRole('super_admin', 'manager', 'po', 'developer') && (
+          {can('backlog', 'create') && (
             <button className="btn-primary" onClick={() => setModal({ open: true, item: null })}>
               <Plus className="w-4 h-4" /> Tambah Item
             </button>
@@ -1182,7 +1190,7 @@ export default function Backlog() {
                         className="text-xs border-0 bg-transparent focus:ring-0 cursor-pointer"
                         value={item.status}
                         onChange={e => quickStatus(item.id, e.target.value)}
-                        disabled={!hasRole('super_admin','manager','po','developer','qa')}
+                        disabled={!(can('backlog', 'update') || can('backlog', 'update_assigned'))}
                       >
                         {STATUSES.map(s => <option key={s} value={s}>{s.replace('_',' ')}</option>)}
                       </select>
@@ -1196,7 +1204,21 @@ export default function Backlog() {
                       <span className="text-xs font-medium" style={{ color: item.product_color }}>{item.product_code}</span>
                     </td>
                     <td className="px-3 py-3 text-xs text-slate-500">
-                      {item.type === 'independent' ? <span className="text-orange-500">⚡ independent</span> : (item.sprint_name || '—')}
+                      {item.type === 'independent' ? (
+                        <span className="text-orange-500">⚡ independent</span>
+                      ) : (
+                        <select
+                          className="text-xs border-0 bg-transparent focus:ring-0 cursor-pointer"
+                          value={item.sprint_id || ''}
+                          onChange={e => quickSprint(item.id, e.target.value)}
+                          disabled={!(can('backlog', 'update') || can('backlog', 'update_assigned'))}
+                        >
+                          <option value="">Backlog (no sprint)</option>
+                          {sprints.filter(s => s.product_id === item.product_id).map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                      )}
                     </td>
                     <td className="px-3 py-3">
                       {item.assignees?.length > 0
@@ -1212,12 +1234,12 @@ export default function Backlog() {
                     </td>
                     <td className="px-3 py-3 text-center">
                       <div className="flex items-center gap-1 justify-center">
-                        {hasRole('super_admin','manager','po','developer') && (
+                        {(can('backlog', 'update') || can('backlog', 'update_assigned')) && (
                           <button className="btn-ghost btn-sm p-1 rounded" onClick={() => setModal({ open: true, item })}>
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
                         )}
-                        {hasRole('super_admin','manager','po') && (
+                        {can('backlog', 'delete') && (
                           <button className="btn-ghost btn-sm p-1 rounded text-red-500 hover:bg-red-50" onClick={() => deleteItem(item.id)}>
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>

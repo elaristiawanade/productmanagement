@@ -1,5 +1,6 @@
 package com.producttracker.controller;
 
+import com.producttracker.config.PermissionHelper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -52,7 +53,10 @@ public class FeatureController {
     }
 
     @PostMapping
-    public ResponseEntity<?> create(@RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> create(@AuthenticationPrincipal Object principal, @RequestBody Map<String, Object> body) {
+        if (!PermissionHelper.can(principal, "features", "create")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk menambah feature"));
+        }
         if (body.get("product_id") == null || body.get("code") == null || body.get("name") == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "product_id, code, name wajib"));
         }
@@ -83,7 +87,11 @@ public class FeatureController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> update(@PathVariable Long id, @AuthenticationPrincipal Object principal,
+                                     @RequestBody Map<String, Object> body) {
+        if (!PermissionHelper.can(principal, "features", "update")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk mengubah feature"));
+        }
         boolean isRoadmapItem = Boolean.TRUE.equals(body.get("is_roadmap_item"));
         int updated = jdbc.update(
             "UPDATE features SET name=?, epic_id=?, owner_id=?, status=?, priority=?, target_release=?, is_roadmap_item=? WHERE id=?",
@@ -123,7 +131,10 @@ public class FeatureController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> delete(@PathVariable Long id) {
+    public ResponseEntity<?> delete(@PathVariable Long id, @AuthenticationPrincipal Object principal) {
+        if (!PermissionHelper.can(principal, "features", "delete")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk menghapus feature"));
+        }
         int deleted = jdbc.update("DELETE FROM features WHERE id=?", id);
         if (deleted == 0) return ResponseEntity.status(404).body(Map.of("error", "Feature tidak ditemukan"));
         return ResponseEntity.ok(Map.of("message", "Feature dihapus"));

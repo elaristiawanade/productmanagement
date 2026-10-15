@@ -1,5 +1,6 @@
 package com.producttracker.controller;
 
+import com.producttracker.config.PermissionHelper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -27,8 +28,8 @@ public class DepartmentController {
     @PostMapping
     public ResponseEntity<?> create(@AuthenticationPrincipal Object principal,
                                      @RequestBody Map<String, Object> body) {
-        if (!isSuperAdmin(principal)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Hanya super_admin yang bisa menambah departemen"));
+        if (!PermissionHelper.can(principal, "departments", "create")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk menambah departemen"));
         }
         String code = str(body.get("code"));
         String name = str(body.get("name"));
@@ -58,8 +59,8 @@ public class DepartmentController {
     public ResponseEntity<?> update(@PathVariable Long id,
                                      @AuthenticationPrincipal Object principal,
                                      @RequestBody Map<String, Object> body) {
-        if (!isSuperAdmin(principal)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Hanya super_admin yang bisa mengubah departemen"));
+        if (!PermissionHelper.can(principal, "departments", "update")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk mengubah departemen"));
         }
         List<Map<String, Object>> existing = jdbc.queryForList("SELECT * FROM departments WHERE id=?", id);
         if (existing.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "Departemen tidak ditemukan"));
@@ -82,8 +83,8 @@ public class DepartmentController {
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id,
                                      @AuthenticationPrincipal Object principal) {
-        if (!isSuperAdmin(principal)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Hanya super_admin yang bisa menghapus departemen"));
+        if (!PermissionHelper.can(principal, "departments", "delete")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk menghapus departemen"));
         }
         List<Map<String, Object>> rows = jdbc.queryForList("SELECT code FROM departments WHERE id=?", id);
         if (rows.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "Departemen tidak ditemukan"));
@@ -102,13 +103,6 @@ public class DepartmentController {
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────
-
-    @SuppressWarnings("unchecked")
-    private boolean isSuperAdmin(Object principal) {
-        if (!(principal instanceof Map)) return false;
-        Object rn = ((Map<String, Object>) principal).get("role_name");
-        return "super_admin".equals(rn);
-    }
 
     private String str(Object v) { return v == null ? "" : v.toString(); }
 

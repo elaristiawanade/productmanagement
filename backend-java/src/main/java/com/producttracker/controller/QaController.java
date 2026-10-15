@@ -1,5 +1,6 @@
 package com.producttracker.controller;
 
+import com.producttracker.config.PermissionHelper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -56,6 +57,9 @@ public class QaController {
     @PostMapping("/test-cases")
     public ResponseEntity<?> createTestCase(@AuthenticationPrincipal Object principal,
                                              @RequestBody Map<String, Object> body) {
+        if (!PermissionHelper.can(principal, "qa", "create")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk membuat test case"));
+        }
         if (body.get("backlog_item_id") == null || body.get("title") == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "backlog_item_id dan title wajib"));
         }
@@ -97,7 +101,12 @@ public class QaController {
     }
 
     @PutMapping("/test-cases/{id}")
-    public ResponseEntity<?> updateTestCase(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> updateTestCase(@PathVariable Long id,
+                                             @AuthenticationPrincipal Object principal,
+                                             @RequestBody Map<String, Object> body) {
+        if (!PermissionHelper.can(principal, "qa", "update")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk mengubah test case"));
+        }
         int updated = jdbc.update(
             "UPDATE qa_test_cases SET title=?,description=?,steps=?,expected_result=?,status=?,priority=? WHERE id=?",
             body.get("title"), body.get("description"),
@@ -110,7 +119,10 @@ public class QaController {
     }
 
     @DeleteMapping("/test-cases/{id}")
-    public ResponseEntity<?> deleteTestCase(@PathVariable Long id) {
+    public ResponseEntity<?> deleteTestCase(@PathVariable Long id, @AuthenticationPrincipal Object principal) {
+        if (!PermissionHelper.can(principal, "qa", "delete")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk menghapus test case"));
+        }
         int deleted = jdbc.update("DELETE FROM qa_test_cases WHERE id=?", id);
         if (deleted == 0) return ResponseEntity.status(404).body(Map.of("error", "Test case tidak ditemukan"));
         return ResponseEntity.ok(Map.of("message", "Test case dihapus"));
@@ -149,6 +161,9 @@ public class QaController {
     @PostMapping("/test-runs")
     public ResponseEntity<?> createTestRun(@AuthenticationPrincipal Object principal,
                                             @RequestBody Map<String, Object> body) {
+        if (!PermissionHelper.can(principal, "qa", "run")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk menjalankan test"));
+        }
         if (body.get("test_case_id") == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "test_case_id wajib"));
         }
@@ -176,6 +191,9 @@ public class QaController {
     public ResponseEntity<?> updateTestRun(@PathVariable Long id,
                                             @AuthenticationPrincipal Object principal,
                                             @RequestBody Map<String, Object> body) {
+        if (!PermissionHelper.can(principal, "qa", "run")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk menjalankan test"));
+        }
         Map<String, Object> user = toMap(principal);
         String result = (String) body.get("result");
         int updated = jdbc.update(

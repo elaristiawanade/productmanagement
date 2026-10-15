@@ -5,15 +5,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.Set;
 
 /**
  * Shared access rules for the C-Level Dashboard (Leader Notes / Leader Task / My Task).
  *
- * By default only Super Admin and Commissioner may view or write anything here — everyone
- * else is locked out entirely unless their role carries the `access_c_level` permission
- * (grantable per-role in Users & Roles → Roles & Permissions), which gives full parity with
- * Commissioner: cross-department view and write, no partial/department-scoped access tier.
+ * Access is driven entirely by the `c_level.access` permission in the module x action
+ * matrix (Users & Roles → Roles & Permissions) — super_admin always bypasses via
+ * PermissionHelper.can(). Full parity: cross-department view and write, no
+ * partial/department-scoped access tier.
  *
  * Department identities themselves (code, display name, code prefix, color) live in the
  * `departments` table — see DepartmentController for CRUD — not hardcoded here.
@@ -23,8 +22,6 @@ public class DepartmentHelper {
 
     @Autowired
     private JdbcTemplate jdbc;
-
-    private static final Set<String> WRITE_ROLES = Set.of("super_admin", "commissioner");
 
     public boolean isValidDepartment(String code) {
         if (code == null || code.isBlank()) return false;
@@ -43,9 +40,7 @@ public class DepartmentHelper {
 
     /** True if this principal may view/create/edit Leader Notes & Leader Task, for any department. */
     public boolean canWrite(Object principal) {
-        String rn = PermissionHelper.getRoleName(principal);
-        if (WRITE_ROLES.contains(rn)) return true;
-        return PermissionHelper.hasPermission(principal, "access_c_level");
+        return PermissionHelper.can(principal, "c_level", "access");
     }
 
     /**

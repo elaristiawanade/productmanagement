@@ -1,5 +1,7 @@
 package com.producttracker.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.producttracker.config.PermissionHelper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -16,6 +18,8 @@ public class RoleController {
     @Autowired
     private JdbcTemplate jdbc;
 
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     @GetMapping
     public ResponseEntity<?> list() {
         List<Map<String, Object>> rows = jdbc.queryForList(
@@ -27,8 +31,8 @@ public class RoleController {
     @PostMapping
     public ResponseEntity<?> create(@AuthenticationPrincipal Object principal,
                                      @RequestBody Map<String, Object> body) {
-        if (!isSuperAdmin(principal)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Hanya super_admin yang bisa menambah role"));
+        if (!PermissionHelper.can(principal, "roles", "create")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk menambah role"));
         }
         if (body.get("name") == null || body.get("display_name") == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "name dan display_name wajib"));
@@ -56,8 +60,8 @@ public class RoleController {
     public ResponseEntity<?> update(@PathVariable Long id,
                                      @AuthenticationPrincipal Object principal,
                                      @RequestBody Map<String, Object> body) {
-        if (!isSuperAdmin(principal)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Hanya super_admin yang bisa mengubah role"));
+        if (!PermissionHelper.can(principal, "roles", "update")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk mengubah role"));
         }
         String permissionsJson = body.get("permissions") != null
             ? toJsonString(body.get("permissions")) : "{}";
@@ -73,8 +77,8 @@ public class RoleController {
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id,
                                      @AuthenticationPrincipal Object principal) {
-        if (!isSuperAdmin(principal)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Hanya super_admin yang bisa menghapus role"));
+        if (!PermissionHelper.can(principal, "roles", "delete")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk menghapus role"));
         }
         // Prevent deletion if users are assigned to this role
         Long count = jdbc.queryForObject(
@@ -92,29 +96,12 @@ public class RoleController {
 
     // ─── Helpers ─────────────────────────────────────────────────────────
 
-    @SuppressWarnings("unchecked")
-    private boolean isSuperAdmin(Object principal) {
-        if (!(principal instanceof Map)) return false;
-        Object rn = ((Map<String, Object>) principal).get("role_name");
-        return "super_admin".equals(rn);
-    }
-
-    @SuppressWarnings("unchecked")
     private String toJsonString(Object obj) {
         if (obj instanceof String) return (String) obj;
-        if (obj instanceof Map) {
-            Map<?, ?> map = (Map<?, ?>) obj;
-            StringBuilder sb = new StringBuilder("{");
-            boolean first = true;
-            for (Map.Entry<?, ?> e : map.entrySet()) {
-                if (!first) sb.append(",");
-                sb.append("\"").append(e.getKey()).append("\":");
-                if (e.getValue() instanceof Boolean) sb.append(e.getValue());
-                else sb.append("\"").append(e.getValue()).append("\"");
-                first = false;
-            }
-            return sb.append("}").toString();
+        try {
+            return MAPPER.writeValueAsString(obj);
+        } catch (Exception e) {
+            return "{}";
         }
-        return "{}";
     }
 }

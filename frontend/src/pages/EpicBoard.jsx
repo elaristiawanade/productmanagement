@@ -425,7 +425,7 @@ function AddEpicModal({ products, onClose, onSaved }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function EpicBoard() {
-  const { hasRole } = useAuth();
+  const { can } = useAuth();
   const [products,        setProducts]        = useState([]);
   const [loadingProducts, setLoadingProducts]  = useState(true);
   const [filterStatus,    setFilterStatus]     = useState('');
@@ -486,7 +486,7 @@ export default function EpicBoard() {
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">Hierarki Produk → Epic → Story → Task &amp; Bug</p>
         </div>
-        {hasRole('super_admin', 'manager', 'po', 'developer') && (
+        {can('epics', 'create') && (
           <button onClick={() => setShowAddModal(true)} className="btn-primary flex items-center gap-1.5">
             <Plus className="w-4 h-4" /> Tambah Epic
           </button>
