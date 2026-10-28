@@ -13,6 +13,7 @@ import SearchableSelect from '../components/SearchableSelect';
 import SearchableMultiSelect from '../components/SearchableMultiSelect';
 import AssigneeStack from '../components/AssigneeStack';
 import { renderWithLinks } from '../utils/linkify';
+import { buildBacklogTreeOptions } from '../utils/backlogHierarchy';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import {
@@ -331,7 +332,12 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
   const [uploading,   setUploading]   = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
   const fileInputRef = useRef(null);
-  const filteredItems = backlogItems.filter(b => !form.product_id || b.product_id === +form.product_id);
+  // Done items are hidden from new picks but the item currently linked stays visible
+  // even if done, so editing an existing bug never silently unlinks it.
+  const filteredItems = backlogItems.filter(b =>
+    (!form.product_id || b.product_id === +form.product_id) &&
+    (b.status !== 'done' || String(b.id) === String(form.backlog_item_id))
+  );
 
   useEffect(() => {
     if (!previewImage) return;
@@ -447,7 +453,7 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
         <SearchableSelect
           value={form.backlog_item_id}
           onChange={v => setForm(f => ({ ...f, backlog_item_id: v }))}
-          options={filteredItems.map(b => ({ value: String(b.id), label: `[${b.code}] ${b.title}` }))}
+          options={buildBacklogTreeOptions(filteredItems)}
           placeholder="— Tidak terkait —"
           emptyOptionLabel="— Tidak terkait —"
           searchPlaceholder="Cari backlog item..."
@@ -768,7 +774,7 @@ export default function BugsIncident() {
         products.length ? null : client.get('/products'),
         client.get('/bugs',          { params }),
         client.get('/bugs/progress', { params }),
-        backlogItems.length ? null : client.get('/backlog', { params: { limit: 500 } }),
+        backlogItems.length ? null : client.get('/backlog', { params: { limit: 2000 } }),
         users.length ? null : client.get('/users'),
         client.get('/bugs/dashboard', { params }),
       ]);

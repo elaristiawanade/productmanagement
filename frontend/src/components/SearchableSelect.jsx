@@ -49,7 +49,14 @@ export default function SearchableSelect({
       <button type="button" disabled={disabled}
         onClick={() => setOpen(o => !o)}
         className={`select w-full flex items-center justify-between gap-2 text-left ${!selected ? 'text-slate-400' : 'text-slate-700'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}>
-        <span className="truncate">{selected ? selected.label : placeholder}</span>
+        <span className="flex items-center gap-1.5 min-w-0">
+          {selected?.badge && (
+            <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${selected.badge.className}`}>
+              {selected.badge.text}
+            </span>
+          )}
+          <span className="truncate">{selected ? selected.label : placeholder}</span>
+        </span>
         <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
@@ -79,8 +86,14 @@ export default function SearchableSelect({
             ) : (
               filtered.map(o => (
                 <button key={o.value} type="button" onClick={() => pick(o.value)}
-                  className={`w-full text-left px-3 py-1.5 text-sm truncate transition-colors ${String(o.value) === String(value) ? 'text-indigo-700 bg-indigo-50/50 font-medium' : 'text-slate-600 hover:bg-slate-50'}`}>
-                  {o.label}
+                  style={o.depth ? { paddingLeft: `${0.75 + o.depth * 0.9}rem` } : undefined}
+                  className={`w-full text-left px-3 py-1.5 text-sm transition-colors flex items-center gap-1.5 min-w-0 ${String(o.value) === String(value) ? 'text-indigo-700 bg-indigo-50/50 font-medium' : 'text-slate-600 hover:bg-slate-50'}`}>
+                  {o.badge && (
+                    <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${o.badge.className}`}>
+                      {o.badge.text}
+                    </span>
+                  )}
+                  <span className="truncate">{o.label}</span>
                 </button>
               ))
             )}

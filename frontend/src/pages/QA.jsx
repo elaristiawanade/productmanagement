@@ -9,6 +9,7 @@ import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import SearchableSelect from '../components/SearchableSelect';
+import { buildBacklogTreeOptions } from '../utils/backlogHierarchy';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { format, parseISO } from 'date-fns';
@@ -29,7 +30,12 @@ function TestCaseForm({ tc, products, backlogItems, onSave, onClose }) {
     status: tc?.status || 'draft', priority: tc?.priority || 'medium',
   });
   const [saving, setSaving] = useState(false);
-  const filteredItems = backlogItems.filter(b => !form.product_id || b.product_id === +form.product_id);
+  // Done items are hidden from new picks (QA shouldn't pile onto closed work) but the
+  // item currently linked stays visible even if done, so editing never silently unlinks it.
+  const filteredItems = backlogItems.filter(b =>
+    (!form.product_id || b.product_id === +form.product_id) &&
+    (b.status !== 'done' || String(b.id) === String(form.backlog_item_id))
+  );
 
   const save = async (e) => {
     e.preventDefault();
@@ -56,7 +62,7 @@ function TestCaseForm({ tc, products, backlogItems, onSave, onClose }) {
         <SearchableSelect
           value={form.backlog_item_id}
           onChange={v => setForm(f => ({ ...f, backlog_item_id: v }))}
-          options={filteredItems.map(b => ({ value: String(b.id), label: `[${b.code}] ${b.title}` }))}
+          options={buildBacklogTreeOptions(filteredItems)}
           placeholder="Pilih item"
           searchPlaceholder="Cari backlog item..."
         />
@@ -177,7 +183,7 @@ export default function QA() {
         products.length ? null : client.get('/products'),
         client.get('/qa/test-cases', { params }),
         client.get('/qa/test-runs',  { params }),
-        backlogItems.length ? null : client.get('/backlog', { params: { limit: 500 } }),
+        backlogItems.length ? null : client.get('/backlog', { params: { limit: 2000 } }),
         sprints.length ? null : client.get('/sprints'),
         client.get('/qa/dashboard',  { params }),
       ]);
