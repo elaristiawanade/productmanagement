@@ -12,8 +12,8 @@ Sistem tracking internal product development berbasis web dengan React + Node.js
 | **Products** | Manajemen produk, epic, dan feature per produk |
 | **Users & Roles** | Role dibuat bebas lewat UI (bukan daftar tetap) — tiap role diberi hak akses lewat matrix **Modul × Aksi** (Buat/Ubah/Hapus/dll per modul, cuma aksi yang relevan yang tampil). 7 role default ter-seed: Super Admin, Manager, PO, Developer, QA, SME, Commissioner |
 | **QA Module** | Test case management, test execution, QA dashboard, **Export/Import CSV** test case (format sama seperti Export CSV — duplikat kode di-skip, kode kosong auto-generate, Backlog Item wajib) |
-| **Bugs Incident** | Bug tracking + histori progress perbaikan (open→in_progress→ready_to_test→reopen→done), komentar/@mention, tanggal incident/closed/update terakhir, kolom Incident Author (pelapor bug), filter sembunyikan closed/done, default sort tanggal incident terbaru di atas, **Import CSV** massal (format sama seperti Export CSV — duplikat kode di-skip, kode kosong auto-generate). Default Super Admin & QA Engineer; role lain (misal Developer) bisa diberi akses lewat permission `access_bugs` |
-| **Lapor Bug Publik** | Halaman `/report-bug` tanpa login — siapa pun di jaringan kantor (bukan cuma user terdaftar) bisa lapor bug lewat form: pilih aplikasi, judul, deskripsi, langkah reproduksi, severity, nama+email pelapor, screenshot opsional. Tiket masuk langsung ke Bugs Incident yang sama, auto-assign ke Product Owner produk terkait |
+| **Bugs Incident** | Bug tracking + histori progress perbaikan (open→in_progress→ready_to_test→reopen→done, plus stage **improvement** untuk masukan/ide non-bug; stage bisa diganti langsung lewat dropdown di tabel), komentar/@mention, tanggal incident/closed/update terakhir, kolom Incident Author (pelapor bug), filter sembunyikan closed/done, default sort tanggal incident terbaru di atas, **Import CSV** massal (format sama seperti Export CSV — duplikat kode di-skip, kode kosong auto-generate). Default Super Admin & QA Engineer; role lain (misal Developer) bisa diberi akses lewat permission `access_bugs` |
+| **Lapor Bug Publik** | Halaman `/report-bug` tanpa login — siapa pun di jaringan kantor (bukan cuma user terdaftar) bisa lapor bug atau masukan ide lewat form: pilih aplikasi, jenis laporan (Bug / Improvement), judul, deskripsi, langkah reproduksi, severity, nama+email pelapor, screenshot opsional. Tiket masuk langsung ke Bugs Incident yang sama, auto-assign ke Product Owner produk terkait |
 | **Notifikasi Email** | Email personal ke assignee/yang di-mention saat assignment, status/stage berubah, atau mention (Backlog, Bugs Incident, Leader Task). Global, dikonfigurasi lewat halaman **Notification Settings** (Super Admin only) — toggle, config SMTP, kirim email tes, aktif tanpa restart |
 
 ## Roles & Permissions
@@ -138,8 +138,8 @@ CRUD /api/qa/test-cases
 CRUD /api/qa/test-runs
 GET  /api/qa/dashboard
 
-CRUD /api/bugs                ← Default: Super Admin & QA Engineer only (403 lainnya, kecuali role diberi aksi bugs.access)
-CRUD /api/bugs/progress       ← Histori progress perbaikan bug
+CRUD /api/bugs                ← Default: Super Admin & QA Engineer only (403 lainnya, kecuali role diberi aksi bugs.access). POST menerima stage awal: open | improvement
+CRUD /api/bugs/progress       ← Histori progress perbaikan bug; POST juga dipakai dropdown Stage di tabel Bugs
 GET  /api/bugs/dashboard      ← summary, byProduct, byStage, recentActivity, recentComments
 GET/POST   /api/bugs/:id/activities   ← Komentar bug (mirror activities Backlog)
 DELETE     /api/bugs/activities/:id
@@ -149,7 +149,7 @@ PUT  /api/settings/mail       ← Simpan config SMTP
 POST /api/settings/mail/test  ← Kirim email tes
 
 GET  /api/public/products              ← Tanpa login. List produk aktif untuk dropdown form Lapor Bug Publik
-POST /api/public/bugs                  ← Tanpa login. Buat tiket bug publik (auto-assign ke Product Owner)
+POST /api/public/bugs                  ← Tanpa login. Buat tiket bug/improvement publik (report_type: bug | improvement; auto-assign ke Product Owner)
 POST /api/public/bugs/:id/attachments  ← Tanpa login. Upload screenshot ke tiket publik (hanya tiket publik)
 ```
 

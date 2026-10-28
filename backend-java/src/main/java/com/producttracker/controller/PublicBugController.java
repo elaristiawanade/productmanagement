@@ -78,6 +78,9 @@ public class PublicBugController {
             }
         }
         String bugCode = pCode + "-" + String.format("%03d", lastNum + 1);
+        // Reporters can flag their ticket as an improvement idea instead of a bug.
+        boolean isImprovement = "improvement".equals(body.get("report_type"));
+        String initialStage = isImprovement ? "improvement" : "open";
 
         try {
             Map<String, Object> row = jdbc.queryForMap(
@@ -89,7 +92,7 @@ public class PublicBugController {
                 body.get("title"), body.get("description"), body.get("steps_to_reproduce"),
                 orDefault(body.get("severity"), "medium"),
                 "medium",
-                "open",
+                initialStage,
                 null,
                 reporterName, reporterEmail,
                 ownerId
@@ -100,8 +103,8 @@ public class PublicBugController {
             Map<String, Object> detail = bugDetail(newBugId);
             if (ownerId != null && detail != null) {
                 createNotification(ownerId, "assignment",
-                    "Bug publik baru " + row.get("code"),
-                    "Bug \"" + row.get("title") + "\" dilaporkan oleh " + reporterName + " (" + reporterEmail + ")",
+                    (isImprovement ? "Improvement publik baru " : "Bug publik baru ") + row.get("code"),
+                    (isImprovement ? "Improvement" : "Bug") + " \"" + row.get("title") + "\" dilaporkan oleh " + reporterName + " (" + reporterEmail + ")",
                     "/bugs?bug=" + newBugId);
                 String ownerEmail = str(detail.get("assigned_to_email"));
                 if (!ownerEmail.isBlank()) {

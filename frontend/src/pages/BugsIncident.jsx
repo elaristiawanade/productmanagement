@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
-import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff, AlertTriangle, XCircle } from 'lucide-react';
+import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff, AlertTriangle, XCircle, Lightbulb } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
@@ -27,12 +27,16 @@ const STAGE_ICONS = {
   ready_to_test: { icon: FlaskConical,  cls: 'text-amber-500'  },
   reopen:        { icon: RotateCcw,     cls: 'text-purple-500' },
   done:          { icon: CheckCircle2,  cls: 'text-emerald-500' },
+  improvement:   { icon: Lightbulb,     cls: 'text-sky-500'    },
 };
 
-const STAGES     = ['open', 'in_progress', 'ready_to_test', 'reopen', 'done'];
+const STAGES     = ['open', 'in_progress', 'ready_to_test', 'reopen', 'done', 'improvement'];
 const STAGE_LABELS = {
   open: 'Open', in_progress: 'In Progress', ready_to_test: 'Ready to Test', reopen: 'Re-Open', done: 'Done',
+  improvement: 'Improvement',
 };
+// Stages a brand-new ticket can start in (the rest only make sense once work has started).
+const INITIAL_STAGES = ['open', 'improvement'];
 const SEVERITIES = ['critical', 'high', 'medium', 'low'];
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
 
@@ -318,6 +322,7 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
     title: bug?.title || '', description: bug?.description || '',
     steps_to_reproduce: bug?.steps_to_reproduce || '',
     severity: bug?.severity || 'medium', priority: bug?.priority || 'medium',
+    stage: 'open', // only sent on create; existing bugs change stage via Update Progress / the table dropdown
     assignee_ids: (bug?.assignees || []).map(a => a.id),
   });
   const [saving, setSaving] = useState(false);
@@ -416,6 +421,7 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
       payload.additional_assignee_ids = payload.assignee_ids.slice(1);
       delete payload.assignee_ids;
       if (bug?.id) {
+        delete payload.stage;
         await client.put(`/bugs/${bug.id}`, payload);
         toast.success('Bug diperbarui');
       } else {
@@ -459,6 +465,14 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
         <label className="label">Langkah Reproduksi</label>
         <textarea className="input h-24 resize-none font-mono text-xs" value={form.steps_to_reproduce} onChange={e => setForm(f => ({ ...f, steps_to_reproduce: e.target.value }))} placeholder="1. Buka halaman...\n2. Klik tombol...\n3. Bug muncul..." />
       </div>
+      {!bug?.id && (
+        <div className="col-span-2">
+          <label className="label">Stage Awal</label>
+          <select className="select" value={form.stage} onChange={e => setForm(f => ({ ...f, stage: e.target.value }))}>
+            {INITIAL_STAGES.map(s => <option key={s} value={s}>{STAGE_LABELS[s]}</option>)}
+          </select>
+        </div>
+      )}
       <div>
         <label className="label">Severity</label>
         <select className="select" value={form.severity} onChange={e => setForm(f => ({ ...f, severity: e.target.value }))}>
@@ -812,6 +826,17 @@ export default function BugsIncident() {
     toast.success('Bug dihapus'); load();
   };
 
+  // Goes through POST /bugs/progress (not a new endpoint) so closed_at, the progress
+  // history, the activity log and assignee notifications all stay consistent.
+  const quickStage = async (bug, stage) => {
+    if (stage === bug.stage) return;
+    try {
+      await client.post('/bugs/progress', { bug_id: bug.id, stage, note: '' });
+      toast.success(`Stage diubah ke ${STAGE_LABELS[stage] || stage}`);
+      load();
+    } catch { /* error toast shown by the axios interceptor; the select snaps back to bug.stage */ }
+  };
+
   const csvEscape = (val) => {
     const s = val === null || val === undefined ? '' : String(val);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -861,7 +886,7 @@ export default function BugsIncident() {
     }
   };
 
-  const STAGE_COLORS = { open: '#ef4444', in_progress: '#3b82f6', ready_to_test: '#f59e0b', reopen: '#a855f7', done: '#10b981' };
+  const STAGE_COLORS = { open: '#ef4444', in_progress: '#3b82f6', ready_to_test: '#f59e0b', reopen: '#a855f7', done: '#10b981', improvement: '#0ea5e9' };
   const summary = dashboard?.summary || {};
 
   const filteredBugs = bugs.filter(b => {
@@ -1155,7 +1180,17 @@ export default function BugsIncident() {
                           </td>
                           <td className="px-3 py-3 text-center"><PriorityBadge priority={b.severity} /></td>
                           <td className="px-3 py-3 text-center"><PriorityBadge priority={b.priority} /></td>
-                          <td className="px-3 py-3 text-center"><StatusBadge status={b.stage} /></td>
+                          <td className="px-3 py-3 text-center">
+                            <select
+                              className="text-xs font-medium border-0 bg-transparent focus:ring-0 cursor-pointer"
+                              style={{ color: STAGE_COLORS[b.stage] }}
+                              value={b.stage}
+                              onChange={e => quickStage(b, e.target.value)}
+                              disabled={!canAccess}
+                            >
+                              {STAGES.map(s => <option key={s} value={s} style={{ color: '#0f172a' }}>{STAGE_LABELS[s]}</option>)}
+                            </select>
+                          </td>
                           <td className="px-3 py-3">
                             {b.assignees?.length > 0
                               ? <AssigneeStack assignees={b.assignees} />

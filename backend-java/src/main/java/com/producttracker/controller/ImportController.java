@@ -41,7 +41,7 @@ public class ImportController {
     private AssigneeSupport assigneeSupport;
 
     private static final Set<String> SEVERITY_VALUES = Set.of("critical", "high", "medium", "low");
-    private static final Set<String> STAGE_VALUES    = Set.of("open", "in_progress", "ready_to_test", "reopen", "done");
+    private static final Set<String> STAGE_VALUES    = Set.of("open", "in_progress", "ready_to_test", "reopen", "done", "improvement");
     private static final Set<String> TC_STATUS_VALUES = Set.of("draft", "active", "deprecated");
 
     @PostMapping("/jira")

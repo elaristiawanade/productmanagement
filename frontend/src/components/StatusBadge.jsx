@@ -26,6 +26,7 @@ const STATUS_MAP = {
   open:          { label: 'Open',          cls: 'bg-red-100 text-red-700' },
   ready_to_test: { label: 'Ready to Test', cls: 'bg-amber-100 text-amber-700' },
   reopen:        { label: 'Re-Open',       cls: 'bg-purple-100 text-purple-700' },
+  improvement:   { label: 'Improvement',   cls: 'bg-sky-100 text-sky-700' },
 };
 
 export default function StatusBadge({ status, size = 'sm' }) {
