@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 export default function ReportBug() {
   const [products, setProducts] = useState([]);
   const [form, setForm] = useState({
-    product_id: '', title: '', description: '', steps_to_reproduce: '',
+    product_id: '', report_type: 'bug', title: '', description: '', steps_to_reproduce: '',
     severity: 'medium', reporter_name: '', reporter_email: '',
   });
   const [pendingFiles, setPendingFiles] = useState([]);
@@ -85,7 +85,7 @@ export default function ReportBug() {
               type="button"
               className="btn-primary w-full justify-center py-2.5 mt-6"
               onClick={() => {
-                setForm({ product_id: '', title: '', description: '', steps_to_reproduce: '', severity: 'medium', reporter_name: '', reporter_email: '' });
+                setForm({ product_id: '', report_type: 'bug', title: '', description: '', steps_to_reproduce: '', severity: 'medium', reporter_name: '', reporter_email: '' });
                 setPendingFiles([]);
                 setSubmittedCode(null);
               }}
@@ -119,6 +119,15 @@ export default function ReportBug() {
                 onChange={e => setForm(f => ({ ...f, product_id: e.target.value }))} required>
                 <option value="">Pilih aplikasi</option>
                 {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="label">Jenis Laporan *</label>
+              <select className="select" value={form.report_type}
+                onChange={e => setForm(f => ({ ...f, report_type: e.target.value }))}>
+                <option value="bug">Bug / Masalah</option>
+                <option value="improvement">Improvement / Masukan Ide</option>
               </select>
             </div>
 

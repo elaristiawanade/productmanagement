@@ -89,6 +89,9 @@ public class BugController {
             return ResponseEntity.badRequest().body(Map.of("error", "product_id dan title wajib"));
         }
 
+        // A new ticket can only start as a regular bug ("open") or as an "improvement" idea.
+        String initialStage = "improvement".equals(body.get("stage")) ? "improvement" : "open";
+
         Long productId = toLong(body.get("product_id"));
         String bugCode = (String) body.get("code");
         if (bugCode == null || bugCode.isBlank()) {
@@ -122,7 +125,7 @@ public class BugController {
                 body.get("title"), body.get("description"), body.get("steps_to_reproduce"),
                 orDefault(body.get("severity"), "medium"),
                 orDefault(body.get("priority"), "medium"),
-                "open",
+                initialStage,
                 user != null ? user.get("id") : null,
                 toLong(body.get("assigned_to"))
             );
