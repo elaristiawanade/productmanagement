@@ -1002,7 +1002,7 @@ export default function BugsIncident() {
                   <h3 className="font-semibold text-slate-700 mb-4">Distribusi Stage</h3>
                   <ResponsiveContainer width="100%" height={220}>
                     <PieChart>
-                      <Pie data={stagePieData} cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={3} dataKey="value" label={({ name, percent }) => `${name} ${(percent*100).toFixed(0)}%`} labelLine={false}>
+                      <Pie data={stagePieData} cx="50%" cy="50%" innerRadius={45} outerRadius={72} paddingAngle={3} dataKey="value" label={({ name, percent }) => `${name} ${(percent*100).toFixed(0)}%`} labelLine={false}>
                         {stagePieData.map((d, i) => <Cell key={i} fill={d.color} />)}
                       </Pie>
                       <Tooltip {...ct.tooltip} />
@@ -1158,9 +1158,9 @@ export default function BugsIncident() {
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-[1320px] text-sm">
                     <thead>
-                      <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                      <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 whitespace-nowrap">
                         <th className="text-left px-4 py-3">Kode</th>
                         <th className="text-left px-4 py-3">Judul</th>
                         <th className="text-left px-3 py-3">Item</th>
@@ -1183,13 +1183,19 @@ export default function BugsIncident() {
                           // Whole row opens the bug (same as the pencil, so only with bugs.access); inner controls stop propagation
                           onClick={() => { if (canAccess && !window.getSelection?.().toString()) setModal({ open: true, type: 'bug', data: b }); }}
                           className={`table-row ${canAccess ? 'cursor-pointer' : ''}`}>
-                          <td className="px-4 py-3"><span className="font-mono text-xs text-slate-500">{b.code}</span></td>
-                          <td className="px-4 py-3 max-w-[220px]">
+                          <td className="px-4 py-3 whitespace-nowrap"><span className="font-mono text-xs text-slate-500">{b.code}</span></td>
+                          <td className="px-4 py-3 min-w-[200px] max-w-[260px]">
                             <p className="font-medium text-slate-700 truncate">{b.title}</p>
                             {b.description && <p className="text-xs text-slate-400 truncate">{b.description}</p>}
                           </td>
                           <td className="px-3 py-3 text-xs text-slate-500">
-                            {b.item_code ? <><span className="font-mono text-slate-400">[{b.item_code}]</span> {b.item_title?.slice(0,30)}</> : '—'}
+                            {/* One line: code never wraps, title truncates (full text on hover) */}
+                            {b.item_code ? (
+                              <div className="flex items-center gap-1 min-w-[170px] max-w-[240px]" title={`[${b.item_code}] ${b.item_title || ''}`}>
+                                <span className="font-mono text-slate-400 shrink-0 whitespace-nowrap">[{b.item_code}]</span>
+                                <span className="truncate">{b.item_title}</span>
+                              </div>
+                            ) : '—'}
                           </td>
                           <td className="px-3 py-3 text-center"><PriorityBadge priority={b.severity} /></td>
                           <td className="px-3 py-3 text-center"><PriorityBadge priority={b.priority} /></td>
@@ -1272,9 +1278,9 @@ export default function BugsIncident() {
                 </div>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full min-w-[960px] text-sm">
                   <thead>
-                    <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                    <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 whitespace-nowrap">
                       <th className="text-left px-4 py-3">Bug</th>
                       <th className="text-left px-3 py-3">Item</th>
                       <th className="text-center px-3 py-3">Stage</th>
@@ -1297,7 +1303,12 @@ export default function BugsIncident() {
                             </div>
                           </td>
                           <td className="px-3 py-3 text-xs text-slate-500">
-                            {p.item_code ? (<><span className="font-mono">[{p.item_code}]</span><span className="ml-1 text-slate-600 truncate max-w-[120px] inline-block align-bottom">{p.item_title?.slice(0,25)}</span></>) : '—'}
+                            {p.item_code ? (
+                              <div className="flex items-center gap-1 min-w-[170px] max-w-[240px]" title={`[${p.item_code}] ${p.item_title || ''}`}>
+                                <span className="font-mono shrink-0 whitespace-nowrap">[{p.item_code}]</span>
+                                <span className="text-slate-600 truncate">{p.item_title}</span>
+                              </div>
+                            ) : '—'}
                           </td>
                           <td className="px-3 py-3 text-center">
                             <div className="flex items-center gap-1.5 justify-center">

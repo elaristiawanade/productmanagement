@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts';
 import { useChartTheme } from '../utils/chartTheme';
@@ -315,17 +315,19 @@ export default function QA() {
                 {/* Pass/Fail by Sprint */}
                 <div className="card p-5">
                   <h3 className="font-semibold text-slate-700 mb-4">Test Results per Sprint</h3>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={dashboard?.bySprint || []} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
+                  <ResponsiveContainer width="100%" height={240}>
+                    <LineChart data={dashboard?.bySprint || []} margin={{ top: 5, right: 16, left: -20, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} />
-                      <XAxis dataKey="sprint" tick={{ ...ct.axisTick, fontSize: 10 }} stroke={ct.line} />
-                      <YAxis tick={ct.axisTick} stroke={ct.line} />
+                      {/* interval 0 + slant: show every sprint label instead of letting Recharts skip some */}
+                      <XAxis dataKey="sprint" interval={0} angle={-25} textAnchor="end" height={52}
+                        tick={{ ...ct.axisTick, fontSize: 10 }} stroke={ct.line} padding={{ left: 12, right: 12 }} />
+                      <YAxis tick={ct.axisTick} stroke={ct.line} allowDecimals={false} />
                       <Tooltip {...ct.tooltip} />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Bar dataKey="pass_count"    name="Pass"    fill="#10b981" radius={[4,4,0,0]} />
-                      <Bar dataKey="fail_count"    name="Fail"    fill="#ef4444" radius={[4,4,0,0]} />
-                      <Bar dataKey="blocked_count" name="Blocked" fill="#f59e0b" radius={[4,4,0,0]} />
-                    </BarChart>
+                      <Line type="linear" dataKey="pass_count"    name="Pass"    stroke="#1F9D55" strokeWidth={2} dot={{ r: 3.5, fill: '#1F9D55' }} activeDot={{ r: 5 }} />
+                      <Line type="linear" dataKey="fail_count"    name="Fail"    stroke="#E5484D" strokeWidth={2} dot={{ r: 3.5, fill: '#E5484D' }} activeDot={{ r: 5 }} />
+                      <Line type="linear" dataKey="blocked_count" name="Blocked" stroke="#D9891A" strokeWidth={2} dot={{ r: 3.5, fill: '#D9891A' }} activeDot={{ r: 5 }} />
+                    </LineChart>
                   </ResponsiveContainer>
                 </div>
 
@@ -334,7 +336,7 @@ export default function QA() {
                   <h3 className="font-semibold text-slate-700 mb-4">Overall Result Distribution</h3>
                   <ResponsiveContainer width="100%" height={220}>
                     <PieChart>
-                      <Pie data={passPieData} cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={3} dataKey="value" label={({ name, percent }) => `${name} ${(percent*100).toFixed(0)}%`} labelLine={false}>
+                      <Pie data={passPieData} cx="50%" cy="50%" innerRadius={45} outerRadius={72} paddingAngle={3} dataKey="value" label={({ name, percent }) => `${name} ${(percent*100).toFixed(0)}%`} labelLine={false}>
                         {passPieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
                       </Pie>
                       <Tooltip {...ct.tooltip} />
@@ -406,9 +408,9 @@ export default function QA() {
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-[1080px] text-sm">
                     <thead>
-                      <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                      <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 whitespace-nowrap">
                         <th className="text-left px-4 py-3">Kode</th>
                         <th className="text-left px-4 py-3">Judul</th>
                         <th className="text-left px-3 py-3">Item</th>
@@ -425,13 +427,18 @@ export default function QA() {
                       {pagedCases.length === 0 && <tr><td colSpan={10} className="text-center py-10 text-slate-400">Belum ada test case</td></tr>}
                       {pagedCases.map(tc => (
                         <tr key={tc.id} className="table-row">
-                          <td className="px-4 py-3"><span className="font-mono text-xs text-slate-500">{tc.code}</span></td>
-                          <td className="px-4 py-3 max-w-[220px]">
+                          <td className="px-4 py-3 whitespace-nowrap"><span className="font-mono text-xs text-slate-500">{tc.code}</span></td>
+                          <td className="px-4 py-3 min-w-[200px] max-w-[260px]">
                             <p className="font-medium text-slate-700 truncate">{tc.title}</p>
                             {tc.description && <p className="text-xs text-slate-400 truncate">{tc.description}</p>}
                           </td>
                           <td className="px-3 py-3 text-xs text-slate-500">
-                            <span className="font-mono text-slate-400">[{tc.item_code}]</span> {tc.item_title?.slice(0,30)}
+                            {tc.item_code ? (
+                              <div className="flex items-center gap-1 min-w-[170px] max-w-[240px]" title={`[${tc.item_code}] ${tc.item_title || ''}`}>
+                                <span className="font-mono text-slate-400 shrink-0 whitespace-nowrap">[{tc.item_code}]</span>
+                                <span className="truncate">{tc.item_title}</span>
+                              </div>
+                            ) : '—'}
                           </td>
                           <td className="px-3 py-3 text-center"><PriorityBadge priority={tc.priority} /></td>
                           <td className="px-3 py-3 text-center"><StatusBadge status={tc.status} /></td>
@@ -494,9 +501,9 @@ export default function QA() {
                 </div>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full min-w-[1000px] text-sm">
                   <thead>
-                    <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                    <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 whitespace-nowrap">
                       <th className="text-left px-4 py-3">Test Case</th>
                       <th className="text-left px-3 py-3">Item</th>
                       <th className="text-center px-3 py-3">Hasil</th>
@@ -521,8 +528,12 @@ export default function QA() {
                             </div>
                           </td>
                           <td className="px-3 py-3 text-xs text-slate-500">
-                            <span className="font-mono">[{run.item_code}]</span>
-                            <span className="ml-1 text-slate-600 truncate max-w-[120px] inline-block align-bottom">{run.item_title?.slice(0,25)}</span>
+                            {run.item_code ? (
+                              <div className="flex items-center gap-1 min-w-[170px] max-w-[240px]" title={`[${run.item_code}] ${run.item_title || ''}`}>
+                                <span className="font-mono shrink-0 whitespace-nowrap">[{run.item_code}]</span>
+                                <span className="text-slate-600 truncate">{run.item_title}</span>
+                              </div>
+                            ) : '—'}
                           </td>
                           <td className="px-3 py-3 text-center">
                             <div className="flex items-center gap-1.5 justify-center">
