@@ -8,6 +8,7 @@ import {
 import client from '../api/client';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
+import StatusMenu from '../components/StatusMenu';
 import PriorityBadge from '../components/PriorityBadge';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -109,9 +110,9 @@ function LeaderNoteForm({ user, departments, onSaved }) {
         {tasks.length > 0 && (
           <div className="flex flex-col gap-1.5 mt-2">
             {tasks.map((t, idx) => (
-              <div key={idx} className="flex items-center justify-between gap-2 bg-indigo-50 text-indigo-700 rounded-lg px-3 py-1.5 text-sm font-medium">
+              <div key={idx} className="flex items-center justify-between gap-2 bg-slate-100 text-slate-800 rounded-lg px-3 py-1.5 text-sm font-medium">
                 <span className="truncate">{t}</span>
-                <button type="button" onClick={() => removeTask(idx)} className="text-indigo-400 hover:text-indigo-700 shrink-0">
+                <button type="button" onClick={() => removeTask(idx)} className="text-slate-400 hover:text-slate-800 shrink-0">
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -232,7 +233,7 @@ function NotesTab({ user, canWrite, departments, filterRequest, onFilterRequestH
       {canWrite ? (
         <div className="card p-6">
           <div className="flex items-center gap-2 mb-5">
-            <Calendar className="w-5 h-5 text-indigo-600" />
+            <Calendar className="w-5 h-5 text-slate-600" />
             <h2 className="font-semibold text-slate-800">Catatan Minggu Ini</h2>
           </div>
           <LeaderNoteForm user={user} departments={departments} onSaved={load} />
@@ -594,7 +595,7 @@ function MultiSelect({ label, options, selected, onChange, minWidth = 130 }) {
   return (
     <div className="relative" ref={ref} style={{ minWidth }}>
       <button type="button" onClick={() => setOpen(o => !o)}
-        className={`select w-full flex items-center justify-between gap-2 ${count ? 'border-indigo-300 text-slate-700' : 'text-slate-500'}`}>
+        className={`chip w-full justify-between ${count ? 'chip-on' : ''}`}>
         <span className="truncate capitalize">{buttonLabel}</span>
         <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -610,7 +611,7 @@ function MultiSelect({ label, options, selected, onChange, minWidth = 130 }) {
             const on = selected.includes(o.v);
             return (
               <button key={o.v} type="button" onClick={() => toggle(o.v)}
-                className={`w-full text-left flex items-center gap-2 px-3 py-1.5 text-sm transition-colors ${on ? 'text-indigo-700 bg-indigo-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>
+                className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] text-slate-700 transition-colors hover:bg-slate-100">
                 <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${on ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}>
                   {on && <Check className="w-3 h-3 text-white" />}
                 </span>
@@ -774,11 +775,14 @@ function TasksTab({ user, canWrite, departments, detailId, setDetailId, filterRe
                 {items.map(item => {
                   const canChangeStatus = canWrite || String(item.assignee_id) === String(user?.id);
                   return (
-                    <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                    <tr key={item.id}
+                      // Whole row opens the task detail (like the title); inner controls stop propagation
+                      onClick={() => { if (!window.getSelection?.().toString()) setDetailId(item.id); }}
+                      className="cursor-pointer hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-3 font-mono text-xs text-slate-500 font-medium">{item.code}</td>
                       <td className="px-4 py-3 max-w-[240px]">
-                        <button className="text-left group w-full" onClick={() => setDetailId(item.id)}>
-                          <p className="font-medium text-slate-700 truncate group-hover:text-indigo-600 transition-colors" title={item.title}>
+                        <button className="text-left group w-full" onClick={e => { e.stopPropagation(); setDetailId(item.id); }}>
+                          <p className="font-medium text-slate-700 truncate group-hover:underline underline-offset-2 transition-colors" title={item.title}>
                             {item.title}
                           </p>
                         </button>
@@ -786,11 +790,8 @@ function TasksTab({ user, canWrite, departments, detailId, setDetailId, filterRe
                       <td className="px-3 py-3 text-center"><DeptTag dept={item.department} /></td>
                       <td className="px-3 py-3 text-center"><PriorityBadge priority={item.priority} /></td>
                       <td className="px-3 py-3 text-center">
-                        <select className="text-xs border-0 bg-transparent focus:ring-0 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-                          value={item.status} disabled={!canChangeStatus}
-                          onChange={e => quickStatus(item.id, e.target.value)}>
-                          {STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
-                        </select>
+                        <StatusMenu status={item.status} statuses={STATUSES} canChange={canChangeStatus}
+                          onChange={s => quickStatus(item.id, s)} />
                       </td>
                       <td className="px-3 py-3 text-xs text-slate-500">{item.assignee_name || '—'}</td>
                       <td className="px-3 py-3 text-xs">
@@ -802,8 +803,8 @@ function TasksTab({ user, canWrite, departments, detailId, setDetailId, filterRe
                       </td>
                       {canWrite && (
                         <td className="px-3 py-3">
-                          <div className="flex items-center gap-1 justify-center">
-                            <button className="p-1 rounded hover:bg-indigo-50 text-slate-400 hover:text-indigo-600" title="Edit"
+                          <div className="flex items-center gap-1 justify-center" onClick={e => e.stopPropagation()}>
+                            <button className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-800" title="Edit"
                               onClick={() => setModal({ open: true, task: item })}>
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
@@ -898,7 +899,7 @@ function MineTab({ user, detailId, setDetailId }) {
     <div className="space-y-5">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { key: 'active',      label: 'Aktif',       value: stats.active,      color: 'bg-indigo-50 text-indigo-600',  icon: Clock },
+          { key: 'active',      label: 'Aktif',       value: stats.active,      color: 'bg-slate-100 text-slate-700',  icon: Clock },
           { key: 'in_progress', label: 'In Progress', value: stats.in_progress, color: 'bg-blue-50 text-blue-600',      icon: CheckCircle2 },
           { key: 'in_review',   label: 'In Review',   value: stats.in_review,   color: 'bg-amber-50 text-amber-600',    icon: AlertCircle },
           { key: 'done',        label: 'Selesai',     value: stats.done,        color: 'bg-emerald-50 text-emerald-600', icon: CheckCheck },
@@ -920,7 +921,7 @@ function MineTab({ user, detailId, setDetailId }) {
         {STATUS_TABS.map(t => (
           <button key={t.key}
             className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors
-              ${tab === t.key ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+              ${tab === t.key ? 'border-slate-800 text-slate-800 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
             onClick={() => setTab(t.key)}>
             {t.label}
           </button>
@@ -945,11 +946,13 @@ function MineTab({ user, detailId, setDetailId }) {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filtered.map(item => (
-                <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                <tr key={item.id}
+                  onClick={() => { if (!window.getSelection?.().toString()) setDetailId(item.id); }}
+                  className="cursor-pointer hover:bg-slate-50 transition-colors">
                   <td className="px-4 py-3 font-mono text-xs text-slate-500 font-medium">{item.code}</td>
                   <td className="px-4 py-3 max-w-[240px]">
-                    <button className="text-left group w-full" onClick={() => setDetailId(item.id)}>
-                      <p className={`font-medium truncate group-hover:text-indigo-600 transition-colors ${item.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700'}`} title={item.title}>
+                    <button className="text-left group w-full" onClick={e => { e.stopPropagation(); setDetailId(item.id); }}>
+                      <p className={`font-medium truncate group-hover:underline underline-offset-2 transition-colors ${item.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700'}`} title={item.title}>
                         {item.title}
                       </p>
                     </button>
@@ -965,14 +968,14 @@ function MineTab({ user, detailId, setDetailId }) {
                       : <span className="text-slate-400">—</span>}
                   </td>
                   <td className="px-3 py-3 text-center">
-                    <div className="flex items-center gap-1 justify-center">
+                    <div className="flex items-center gap-1 justify-center" onClick={e => e.stopPropagation()}>
                       {item.status !== 'done' && (
                         <button title="Tandai selesai" className="p-1 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-600"
                           onClick={() => quickStatus(item.id, 'done')}>
                           <CheckCheck className="w-3.5 h-3.5" />
                         </button>
                       )}
-                      <button title="Detail" className="p-1 rounded hover:bg-indigo-50 text-slate-400 hover:text-indigo-600"
+                      <button title="Detail" className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-800"
                         onClick={() => setDetailId(item.id)}>
                         <ExternalLink className="w-3.5 h-3.5" />
                       </button>
@@ -1000,7 +1003,7 @@ function BarRow({ label, count, max, barClass, barColor, onClick }) {
   return (
     <button type="button" onClick={onClick} disabled={!onClick}
       className="flex items-center gap-3 w-full text-left group disabled:cursor-default">
-      <span className="text-xs text-slate-500 w-24 shrink-0 truncate group-hover:text-indigo-600 transition-colors" title={label}>{label}</span>
+      <span className="text-xs text-slate-500 w-24 shrink-0 truncate group-hover:underline underline-offset-2 transition-colors" title={label}>{label}</span>
       <div className="flex-1 h-2.5 rounded-full bg-slate-100 overflow-hidden">
         <div className={`h-full rounded-full ${barClass || ''} ${onClick ? 'group-hover:opacity-80 transition-opacity' : ''}`}
           style={{ width: `${pct}%`, backgroundColor: barColor }} />
@@ -1089,7 +1092,7 @@ function DashboardTab({ user, canWrite, departments, onGoToTasks, onGoToNotes, o
     <div className="space-y-5">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Total Task',  value: stats.total,   color: 'bg-indigo-50 text-indigo-600',   icon: ClipboardList, filter: {} },
+          { label: 'Total Task',  value: stats.total,   color: 'bg-slate-100 text-slate-700',   icon: ClipboardList, filter: {} },
           { label: 'Aktif',       value: stats.active,  color: 'bg-blue-50 text-blue-600',        icon: Clock,         filter: {} },
           { label: 'Selesai',     value: stats.done,    color: 'bg-emerald-50 text-emerald-600',  icon: CheckCheck,    filter: { status: 'done' } },
           { label: 'Terlambat',   value: stats.overdue, color: 'bg-red-50 text-red-600',          icon: AlertCircle,   filter: {} },
@@ -1164,7 +1167,7 @@ function DashboardTab({ user, canWrite, departments, onGoToTasks, onGoToNotes, o
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <div className="card p-5">
           <div className="flex items-center gap-2 mb-4">
-            <FileText className="w-4 h-4 text-indigo-600" />
+            <FileText className="w-4 h-4 text-slate-600" />
             <h3 className="font-semibold text-slate-800 text-sm">Catatan Terbaru</h3>
           </div>
           {recentNotes.length === 0 ? (
@@ -1181,7 +1184,7 @@ function DashboardTab({ user, canWrite, departments, onGoToTasks, onGoToNotes, o
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-semibold text-slate-700 group-hover:text-indigo-600 transition-colors">{n.user_name}</span>
+                      <span className="text-xs font-semibold text-slate-700 group-hover:text-slate-900 group-hover:underline transition-colors">{n.user_name}</span>
                       <DeptTag dept={n.department} />
                       <span className="text-[10px] text-slate-400">
                         {n.note_date ? format(parseISO(String(n.note_date).slice(0, 10)), 'dd MMM yyyy') : ''}
@@ -1197,7 +1200,7 @@ function DashboardTab({ user, canWrite, departments, onGoToTasks, onGoToNotes, o
 
         <div className="card p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Calendar className="w-4 h-4 text-indigo-600" />
+            <Calendar className="w-4 h-4 text-slate-600" />
             <h3 className="font-semibold text-slate-800 text-sm">Deadline Mendatang</h3>
           </div>
           {upcomingDeadlines.length === 0 ? (
@@ -1208,7 +1211,7 @@ function DashboardTab({ user, canWrite, departments, onGoToTasks, onGoToNotes, o
                 <button key={t.id} type="button" onClick={() => onOpenTask?.(t.id)}
                   className="flex items-center justify-between gap-2 pb-3 border-b border-slate-50 last:border-0 last:pb-0 w-full text-left group">
                   <div className="min-w-0">
-                    <p className="text-xs font-medium text-slate-700 truncate group-hover:text-indigo-600 transition-colors" title={t.title}>{t.title}</p>
+                    <p className="text-xs font-medium text-slate-700 truncate group-hover:underline underline-offset-2 transition-colors" title={t.title}>{t.title}</p>
                     <div className="flex items-center gap-1.5 mt-1">
                       <span className="font-mono text-[10px] text-slate-400">{t.code}</span>
                       <DeptTag dept={t.department} />
@@ -1259,7 +1262,7 @@ export default function CLevel() {
           ].map(([id, label]) => (
             <button key={id} onClick={() => { setTab(id); setDetailId(null); }}
               className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors
-                ${tab === id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+                ${tab === id ? 'border-slate-800 text-slate-800 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
               {label}
             </button>
           ))}

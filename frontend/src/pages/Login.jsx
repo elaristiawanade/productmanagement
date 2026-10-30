@@ -28,10 +28,12 @@ export default function Login() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center bg-slate-50 bg-cover bg-center p-4"
+      className="relative min-h-screen flex items-center justify-center bg-slate-50 bg-cover bg-center p-4"
       style={{ backgroundImage: `url(${loginBackground})` }}
     >
-      <div className="w-full max-w-sm">
+      {/* Dark theme: dim the (light) background photo so the light text stays readable */}
+      <div className="absolute inset-0 hidden dark:block bg-app/85" aria-hidden="true" />
+      <div className="relative w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8 gap-3">
           <div className="w-14 h-14 rounded-2xl bg-red-600 flex items-center justify-center shadow-lg shadow-red-900/20">
@@ -44,7 +46,7 @@ export default function Login() {
         </div>
 
         {/* Card */}
-        <div className="bg-white/80 backdrop-blur-md border border-white/60 rounded-2xl p-8 shadow-2xl">
+        <div className="bg-panel/85 backdrop-blur-md border border-slate-200/60 rounded-2xl p-8 shadow-2xl">
           <form onSubmit={submit} className="space-y-5">
             <div>
               <label className="label text-slate-600">Email</label>
@@ -78,7 +80,7 @@ export default function Login() {
                 </button>
               </div>
             </div>
-            <button type="submit" className="btn-danger w-full justify-center py-2.5" disabled={loading}>
+            <button type="submit" className="btn-primary w-full justify-center py-2.5" disabled={loading}>
               {loading ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : 'Masuk'}
             </button>
           </form>

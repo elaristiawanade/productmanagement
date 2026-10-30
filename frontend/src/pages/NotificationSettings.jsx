@@ -67,8 +67,8 @@ export default function NotificationSettings() {
 
       <div className="card p-6">
         <div className="flex items-center gap-2 mb-5">
-          <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center">
-            <Mail className="w-4 h-4 text-indigo-600" />
+          <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center">
+            <Mail className="w-4 h-4 text-slate-700" />
           </div>
           <h2 className="font-semibold text-slate-700">Konfigurasi SMTP</h2>
         </div>

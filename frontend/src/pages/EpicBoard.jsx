@@ -44,7 +44,7 @@ function TaskRow({ item }) {
       <Link
         to={`/backlog?item=${item.id}`}
         onClick={e => e.stopPropagation()}
-        className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-indigo-600 shrink-0"
+        className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-slate-800 shrink-0"
         title="Buka di Backlog">
         <ExternalLink className="w-3.5 h-3.5" />
       </Link>
@@ -73,23 +73,23 @@ function StoryRow({ story }) {
   };
 
   return (
-    <div className={`border rounded-xl overflow-hidden transition-colors ${open ? 'border-indigo-200' : 'border-slate-100'}`}>
+    <div className={`border rounded-xl overflow-hidden transition-colors ${open ? 'border-slate-300' : 'border-slate-200'}`}>
       {/* Story header */}
       <div
-        className={`flex items-center gap-2 px-4 py-2.5 cursor-pointer hover:bg-indigo-50/40 transition-colors group
-          ${open ? 'bg-indigo-50/30 border-b border-indigo-100' : ''}`}
+        className={`flex items-center gap-2 px-4 py-2.5 cursor-pointer hover:bg-slate-50 transition-colors group
+          ${open ? 'bg-slate-50 border-b border-slate-200' : ''}`}
         onClick={toggle}>
-        <div className="w-4 h-4 flex items-center justify-center shrink-0 text-indigo-400">
+        <div className="w-4 h-4 flex items-center justify-center shrink-0 text-slate-400">
           {loading
             ? <div className="w-3 h-3 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
             : open
               ? <ChevronDown className="w-3.5 h-3.5" />
               : <ChevronRight className="w-3.5 h-3.5" />}
         </div>
-        <span className="font-mono text-xs text-indigo-500 shrink-0 font-medium">{story.code}</span>
+        <span className="font-mono text-xs text-slate-500 shrink-0 font-medium">{story.code}</span>
         <span className="text-sm font-medium text-slate-700 flex-1 truncate">{story.title}</span>
         {loaded && (
-          <span className="text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full shrink-0 font-medium">
+          <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full shrink-0 font-medium">
             {children.length} task{children.length !== 1 ? 's' : ''}
           </span>
         )}
@@ -113,7 +113,7 @@ function StoryRow({ story }) {
         <Link
           to={`/backlog?item=${story.id}`}
           onClick={e => e.stopPropagation()}
-          className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-indigo-600 shrink-0"
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-slate-800 shrink-0"
           title="Buka di Backlog">
           <ExternalLink className="w-3.5 h-3.5" />
         </Link>

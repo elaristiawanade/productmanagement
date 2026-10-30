@@ -77,7 +77,7 @@ export default function Profile() {
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-800">{user?.name}</h1>
-          <span className="inline-flex items-center gap-1.5 mt-1 text-xs font-medium px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700">
+          <span className="inline-flex items-center gap-1.5 mt-1 text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-700">
             <ShieldCheck className="w-3 h-3" />
             {user?.roleDisplay || user?.role?.replace(/_/g, ' ')}
           </span>
@@ -87,8 +87,8 @@ export default function Profile() {
       {/* ── Profile card ─────────────────────────────────────────────────── */}
       <div className="card p-6">
         <div className="flex items-center gap-2 mb-5">
-          <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center">
-            <User className="w-4 h-4 text-indigo-600" />
+          <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center">
+            <User className="w-4 h-4 text-slate-700" />
           </div>
           <h2 className="font-semibold text-slate-700">Informasi Profil</h2>
         </div>

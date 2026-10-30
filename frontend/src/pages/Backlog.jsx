@@ -5,7 +5,9 @@ import client from '../api/client';
 import Modal from '../components/Modal';
 import StatusBadge, { StatusIcon, STATUS_MAP } from '../components/StatusBadge';
 import PriorityBadge, { PriorityFlag } from '../components/PriorityBadge';
-import FloatingMenu from '../components/FloatingMenu';
+import StatusMenu from '../components/StatusMenu';
+
+const StatusMenuButton = (props) => <StatusMenu statuses={STATUSES} {...props} />;
 import LinkInsertButton from '../components/LinkInsertButton';
 import SearchableSelect from '../components/SearchableSelect';
 import SearchableMultiSelect from '../components/SearchableMultiSelect';
@@ -34,37 +36,6 @@ function TypeTag({ type }) {
   return <span className={`shrink-0 text-[11px] font-medium leading-5 px-1.5 rounded ${TYPE_TAG[type] || TYPE_TAG.task}`}>{type}</span>;
 }
 
-// Status shown as a pill (list) or icon (board card); with permission it opens a status menu
-// that calls the same quick-status update the old inline <select> did.
-function StatusMenuButton({ status, canChange, onChange, variant = 'pill' }) {
-  const ref = useRef(null);
-  const [open, setOpen] = useState(false);
-  const face = variant === 'icon' ? <StatusIcon status={status} /> : <StatusBadge status={status} />;
-  if (!canChange) return face;
-  return (
-    <>
-      <button ref={ref} type="button" title="Ubah status" aria-haspopup="menu" aria-expanded={open}
-        onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
-        className={variant === 'icon'
-          ? 'w-5 h-5 -ml-0.5 grid place-items-center rounded hover:bg-slate-200/70'
-          : 'rounded-md hover:shadow-[inset_0_0_0_1px_rgb(var(--c-slate-300))]'}>
-        {face}
-      </button>
-      <FloatingMenu anchorRef={ref} open={open} onClose={() => setOpen(false)} width={200}>
-        <p className="px-2 pt-1.5 pb-1 text-[11px] font-semibold uppercase tracking-[.06em] text-slate-400">Status</p>
-        {STATUSES.map(s => (
-          <button key={s} type="button" role="menuitemradio" aria-checked={s === status}
-            onClick={() => { setOpen(false); if (s !== status) onChange(s); }}
-            className="w-full flex items-center gap-2 h-8 px-2 rounded-md text-[13px] text-slate-800 hover:bg-slate-100">
-            <StatusIcon status={s} />
-            <span className="flex-1 text-left">{STATUS_MAP[s].label}</span>
-            {s === status && <Check className="w-3.5 h-3.5 text-indigo-600" />}
-          </button>
-        ))}
-      </FloatingMenu>
-    </>
-  );
-}
 
 // ─── Backlog attachments ───────────────────────────────────────────────────
 const ATTACHMENT_ACCEPT = 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.csv,.txt';
@@ -823,7 +794,7 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
               <input ref={fileInputRef} type="file" accept={ATTACHMENT_ACCEPT} className="hidden" onChange={handleUpload} />
             </div>
             {attachments.length === 0 ? (
-              <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors"
+              <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center cursor-pointer hover:border-slate-400 hover:bg-slate-50 transition-colors"
                 onClick={() => fileInputRef.current?.click()}>
                 <ImageIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                 <p className="text-xs text-slate-400">Klik untuk unggah file</p>
@@ -866,7 +837,7 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
                   );
                 })}
                 <button type="button" onClick={() => fileInputRef.current?.click()}
-                  className="aspect-video rounded-lg border-2 border-dashed border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors flex flex-col items-center justify-center gap-1">
+                  className="aspect-video rounded-lg border-2 border-dashed border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-colors flex flex-col items-center justify-center gap-1">
                   <Upload className="w-4 h-4 text-slate-400" />
                   <span className="text-xs text-slate-400">Tambah</span>
                 </button>
@@ -898,7 +869,7 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
       </div>
 
       {previewImage && (
-        <div className="fixed inset-0 z-[60] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-6"
+        <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6"
           onClick={() => setPreviewImage(null)}>
           <button type="button" onClick={() => setPreviewImage(null)}
             className="absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2">
@@ -910,7 +881,7 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
       )}
 
       {previewDoc && (
-        <div className="fixed inset-0 z-[60] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-6"
+        <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6"
           onClick={() => setPreviewDoc(null)}>
           <div className="w-full h-full max-w-4xl bg-white rounded-lg shadow-2xl flex flex-col overflow-hidden"
             onClick={e => e.stopPropagation()}>

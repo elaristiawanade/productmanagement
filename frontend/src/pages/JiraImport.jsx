@@ -118,11 +118,11 @@ export default function JiraImport() {
           <div
             onClick={() => fileInputRef.current?.click()}
             className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
-              ${file ? 'border-indigo-300 bg-indigo-50/40' : 'border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/20'}`}>
+              ${file ? 'border-slate-300 bg-slate-50' : 'border-slate-200 hover:border-slate-400 hover:bg-slate-50'}`}>
             <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
             {file ? (
               <>
-                <p className="text-sm font-medium text-indigo-700">{file.name}</p>
+                <p className="text-sm font-medium text-slate-800">{file.name}</p>
                 <p className="text-xs text-slate-400 mt-1">{(file.size / 1024).toFixed(1)} KB — klik untuk ganti</p>
               </>
             ) : (

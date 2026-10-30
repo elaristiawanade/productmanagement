@@ -9,7 +9,7 @@ import { format, parseISO } from 'date-fns';
 const ROLE_COLORS = {
   super_admin:  'bg-purple-100 text-purple-700',
   manager:      'bg-blue-100 text-blue-700',
-  po:           'bg-indigo-100 text-indigo-700',
+  po:           'bg-slate-200 text-slate-700',
   developer:    'bg-emerald-100 text-emerald-700',
   qa:           'bg-amber-100 text-amber-700',
   sme:          'bg-cyan-100 text-cyan-700',
@@ -323,7 +323,7 @@ function RoleForm({ role, onSave, onClose }) {
                   <tr key={module} className="align-top">
                     <td className="px-3 py-2.5 font-medium text-slate-700">
                       <button type="button" onClick={() => toggleModuleAll(module, actions)}
-                        className="text-left hover:text-indigo-600 transition-colors" title="Pilih/hapus semua aksi modul ini">
+                        className="text-left hover:text-slate-800 hover:underline underline-offset-2 transition-colors" title="Pilih/hapus semua aksi modul ini">
                         {label}
                       </button>
                     </td>
@@ -571,7 +571,7 @@ export default function Users() {
         {[['users','Users'], ['roles','Roles & Permissions'], ['departments','Departemen']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors
-              ${tab === id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+              ${tab === id ? 'border-slate-800 text-slate-800 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
             {label}
           </button>
         ))}
@@ -755,8 +755,8 @@ export default function Users() {
               return (
                 <div key={role.id} className="card p-5 flex flex-col">
                   <div className="flex items-start gap-3 mb-4">
-                    <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
-                      <Shield className="w-4 h-4 text-indigo-600" />
+                    <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
+                      <Shield className="w-4 h-4 text-slate-700" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-slate-800 truncate">{role.display_name}</p>
@@ -794,7 +794,7 @@ export default function Users() {
                           <div className="flex flex-wrap gap-1">
                             {actions.filter(a => perms[module]?.[a.key]).map(a => (
                               <span key={a.key}
-                                className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-full">
+                                className="text-xs bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-full">
                                 {a.label}
                               </span>
                             ))}

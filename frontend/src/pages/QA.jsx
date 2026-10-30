@@ -3,6 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts';
+import { useChartTheme } from '../utils/chartTheme';
 import { Plus, Pencil, Trash2, Play, CheckCircle2, XCircle, AlertCircle, Clock, Download, Upload, AlertTriangle } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
@@ -132,7 +133,7 @@ function TestRunForm({ tc, sprints, onSave, onClose }) {
           {['pass','fail','blocked','pending','skip'].map(r => (
             <button type="button" key={r} onClick={() => setForm(f => ({ ...f, result: r }))}
               className={`py-2 rounded-lg text-xs font-medium border transition-all
-                ${form.result === r ? 'ring-2 ring-indigo-400 border-indigo-400' : 'border-slate-200 hover:bg-slate-50'}`}>
+                ${form.result === r ? 'ring-1 ring-slate-800 border-slate-800 text-slate-800' : 'border-slate-200 hover:bg-slate-50'}`}>
               {r.charAt(0).toUpperCase()+r.slice(1)}
             </button>
           ))}
@@ -173,6 +174,7 @@ export default function QA() {
   const [perPageRuns,  setPerPageRuns] = useState(10);
   const [pageRuns,     setPageRuns]    = useState(1);
   const [importing,    setImporting]   = useState(false);
+  const ct = useChartTheme();
   const importInputRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -248,7 +250,7 @@ export default function QA() {
     }
   };
 
-  const PIE_COLORS = ['#10b981','#ef4444','#f59e0b','#94a3b8','#e2e8f0'];
+  const PIE_COLORS = ['#10b981','#ef4444','#f59e0b','#94a3b8', ct.muted];
   const summary = dashboard?.summary || {};
 
   const totalPagesCases = Math.max(1, Math.ceil(testCases.length / perPageCases));
@@ -274,7 +276,7 @@ export default function QA() {
           {[['dashboard','QA Dashboard'],['cases','Test Cases'],['runs','Test Runs']].map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)}
               className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors
-                ${tab === id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+                ${tab === id ? 'border-slate-800 text-slate-800 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
               {label}
             </button>
           ))}
@@ -297,7 +299,7 @@ export default function QA() {
               {/* Stats */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
-                  { label: 'Total Test Cases', value: summary.total_cases, cls: 'bg-indigo-50 text-indigo-600' },
+                  { label: 'Total Test Cases', value: summary.total_cases, cls: 'bg-slate-100 text-slate-700' },
                   { label: 'Total Runs',        value: summary.total_runs,  cls: 'bg-blue-50 text-blue-600' },
                   { label: 'Pass Rate',         value: `${summary.pass_rate || 0}%`, cls: 'bg-emerald-50 text-emerald-600' },
                   { label: 'Failed',            value: summary.fail_count,  cls: 'bg-red-50 text-red-600' },
@@ -315,10 +317,10 @@ export default function QA() {
                   <h3 className="font-semibold text-slate-700 mb-4">Test Results per Sprint</h3>
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={dashboard?.bySprint || []} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis dataKey="sprint" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 11 }} />
-                      <Tooltip />
+                      <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} />
+                      <XAxis dataKey="sprint" tick={{ ...ct.axisTick, fontSize: 10 }} stroke={ct.line} />
+                      <YAxis tick={ct.axisTick} stroke={ct.line} />
+                      <Tooltip {...ct.tooltip} />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
                       <Bar dataKey="pass_count"    name="Pass"    fill="#10b981" radius={[4,4,0,0]} />
                       <Bar dataKey="fail_count"    name="Fail"    fill="#ef4444" radius={[4,4,0,0]} />
@@ -335,7 +337,7 @@ export default function QA() {
                       <Pie data={passPieData} cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={3} dataKey="value" label={({ name, percent }) => `${name} ${(percent*100).toFixed(0)}%`} labelLine={false}>
                         {passPieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
                       </Pie>
-                      <Tooltip />
+                      <Tooltip {...ct.tooltip} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -440,7 +442,7 @@ export default function QA() {
                           <td className="px-3 py-3">
                             <div className="flex items-center gap-1 justify-center">
                               {can('qa', 'run') && (
-                                <button className="btn-ghost btn-sm p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50" title="Run Test"
+                                <button className="btn-ghost btn-sm p-1.5 rounded-lg text-slate-600 hover:bg-slate-100" title="Run Test"
                                   onClick={() => setModal({ open: true, type: 'run', data: tc })}>
                                   <Play className="w-3.5 h-3.5" />
                                 </button>
