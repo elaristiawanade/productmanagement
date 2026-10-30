@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, Link } from 'react-router-dom';
-import { LogOut, Menu, ChevronsRight, User } from 'lucide-react';
+import { LogOut, Menu, ChevronsRight, User, Search } from 'lucide-react';
 import Sidebar, { IconRail } from './Sidebar';
 import NotificationBell from './NotificationBell';
 import ThemeToggle from './ThemeToggle';
+import CommandPalette from './CommandPalette';
 import { pageMeta } from './navConfig';
 import { useAuth } from '../context/AuthContext';
 
@@ -62,7 +63,16 @@ function UserMenu() {
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(readCollapsed);   // desktop: secondary sidebar hidden
   const [drawer, setDrawer] = useState(false);                 // mobile: rail + sidebar slide in
+  const [paletteOpen, setPaletteOpen] = useState(false);       // Ctrl/⌘ K
   const location = useLocation();
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setPaletteOpen(v => !v); }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
   const { section, item } = pageMeta(location.pathname);
   const PageIcon = item.icon;
   const SectionIcon = section.icon;
@@ -80,6 +90,7 @@ export default function Layout() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-frame">
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       {/* Top bar */}
       <header className="h-12 shrink-0 flex items-center gap-3 pl-3.5 pr-3 text-frame-ink">
         <button onClick={toggleMenu} aria-label="Buka/tutup menu"
@@ -93,7 +104,14 @@ export default function Layout() {
             PTAP <span className="text-frame-ink-2 font-medium">· Product Tracker</span>
           </span>
         </Link>
-        <div className="flex-1" />
+        <div className="flex-1 flex justify-center min-w-0">
+          <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Cari (Ctrl K)"
+            className="flex items-center gap-2 h-8 w-8 sm:w-full sm:max-w-[520px] justify-center sm:justify-start px-0 sm:pl-3 sm:pr-1.5 rounded-lg bg-frame-2 border border-frame-3 text-frame-ink-2 text-[13px] hover:border-[#3d3d44] hover:text-frame-ink transition-colors">
+            <Search className="w-[15px] h-[15px] shrink-0" />
+            <span className="hidden sm:block flex-1 text-left truncate">Cari halaman atau backlog item…</span>
+            <kbd className="hidden sm:block font-sans text-[11px] font-medium px-1.5 py-0.5 rounded bg-frame-3 text-frame-ink-2">Ctrl K</kbd>
+          </button>
+        </div>
         <div className="flex items-center gap-1 shrink-0">
           <ThemeToggle />
           <NotificationBell />

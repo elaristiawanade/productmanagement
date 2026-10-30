@@ -60,6 +60,7 @@
   .table-row  { @apply hover:bg-slate-50 border-b border-slate-100 transition-colors; }
   /* Toolbar chip (filters, group toggle); .chip-on = an active filter */
   .chip       { @apply inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-slate-200 bg-panel text-[12.5px] text-slate-600 whitespace-nowrap transition-colors hover:bg-slate-50 hover:text-slate-800; }
+  .kbd        { @apply inline-block font-sans text-[11px] font-medium leading-none px-1.5 py-[3px] rounded bg-slate-100 text-slate-600; }
   .chip-on    { @apply border-indigo-200 bg-indigo-50 text-indigo-800 hover:bg-indigo-50 hover:text-indigo-800; }
 
   /* Status pill (StatusBadge): soft tint of the status hue --c, readable in both themes */
