@@ -3,7 +3,8 @@ import {
   Settings, Crown, Bug, Home, CalendarRange, User,
 } from 'lucide-react';
 
-// Navigation grouped into icon-rail sections. Gates are the same permissions the old Sidebar used:
+// Navigation grouped into icon-rail sections. `title` (when set) is the page title from the old header,
+// shown in the breadcrumb; menus use the shorter `label`. Gates are the same permissions the old Sidebar used:
 // an item with `gate: [module, action]` only shows when can(module, action) passes
 // (super_admin always passes via can()'s bypass). Route-level gates stay in App.jsx.
 export const SECTIONS = [
@@ -12,11 +13,11 @@ export const SECTIONS = [
     { to: '/my-tasks', label: 'My Tasks',  icon: CheckSquare },
   ] },
   { key: 'plan', label: 'Planning', icon: CalendarRange, items: [
-    { to: '/backlog',    label: 'Backlog',    icon: ListTodo },
+    { to: '/backlog',    label: 'Backlog',    icon: ListTodo,      title: 'Backlog Management' },
     { to: '/epic-board', label: 'Epic Board', icon: Layers },
-    { to: '/sprints',    label: 'Sprints',    icon: Zap },
-    { to: '/standup',    label: 'Standup',    icon: ClipboardList },
-    { to: '/products',   label: 'Products',   icon: Package },
+    { to: '/sprints',    label: 'Sprints',    icon: Zap,           title: 'Sprint Management' },
+    { to: '/standup',    label: 'Standup',    icon: ClipboardList, title: 'Daily Standup' },
+    { to: '/products',   label: 'Products',   icon: Package,       title: 'Product Management' },
   ] },
   { key: 'quality', label: 'Quality', icon: TestTube2, items: [
     { to: '/qa',   label: 'QA Module',     icon: TestTube2 },
@@ -27,7 +28,7 @@ export const SECTIONS = [
   ] },
   { key: 'admin', label: 'Admin', icon: Settings, items: [
     { to: '/users',                  label: 'Users & Roles',         icon: Users,    gate: ['users', 'update'] },
-    { to: '/import/jira',            label: 'Import Jira',           icon: FileDown, gate: ['import', 'run'] },
+    { to: '/import/jira',            label: 'Import Jira',           icon: FileDown, gate: ['import', 'run'], title: 'Import dari Jira' },
     { to: '/settings/notifications', label: 'Notification Settings', icon: Settings, gate: ['settings', 'update'] },
   ] },
 ];

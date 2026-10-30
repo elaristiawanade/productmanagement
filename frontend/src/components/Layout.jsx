@@ -146,7 +146,7 @@ export default function Layout() {
               </span>
               <span className="hidden sm:inline text-slate-400">/</span>
               <h1 className="inline-flex items-center gap-1.5 px-1.5 font-semibold text-slate-800 truncate">
-                <PageIcon className="w-3.5 h-3.5 shrink-0" />{item.label}
+                <PageIcon className="w-3.5 h-3.5 shrink-0" />{item.title || item.label}
               </h1>
             </nav>
           </div>
