@@ -82,18 +82,18 @@ export default function NotificationBell() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={toggleOpen}
-        className="btn-ghost btn-sm rounded-lg p-2 relative"
+        className="relative w-8 h-8 grid place-items-center rounded-md text-frame-ink-2 hover:bg-frame-2 hover:text-[#fff] transition-colors"
         title="Notifikasi">
-        <Bell className="w-4 h-4" />
+        <Bell className="w-[18px] h-[18px]" />
         {unread > 0 && (
-          <span className="absolute top-0.5 right-0.5 min-w-[16px] h-4 px-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-indigo-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none border-2 border-frame">
             {unread > 99 ? '99+' : unread}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-xl border border-slate-200 z-50 overflow-hidden">
+        <div className="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-24px)] bg-white text-slate-800 rounded-xl shadow-pop border border-slate-200 z-50 overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
             <span className="text-sm font-semibold text-slate-800">
@@ -101,7 +101,7 @@ export default function NotificationBell() {
             </span>
             {unread > 0 && (
               <button onClick={markAllRead}
-                className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                className="text-xs text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-md px-2 py-1 -mr-2 flex items-center gap-1">
                 <CheckCheck className="w-3.5 h-3.5" />
                 Tandai semua
               </button>
