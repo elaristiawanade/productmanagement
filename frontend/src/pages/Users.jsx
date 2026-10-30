@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Plus, Pencil, UserX, UserCheck, Key, Shield, Package, Trash2, AlertTriangle, Building2 } from 'lucide-react';
 import client from '../api/client';
+import PresenceDot from '../components/PresenceDot';
 import Modal from '../components/Modal';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -621,9 +622,10 @@ export default function Users() {
                     <tr key={u.id} className="table-row">
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0"
+                          <div className="relative w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0"
                             style={{ backgroundColor: u.avatar_color || '#4F46E5' }}>
                             {u.name.charAt(0).toUpperCase()}
+                            <PresenceDot userId={u.id} />
                           </div>
                           <span className="font-medium text-slate-800">{u.name}</span>
                         </div>

@@ -5,6 +5,8 @@ import Sidebar, { IconRail } from './Sidebar';
 import NotificationBell from './NotificationBell';
 import ThemeToggle from './ThemeToggle';
 import CommandPalette from './CommandPalette';
+import PresenceDot from './PresenceDot';
+import { PresenceProvider, usePresence } from '../context/PresenceContext';
 import { pageMeta } from './navConfig';
 import { useAuth } from '../context/AuthContext';
 
@@ -14,7 +16,10 @@ const readCollapsed = () => {
 
 function UserMenu() {
   const { logout, user } = useAuth();
+  const { goOffline } = usePresence();
   const [open, setOpen] = useState(false);
+  // Mark offline while the token still exists, then log out as before
+  const signOut = () => { goOffline(); logout(); };
   const ref = useRef(null);
 
   useEffect(() => {
@@ -28,17 +33,19 @@ function UserMenu() {
       <button onClick={() => setOpen(v => !v)} aria-label="Menu akun" aria-expanded={open}
         title={`${user?.name} — Menu akun`}
         className="w-8 h-8 ml-1 rounded-full grid place-items-center hover:ring-2 hover:ring-frame-3 transition-shadow">
-        <span className="w-7 h-7 rounded-full grid place-items-center text-white text-xs font-semibold"
+        <span className="relative w-7 h-7 rounded-full grid place-items-center text-white text-xs font-semibold"
           style={{ backgroundColor: user?.avatarColor || '#4F46E5' }}>
           {user?.name?.charAt(0).toUpperCase()}
+          <PresenceDot userId={user?.id} ring="border-frame" />
         </span>
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-2 w-60 bg-white text-slate-800 rounded-xl shadow-pop border border-slate-200 z-50 p-1.5">
           <div className="flex items-center gap-2.5 px-2 py-1.5">
-            <span className="w-8 h-8 rounded-full grid place-items-center text-white text-xs font-semibold shrink-0"
+            <span className="relative w-8 h-8 rounded-full grid place-items-center text-white text-xs font-semibold shrink-0"
               style={{ backgroundColor: user?.avatarColor || '#4F46E5' }}>
               {user?.name?.charAt(0).toUpperCase()}
+              <PresenceDot userId={user?.id} />
             </span>
             <div className="min-w-0">
               <p className="text-sm font-semibold truncate">{user?.name}</p>
@@ -50,7 +57,7 @@ function UserMenu() {
             className="flex items-center gap-2 h-8 px-2 rounded-md text-[13px] hover:bg-slate-100">
             <User className="w-4 h-4 text-slate-500" />Profile
           </Link>
-          <button onClick={logout}
+          <button onClick={signOut}
             className="w-full flex items-center gap-2 h-8 px-2 rounded-md text-[13px] hover:bg-slate-100">
             <LogOut className="w-4 h-4 text-slate-500" />Logout
           </button>
@@ -89,6 +96,7 @@ export default function Layout() {
   };
 
   return (
+    <PresenceProvider>
     <div className="h-screen flex flex-col overflow-hidden bg-frame">
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       {/* Top bar */}
@@ -156,5 +164,6 @@ export default function Layout() {
         </main>
       </div>
     </div>
+    </PresenceProvider>
   );
 }

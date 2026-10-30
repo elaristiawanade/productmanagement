@@ -7,6 +7,7 @@ import { AlertTriangle, Clock, TrendingUp, CheckCircle2, CircleDot, ShieldAlert,
 import { Link } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import client from '../api/client';
+import PresenceDot from '../components/PresenceDot';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import { useChartTheme, STATUS_COLORS } from '../utils/chartTheme';
@@ -401,9 +402,10 @@ export default function Dashboard() {
                     onClick={() => openDrill(`Workload: ${u.name}`, { assignee_id: u.id })}>
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                        <div className="relative w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
                           style={{ backgroundColor: u.avatar_color || '#6366f1' }}>
                           {u.name?.charAt(0)}
+                          <PresenceDot userId={u.id} size="sm" />
                         </div>
                         <span className="text-sm font-medium text-slate-700 truncate">{u.name}</span>
                         <span className="text-xs text-slate-400 hidden sm:block truncate">{u.role}</span>
@@ -498,9 +500,10 @@ export default function Dashboard() {
                     onClick={() => openDrill(`Occupation: ${u.name}`, { assignee_id: u.id })}>
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                        <div className="relative w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
                           style={{ backgroundColor: u.avatar_color || '#6366f1' }}>
                           {u.name?.charAt(0)}
+                          <PresenceDot userId={u.id} />
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-slate-700 truncate leading-tight">{u.name}</p>

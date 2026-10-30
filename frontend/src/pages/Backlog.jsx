@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Search, Pencil, Trash2, AlertCircle, Link2, Paperclip, Upload, X, ImageIcon, MessageSquare, Send, FileDown, ChevronDown, Check, FileText, FileSpreadsheet, Presentation, Archive, File as FileIcon, ExternalLink, List, Columns3, Layers, Zap } from 'lucide-react';
 import client from '../api/client';
+import PresenceDot from '../components/PresenceDot';
 import Modal from '../components/Modal';
 import StatusBadge, { StatusIcon, STATUS_MAP } from '../components/StatusBadge';
 import PriorityBadge, { PriorityFlag } from '../components/PriorityBadge';
@@ -331,9 +332,10 @@ function ActivitySection({ itemId, users = [] }) {
               <button key={u.id} type="button"
                 className={`w-full text-left flex items-center gap-2 px-3 py-1.5 text-xs transition-colors ${i === mentionIdx ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'}`}
                 onMouseDown={e => { e.preventDefault(); selectMention(u.name); }}>
-                <span className="w-5 h-5 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0"
+                <span className="relative w-5 h-5 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0"
                   style={{ backgroundColor: u.avatar_color || '#6366f1' }}>
                   {u.name.charAt(0).toUpperCase()}
+                  <PresenceDot userId={u.id} size="sm" />
                 </span>
                 <span className="truncate">{u.name}</span>
               </button>
