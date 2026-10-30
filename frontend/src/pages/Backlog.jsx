@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Pencil, Trash2, AlertCircle, Link2, Paperclip, Upload, X, ImageIcon, MessageSquare, Send, FileDown, ChevronDown, Check, FileText, FileSpreadsheet, Presentation, Archive, File as FileIcon, ExternalLink } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, AlertCircle, Link2, Paperclip, Upload, X, ImageIcon, MessageSquare, Send, FileDown, ChevronDown, Check, FileText, FileSpreadsheet, Presentation, Archive, File as FileIcon, ExternalLink, List, Columns3, Layers, Zap } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
-import StatusBadge from '../components/StatusBadge';
-import PriorityBadge from '../components/PriorityBadge';
+import StatusBadge, { StatusIcon, STATUS_MAP } from '../components/StatusBadge';
+import PriorityBadge, { PriorityFlag } from '../components/PriorityBadge';
+import FloatingMenu from '../components/FloatingMenu';
 import LinkInsertButton from '../components/LinkInsertButton';
 import SearchableSelect from '../components/SearchableSelect';
 import SearchableMultiSelect from '../components/SearchableMultiSelect';
@@ -19,6 +20,51 @@ import { Link } from 'react-router-dom';
 const STATUSES   = ['backlog','todo','in_progress','in_review','done','blocked'];
 const PRIORITIES = ['critical','high','medium','low'];
 const TYPES      = ['story','bug','task','epic','independent'];
+
+// Filled type tags (story blue, task grey, bug red, epic purple, independent orange)
+const TYPE_TAG = {
+  story:       'text-blue-700 bg-blue-100',
+  bug:         'text-red-700 bg-red-100',
+  task:        'text-slate-600 bg-slate-200/70',
+  epic:        'text-purple-700 bg-purple-100',
+  independent: 'text-orange-700 bg-orange-100',
+};
+
+function TypeTag({ type }) {
+  return <span className={`shrink-0 text-[11px] font-medium leading-5 px-1.5 rounded ${TYPE_TAG[type] || TYPE_TAG.task}`}>{type}</span>;
+}
+
+// Status shown as a pill (list) or icon (board card); with permission it opens a status menu
+// that calls the same quick-status update the old inline <select> did.
+function StatusMenuButton({ status, canChange, onChange, variant = 'pill' }) {
+  const ref = useRef(null);
+  const [open, setOpen] = useState(false);
+  const face = variant === 'icon' ? <StatusIcon status={status} /> : <StatusBadge status={status} />;
+  if (!canChange) return face;
+  return (
+    <>
+      <button ref={ref} type="button" title="Ubah status" aria-haspopup="menu" aria-expanded={open}
+        onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+        className={variant === 'icon'
+          ? 'w-5 h-5 -ml-0.5 grid place-items-center rounded hover:bg-slate-200/70'
+          : 'rounded-md hover:shadow-[inset_0_0_0_1px_rgb(var(--c-slate-300))]'}>
+        {face}
+      </button>
+      <FloatingMenu anchorRef={ref} open={open} onClose={() => setOpen(false)} width={200}>
+        <p className="px-2 pt-1.5 pb-1 text-[11px] font-semibold uppercase tracking-[.06em] text-slate-400">Status</p>
+        {STATUSES.map(s => (
+          <button key={s} type="button" role="menuitemradio" aria-checked={s === status}
+            onClick={() => { setOpen(false); if (s !== status) onChange(s); }}
+            className="w-full flex items-center gap-2 h-8 px-2 rounded-md text-[13px] text-slate-800 hover:bg-slate-100">
+            <StatusIcon status={s} />
+            <span className="flex-1 text-left">{STATUS_MAP[s].label}</span>
+            {s === status && <Check className="w-3.5 h-3.5 text-indigo-600" />}
+          </button>
+        ))}
+      </FloatingMenu>
+    </>
+  );
+}
 
 // ─── Backlog attachments ───────────────────────────────────────────────────
 const ATTACHMENT_ACCEPT = 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.csv,.txt';
@@ -97,15 +143,15 @@ function MultiSelect({ label, options, selected, onChange, minWidth = 130 }) {
   return (
     <div className="relative" ref={ref} style={{ minWidth }}>
       <button type="button" onClick={() => setOpen(o => !o)}
-        className={`select w-full flex items-center justify-between gap-2 ${count ? 'border-indigo-300 text-slate-700' : 'text-slate-500'}`}>
-        <span className="truncate">{buttonLabel}</span>
-        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+        className={`chip w-full justify-between ${count ? 'chip-on' : ''}`}>
+        <span className="truncate capitalize">{buttonLabel}</span>
+        <ChevronDown className={`w-3.5 h-3.5 shrink-0 opacity-60 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute z-40 mt-1 w-full min-w-[170px] bg-white border border-slate-200 rounded-lg shadow-lg py-1 max-h-64 overflow-y-auto">
+        <div className="absolute z-40 mt-1 w-full min-w-[180px] bg-white border border-slate-200 rounded-lg shadow-pop p-1 max-h-64 overflow-y-auto">
           {count > 0 && (
             <button type="button" onClick={() => onChange([])}
-              className="w-full text-left px-3 py-1.5 text-xs text-slate-400 hover:text-slate-600 border-b border-slate-100 mb-1">
+              className="w-full text-left px-2 py-1.5 rounded-md text-xs text-slate-500 hover:text-slate-800 hover:bg-slate-100 mb-1">
               Bersihkan pilihan
             </button>
           )}
@@ -116,7 +162,7 @@ function MultiSelect({ label, options, selected, onChange, minWidth = 130 }) {
             const on = selected.includes(o.v);
             return (
               <button key={o.v} type="button" onClick={() => toggle(o.v)}
-                className={`w-full text-left flex items-center gap-2 px-3 py-1.5 text-sm transition-colors ${on ? 'text-indigo-700 bg-indigo-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>
+                className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] text-slate-700 transition-colors hover:bg-slate-100">
                 <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${on ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}>
                   {on && <Check className="w-3 h-3 text-white" />}
                 </span>
@@ -355,13 +401,7 @@ function ChildrenSection({ item, onOpenItem }) {
   const [children, setChildren] = useState([]);
   const [loading,  setLoading]  = useState(true);
 
-  const TYPE_COLORS_LOCAL = {
-    story:       'text-blue-600 bg-blue-50',
-    bug:         'text-red-600 bg-red-50',
-    task:        'text-slate-600 bg-slate-100',
-    epic:        'text-purple-600 bg-purple-50',
-    independent: 'text-orange-600 bg-orange-50',
-  };
+  const TYPE_COLORS_LOCAL = TYPE_TAG;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -391,11 +431,11 @@ function ChildrenSection({ item, onOpenItem }) {
         <div className="space-y-1.5">
           {children.map(c => (
             <button key={c.id} type="button" onClick={() => onOpenItem(c)}
-              className="w-full text-left px-3 py-2 rounded-lg border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/30 transition-colors group">
+              className="w-full text-left px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors group">
               <div className="flex items-center gap-2">
                 <span className={`text-xs font-medium px-1.5 py-0.5 rounded shrink-0 ${TYPE_COLORS_LOCAL[c.type] || ''}`}>{c.type}</span>
                 <span className="font-mono text-xs text-slate-400 shrink-0">{c.code}</span>
-                <span className="text-sm text-slate-700 truncate flex-1 group-hover:text-indigo-700">{c.title}</span>
+                <span className="text-sm text-slate-800 truncate flex-1 group-hover:underline underline-offset-2">{c.title}</span>
                 <StatusBadge status={c.status} />
               </div>
             </button>
@@ -406,7 +446,7 @@ function ChildrenSection({ item, onOpenItem }) {
   );
 }
 
-function ItemForm({ item, products, users, sprints, features, epics, onSave, onClose, onOpenItem }) {
+function ItemForm({ item, defaults, products, users, sprints, features, epics, onSave, onClose, onOpenItem }) {
   const [form, setForm] = useState({
     product_id: item?.product_id || '',
     code: item?.code || '',
@@ -417,7 +457,8 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
     priority: item?.priority || 'medium',
     story_points: item?.story_points || 0,
     estimated_hours: item?.estimated_hours || '',
-    status: item?.status || 'backlog',
+    // defaults.status: "+" on a status group/column pre-selects that status for a new item
+    status: item?.status || defaults?.status || 'backlog',
     sprint_id: item?.sprint_id || '',
     assignee_ids: (item?.assignees || []).map(a => a.id),
     acceptance_criteria: item?.acceptance_criteria || '',
@@ -621,7 +662,6 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
         <div className="col-span-2">
           <F label="Parent User Story" required>
             <SearchableSelect
-              className="border-indigo-300"
               value={form.parent_id}
               onChange={v => setForm(f => ({ ...f, parent_id: v }))}
               options={stories.map(s => ({ value: String(s.id), label: `${s.code} — ${s.title}` }))}
@@ -630,7 +670,7 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
               emptyMessage="Tidak ada story di produk ini"
             />
           </F>
-          <p className="text-xs text-indigo-500 mt-1 flex items-center gap-1">
+          <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
             <Link2 className="w-3 h-3" />{form.type === 'task' ? 'Task' : 'Bug'} harus terhubung ke tepat 1 user story
           </p>
         </div>
@@ -689,7 +729,7 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
       ) : form.type === 'epic' ? (
         <div>
           <label className="label">
-            Story Points&nbsp;<span className="text-xs font-normal text-indigo-400">(otomatis)</span>
+            Story Points&nbsp;<span className="text-xs font-normal text-slate-400">(otomatis)</span>
           </label>
           <div className="input bg-slate-50 text-slate-600 flex items-center gap-2 cursor-default select-none">
             <span className="font-semibold">{form.story_points || 0}</span>
@@ -713,7 +753,7 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
               [13, 'Epic terlalu besar — harus dipecah menjadi item lebih kecil sebelum dikerjakan'],
             ].map(([pt, desc]) => (
               <div key={pt} className="flex gap-2 text-xs">
-                <span className="shrink-0 font-semibold text-indigo-600 w-5">{pt}</span>
+                <span className="shrink-0 font-semibold text-slate-800 w-5">{pt}</span>
                 <span className="text-slate-500">{desc}</span>
               </div>
             ))}
@@ -923,9 +963,44 @@ function ItemForm({ item, products, users, sprints, features, epics, onSave, onC
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+const SHORTCUTS = [
+  { label: 'Backlog',  icon: '📋', filterKey: 'status', filterVal: 'backlog' },
+  { label: 'Story',    icon: '📖', filterKey: 'type',   filterVal: 'story'   },
+  { label: 'Task',     icon: '🔧', filterKey: 'type',   filterVal: 'task'    },
+  { label: 'Epic',     icon: '🗂️', filterKey: 'type',   filterVal: 'epic'    },
+  { label: 'Selesai',  icon: '✅', filterKey: 'status', filterVal: 'done'    },
+];
+
+function ProductTag({ item }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[12.5px] text-slate-600 whitespace-nowrap">
+      <span className="w-[18px] h-[18px] rounded grid place-items-center text-[10px] font-bold text-white shrink-0"
+        style={{ backgroundColor: item.product_color || '#9A9CA4' }}>
+        {(item.product_code || '?').charAt(0)}
+      </span>
+      {item.product_code}
+    </span>
+  );
+}
+
+function Deadline({ item }) {
+  if (!item.deadline) return <span className="text-slate-400">—</span>;
+  return (
+    <span className={`inline-flex items-center gap-1 tabular-nums ${item.is_delayed ? 'text-red-600 font-medium' : 'text-slate-600'}`}>
+      {item.is_delayed && <AlertCircle className="w-3 h-3" />}
+      {format(parseISO(item.deadline), 'dd MMM')}
+    </span>
+  );
+}
+
+// Clicking a row/card opens the item, unless the click was really a text selection (e.g. copying a code).
+const isSelectingText = () => !!window.getSelection?.().toString();
+
 export default function Backlog() {
   const { can } = useAuth();
   const [searchParams] = useSearchParams();
+  // ?product=<id> comes from the Products list in the sidebar
+  const productParam = searchParams.get('product');
   const [items, setItems]       = useState([]);
   const [total, setTotal]       = useState(0);
   const [products, setProducts] = useState([]);
@@ -934,11 +1009,18 @@ export default function Backlog() {
   const [features, setFeatures] = useState([]);
   const [epics,    setEpics]    = useState([]);
   const [loading,  setLoading]  = useState(true);
-  const [modal,    setModal]    = useState({ open: false, item: null });
-  const [filters,  setFilters]  = useState({ product_id: [], status: [], priority: [], type: [], assignee_id: [], deadline_from: '', deadline_to: '', search: '' });
+  const [modal,    setModal]    = useState({ open: false, item: null, defaults: null });
+  const [filters,  setFilters]  = useState(() => ({ product_id: productParam ? [Number(productParam)] : [], status: [], priority: [], type: [], assignee_id: [], deadline_from: '', deadline_to: '', search: '' }));
   const [page,     setPage]     = useState(1);
   const [perPage,  setPerPage]  = useState(30);
+  const [view,     setView]     = useState('list');   // 'list' | 'board' — presentation only, same data
+  const [grouped,  setGrouped]  = useState(true);     // list grouped by status
+  const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
+  const lastProductParam = useRef(productParam);
   const PER_PAGE = perPage;
+
+  const canEdit   = can('backlog', 'update') || can('backlog', 'update_assigned');
+  const canCreate = can('backlog', 'create');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -974,12 +1056,20 @@ export default function Backlog() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Sidebar product link changed (or cleared by clicking "Backlog"): apply it as the product filter
+  useEffect(() => {
+    if (productParam === lastProductParam.current) return;
+    lastProductParam.current = productParam;
+    setFilters(f => ({ ...f, product_id: productParam ? [Number(productParam)] : [] }));
+    setPage(1);
+  }, [productParam]);
+
   // Auto-open item from URL ?item=123 (from notification click)
   useEffect(() => {
     const itemId = searchParams.get('item');
     if (!itemId) return;
     client.get(`/backlog/${itemId}`).then(res => {
-      setModal({ open: true, item: res.data });
+      setModal({ open: true, item: res.data, defaults: null });
     }).catch(() => {});
   }, [searchParams]);
 
@@ -1000,22 +1090,130 @@ export default function Backlog() {
     load();
   };
 
-  const TYPE_COLORS = {
-    story:       'text-blue-600 bg-blue-50',
-    bug:         'text-red-600 bg-red-50',
-    task:        'text-slate-600 bg-slate-100',
-    epic:        'text-purple-600 bg-purple-50',
-    independent: 'text-orange-600 bg-orange-50',
-  };
+  const setFilter = (key, vals) => { setFilters(f => ({ ...f, [key]: vals })); setPage(1); };
+  // Same rule as the old pencil button: only users who may edit can open an item
+  const openItem = (item) => { if (canEdit && !isSelectingText()) setModal({ open: true, item, defaults: null }); };
+  const openNew  = (status) => setModal({ open: true, item: null, defaults: status ? { status } : null });
+  const closeModal = () => setModal({ open: false, item: null, defaults: null });
+  const toggleGroup = (s) => setCollapsedGroups(prev => {
+    const next = new Set(prev);
+    next.has(s) ? next.delete(s) : next.add(s);
+    return next;
+  });
+
+  const stop = e => e.stopPropagation();
+
+  const sprintCell = (item) => item.type === 'independent' ? (
+    <span className="inline-flex items-center gap-1 text-[12.5px] text-orange-600"><Zap className="w-3 h-3" />independent</span>
+  ) : (
+    <select
+      className="max-w-[170px] text-[12.5px] text-slate-600 bg-transparent border-0 rounded-md pl-1.5 pr-6 py-1 -ml-1.5 cursor-pointer hover:bg-slate-100 focus:ring-0 focus:outline-none disabled:cursor-default disabled:hover:bg-transparent"
+      value={item.sprint_id || ''}
+      onClick={stop}
+      onChange={e => quickSprint(item.id, e.target.value)}
+      disabled={!canEdit}
+    >
+      <option value="">Backlog (no sprint)</option>
+      {sprints.filter(s => s.product_id === item.product_id).map(s => (
+        <option key={s.id} value={s.id}>{s.name}</option>
+      ))}
+    </select>
+  );
+
+  const pointsCell = (item) => item.type === 'independent'
+    ? <span className="text-orange-600">{item.estimated_hours ? `${item.estimated_hours}h` : '—'}</span>
+    : item.story_points;
+
+  const rowActions = (item) => (
+    <div className="flex items-center gap-0.5 justify-end md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+      {canEdit && (
+        <button className="w-7 h-7 grid place-items-center rounded-md text-slate-500 hover:bg-slate-200/70 hover:text-slate-800"
+          title={`Edit ${item.code}`} onClick={e => { stop(e); setModal({ open: true, item, defaults: null }); }}>
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+      )}
+      {can('backlog', 'delete') && (
+        <button className="w-7 h-7 grid place-items-center rounded-md text-slate-500 hover:bg-red-50 hover:text-red-700"
+          title={`Hapus ${item.code}`} onClick={e => { stop(e); deleteItem(item.id); }}>
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>
+  );
+
+  const itemRow = (item) => (
+    <tr key={item.id} onClick={() => openItem(item)}
+      className={`group border-b border-slate-100 hover:bg-slate-50 transition-colors ${canEdit ? 'cursor-pointer' : ''}`}>
+      <td className="pl-3 pr-3 py-2">
+        <div className="flex items-center gap-2 min-w-0 max-w-[560px]">
+          <StatusIcon status={item.status} />
+          <span className="font-mono text-[11.5px] text-slate-400 shrink-0">{item.code}</span>
+          {item.is_delayed && <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" aria-label="Terlambat" />}
+          <span className={`font-medium truncate min-w-0 ${item.type === 'epic' ? 'text-purple-700' : 'text-slate-800'}`} title={item.title}>{item.title}</span>
+          <TypeTag type={item.type} />
+          {item.parent_code && (
+            <span className="shrink-0 inline-flex items-center gap-0.5 font-mono text-[11px] text-slate-600 bg-slate-100 rounded px-1.5 leading-[18px]" title="Parent">
+              <Link2 className="w-2.5 h-2.5" />{item.parent_code}
+            </span>
+          )}
+          {(item.feature_name || item.epic_name) && (
+            <span className="text-xs text-slate-400 truncate min-w-0">{item.feature_name || item.epic_name}</span>
+          )}
+        </div>
+      </td>
+      <td className="px-3 py-2">
+        {item.assignees?.length > 0
+          ? <AssigneeStack assignees={item.assignees} />
+          : <span className="text-xs text-slate-400">—</span>}
+      </td>
+      <td className="px-3 py-2 text-[12.5px]"><Deadline item={item} /></td>
+      <td className="px-3 py-2"><PriorityBadge priority={item.priority} /></td>
+      <td className="px-3 py-2">
+        <StatusMenuButton status={item.status} canChange={canEdit} onChange={s => quickStatus(item.id, s)} />
+      </td>
+      <td className="px-3 py-2 text-right font-semibold text-slate-600 tabular-nums">{pointsCell(item)}</td>
+      <td className="px-3 py-2"><ProductTag item={item} /></td>
+      <td className="px-3 py-2">{sprintCell(item)}</td>
+      <td className="pl-2 pr-3 py-2">{rowActions(item)}</td>
+    </tr>
+  );
+
+  const groupedStatuses = STATUSES.filter(s => items.some(i => i.status === s));
 
   return (
-    <div className="space-y-4">
-      {/* Filter Bar */}
-      <div className="card px-4 py-3 flex flex-wrap gap-3 items-center">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+    <div className="space-y-3">
+      {/* View tabs + primary actions */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200">
+        <div className="flex gap-5" role="tablist">
+          {[{ k: 'list', l: 'List', Icon: List }, { k: 'board', l: 'Board', Icon: Columns3 }].map(({ k, l, Icon }) => (
+            <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setView(k)}
+              className={`inline-flex items-center gap-1.5 h-10 -mb-px border-b-2 text-[13.5px] transition-colors
+                ${view === k ? 'border-slate-800 text-slate-800 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
+              <Icon className="w-3.5 h-3.5" />{l}
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto flex items-center gap-2 pb-1.5">
+          {can('import', 'run') && (
+            <Link to="/import/jira" className="btn-ghost">
+              <FileDown className="w-4 h-4" />
+              Import Jira
+            </Link>
+          )}
+          {canCreate && (
+            <button className="btn-primary" onClick={() => openNew(null)}>
+              <Plus className="w-4 h-4" /> Tambah Item
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Filter toolbar */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <div className="relative w-full sm:w-56">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
           <input
-            className="input pl-9" placeholder="Cari judul atau kode..."
+            className="input h-8 py-1 pl-8 text-[12.5px]" placeholder="Cari judul atau kode..."
             value={filters.search}
             onChange={e => { setFilters(f => ({ ...f, search: e.target.value })); setPage(1); }}
           />
@@ -1026,242 +1224,195 @@ export default function Backlog() {
           { key: 'priority',   label: 'Prioritas', opts: PRIORITIES.map(p => ({ v: p, l: p })) },
           { key: 'type',       label: 'Tipe',      opts: TYPES.map(t => ({ v: t, l: t })) },
         ].map(({ key, label, opts }) => (
-          <MultiSelect key={key} label={label} options={opts}
+          <MultiSelect key={key} label={label} options={opts} minWidth={0}
             selected={filters[key]}
-            onChange={vals => { setFilters(f => ({ ...f, [key]: vals })); setPage(1); }} />
+            onChange={vals => setFilter(key, vals)} />
         ))}
         {/* Assignee filter */}
-        <SearchableMultiSelect label="Assignee" minWidth={160}
+        <SearchableMultiSelect label="Assignee" minWidth={150}
           options={users.map(u => ({ v: u.id, l: u.name }))}
           selected={filters.assignee_id}
           searchPlaceholder="Cari nama assignee..."
-          onChange={vals => { setFilters(f => ({ ...f, assignee_id: vals })); setPage(1); }} />
+          onChange={vals => setFilter('assignee_id', vals)} />
         {/* Deadline range */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-slate-500 whitespace-nowrap">Deadline</span>
-          <input type="date" className="input w-[140px] text-sm"
+        <div className={`chip pr-1.5 ${filters.deadline_from || filters.deadline_to ? 'chip-on' : ''}`}>
+          <span className="whitespace-nowrap">Deadline</span>
+          <input type="date" aria-label="Deadline dari" className="bg-transparent text-[12.5px] w-[118px] focus:outline-none"
             value={filters.deadline_from}
             onChange={e => { setFilters(f => ({ ...f, deadline_from: e.target.value })); setPage(1); }} />
-          <span className="text-xs text-slate-400">—</span>
-          <input type="date" className="input w-[140px] text-sm"
+          <span className="opacity-50">—</span>
+          <input type="date" aria-label="Deadline sampai" className="bg-transparent text-[12.5px] w-[118px] focus:outline-none"
             value={filters.deadline_to}
             onChange={e => { setFilters(f => ({ ...f, deadline_to: e.target.value })); setPage(1); }} />
           {(filters.deadline_from || filters.deadline_to) && (
-            <button className="text-slate-400 hover:text-slate-600"
+            <button title="Hapus filter deadline" className="w-5 h-5 grid place-items-center rounded opacity-70 hover:opacity-100"
               onClick={() => { setFilters(f => ({ ...f, deadline_from: '', deadline_to: '' })); setPage(1); }}>
               <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          {can('import', 'run') && (
-            <Link to="/import/jira"
-              className="btn-secondary flex items-center gap-1.5 text-sm">
-              <FileDown className="w-4 h-4" />
-              Import Jira
-            </Link>
-          )}
-          {can('backlog', 'create') && (
-            <button className="btn-primary" onClick={() => setModal({ open: true, item: null })}>
-              <Plus className="w-4 h-4" /> Tambah Item
-            </button>
-          )}
-        </div>
-
-        {/* Shortcut filter chips */}
-        <div className="w-full flex items-center gap-2 pt-2.5 border-t border-slate-100">
-          <span className="text-[11px] font-medium text-slate-400 shrink-0">Shortcut:</span>
-          {[
-            { label: 'Backlog',  icon: '📋', filterKey: 'status', filterVal: 'backlog' },
-            { label: 'Story',    icon: '📖', filterKey: 'type',   filterVal: 'story'   },
-            { label: 'Task',     icon: '🔧', filterKey: 'type',   filterVal: 'task'    },
-            { label: 'Epic',     icon: '🗂️', filterKey: 'type',   filterVal: 'epic'    },
-            { label: 'Selesai',  icon: '✅', filterKey: 'status', filterVal: 'done'    },
-          ].map(({ label, icon, filterKey, filterVal }) => {
-            const active = filters[filterKey].includes(filterVal);
-            return (
-              <button key={label} type="button"
-                onClick={() => { setFilters(f => ({ ...f, [filterKey]: active ? f[filterKey].filter(x => x !== filterVal) : [...f[filterKey], filterVal] })); setPage(1); }}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                  active
-                    ? 'bg-indigo-100 text-indigo-700 border-indigo-300'
-                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300'
-                }`}>
-                <span>{icon}</span>
-                {label}
-                {active && <X className="w-3 h-3 ml-0.5 opacity-60" />}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="card overflow-hidden">
-        <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
-          <p className="text-sm text-slate-500">
-            Menampilkan <strong>{items.length}</strong> dari <strong>{total}</strong> item
-          </p>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 text-xs text-slate-500">
-              Tampilkan
-              <select className="select py-0.5 text-xs w-auto"
-                value={perPage}
-                onChange={e => { setPerPage(+e.target.value); setPage(1); }}>
-                {[10, 30, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
-              </select>
-              baris
-            </div>
-            {total > PER_PAGE && (
-              <div className="flex items-center gap-2">
-                <button className="btn-secondary btn-sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Prev</button>
-                <span className="text-sm text-slate-500">{page} / {Math.ceil(total/PER_PAGE)}</span>
-                <button className="btn-secondary btn-sm" disabled={page >= Math.ceil(total/PER_PAGE)} onClick={() => setPage(p => p + 1)}>Next</button>
-              </div>
-            )}
-          </div>
-        </div>
-        {loading
-          ? <div className="flex items-center justify-center h-40"><div className="w-6 h-6 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>
-          : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                  <th className="text-left px-4 py-2.5 w-24">Kode</th>
-                  <th className="text-left px-4 py-2.5">Judul</th>
-                  <th className="text-center px-3 py-2.5 w-20">Tipe</th>
-                  <th className="text-center px-3 py-2.5 w-24">Prioritas</th>
-                  <th className="text-center px-3 py-2.5 w-28">Status</th>
-                  <th className="text-center px-3 py-2.5 w-20">Pts</th>
-                  <th className="text-left px-3 py-2.5 w-32">Produk</th>
-                  <th className="text-left px-3 py-2.5 w-28">Sprint</th>
-                  <th className="text-left px-3 py-2.5 w-40">Assignee</th>
-                  <th className="text-left px-3 py-2.5 w-24">Deadline</th>
-                  <th className="text-center px-3 py-2.5 w-16">Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.length === 0 && (
-                  <tr><td colSpan={11} className="text-center py-12 text-slate-400">Tidak ada item ditemukan</td></tr>
-                )}
-                {items.map(item => (
-                  <tr key={item.id} className={`table-row ${
-                    item.type === 'epic'  ? 'bg-purple-50/30' :
-                    item.type === 'bug'   ? 'bg-red-50/20' :
-                    item.type === 'task'  ? 'bg-slate-50/50' : ''
-                  }`}>
-                    <td className="px-4 py-3">
-                      <span className="font-mono text-xs text-slate-500 font-medium">{item.code}</span>
-                      {item.is_delayed && <AlertCircle className="w-3 h-3 text-red-500 inline ml-1" />}
-                    </td>
-                    <td className="px-4 py-3 max-w-[260px]">
-                      <div className={
-                        item.type === 'epic'  ? 'border-l-2 border-purple-300 pl-2' :
-                        item.type === 'story' ? '' :
-                        item.type === 'bug'   ? 'pl-3 border-l-2 border-red-200' :
-                                                'pl-3 border-l-2 border-slate-200'
-                      }>
-                        {(item.type === 'task' || item.type === 'bug') && item.parent_code && (
-                          <p className="text-xs text-indigo-500 flex items-center gap-1 mb-0.5">
-                            <Link2 className="w-2.5 h-2.5" />{item.parent_code}
-                          </p>
-                        )}
-                        {item.type === 'story' && item.parent_code && (
-                          <p className="text-xs text-purple-500 flex items-center gap-1 mb-0.5">
-                            <Link2 className="w-2.5 h-2.5" />{item.parent_code}
-                          </p>
-                        )}
-                        <p className={`font-medium truncate ${item.type === 'epic' ? 'text-purple-700' : 'text-slate-700'}`}
-                          title={item.title}>{item.title}</p>
-                        {(item.feature_name || item.epic_name) && (
-                          <p className="text-xs text-slate-400 truncate">{item.feature_name || item.epic_name}</p>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 text-center">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${TYPE_COLORS[item.type] || ''}`}>
-                        {item.type}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3 text-center"><PriorityBadge priority={item.priority} /></td>
-                    <td className="px-3 py-3 text-center">
-                      <select
-                        className="text-xs border-0 bg-transparent focus:ring-0 cursor-pointer"
-                        value={item.status}
-                        onChange={e => quickStatus(item.id, e.target.value)}
-                        disabled={!(can('backlog', 'update') || can('backlog', 'update_assigned'))}
-                      >
-                        {STATUSES.map(s => <option key={s} value={s}>{s.replace('_',' ')}</option>)}
-                      </select>
-                    </td>
-                    <td className="px-3 py-3 text-center font-semibold text-slate-600">
-                      {item.type === 'independent'
-                        ? <span className="text-orange-600">{item.estimated_hours ? `${item.estimated_hours}h` : '—'}</span>
-                        : item.story_points}
-                    </td>
-                    <td className="px-3 py-3">
-                      <span className="text-xs font-medium" style={{ color: item.product_color }}>{item.product_code}</span>
-                    </td>
-                    <td className="px-3 py-3 text-xs text-slate-500">
-                      {item.type === 'independent' ? (
-                        <span className="text-orange-500">⚡ independent</span>
-                      ) : (
-                        <select
-                          className="text-xs border-0 bg-transparent focus:ring-0 cursor-pointer"
-                          value={item.sprint_id || ''}
-                          onChange={e => quickSprint(item.id, e.target.value)}
-                          disabled={!(can('backlog', 'update') || can('backlog', 'update_assigned'))}
-                        >
-                          <option value="">Backlog (no sprint)</option>
-                          {sprints.filter(s => s.product_id === item.product_id).map(s => (
-                            <option key={s.id} value={s.id}>{s.name}</option>
-                          ))}
-                        </select>
-                      )}
-                    </td>
-                    <td className="px-3 py-3">
-                      {item.assignees?.length > 0
-                        ? <AssigneeStack assignees={item.assignees} />
-                        : <span className="text-xs text-slate-400">—</span>}
-                    </td>
-                    <td className="px-3 py-3 text-xs">
-                      {item.deadline
-                        ? <span className={item.is_delayed ? 'text-red-500 font-medium' : 'text-slate-500'}>
-                            {format(parseISO(item.deadline), 'dd MMM')}
-                          </span>
-                        : <span className="text-slate-400">—</span>}
-                    </td>
-                    <td className="px-3 py-3 text-center">
-                      <div className="flex items-center gap-1 justify-center">
-                        {(can('backlog', 'update') || can('backlog', 'update_assigned')) && (
-                          <button className="btn-ghost btn-sm p-1 rounded" onClick={() => setModal({ open: true, item })}>
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        {can('backlog', 'delete') && (
-                          <button className="btn-ghost btn-sm p-1 rounded text-red-500 hover:bg-red-50" onClick={() => deleteItem(item.id)}>
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        {view === 'list' && (
+          <button type="button" onClick={() => setGrouped(g => !g)} aria-pressed={grouped}
+            className={`chip sm:ml-auto ${grouped ? 'chip-on' : ''}`}>
+            <Layers className="w-3.5 h-3.5" />Group: Status
+          </button>
         )}
       </div>
 
-      <Modal open={modal.open} onClose={() => setModal({ open: false, item: null })}
+      {/* Shortcut filter chips */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] font-medium text-slate-400 shrink-0 mr-0.5">Shortcut:</span>
+        {SHORTCUTS.map(({ label, icon, filterKey, filterVal }) => {
+          const active = filters[filterKey].includes(filterVal);
+          return (
+            <button key={label} type="button"
+              onClick={() => { setFilters(f => ({ ...f, [filterKey]: active ? f[filterKey].filter(x => x !== filterVal) : [...f[filterKey], filterVal] })); setPage(1); }}
+              className={`chip h-7 text-xs ${active ? 'chip-on' : ''}`}>
+              <span>{icon}</span>
+              {label}
+              {active && <X className="w-3 h-3 ml-0.5 opacity-60" />}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Count, page size, pager */}
+      <div className="flex flex-wrap items-center justify-between gap-3 text-[12.5px] text-slate-500">
+        <p>Menampilkan <strong className="text-slate-800">{items.length}</strong> dari <strong className="text-slate-800">{total}</strong> item</p>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            Tampilkan
+            <select className="h-7 border border-slate-200 rounded-md bg-panel px-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
+              value={perPage}
+              onChange={e => { setPerPage(+e.target.value); setPage(1); }}>
+              {[10, 30, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+            baris
+          </div>
+          {total > PER_PAGE && (
+            <div className="flex items-center gap-2">
+              <button className="btn-secondary btn-sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Prev</button>
+              <span className="tabular-nums">{page} / {Math.ceil(total/PER_PAGE)}</span>
+              <button className="btn-secondary btn-sm" disabled={page >= Math.ceil(total/PER_PAGE)} onClick={() => setPage(p => p + 1)}>Next</button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center h-40"><div className="w-6 h-6 border-[3px] border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>
+      ) : items.length === 0 ? (
+        <div className="flex flex-col items-center text-center gap-2 py-14 text-slate-500">
+          <span className="w-11 h-11 rounded-xl bg-app border border-slate-200 grid place-items-center"><Search className="w-5 h-5" /></span>
+          <p className="text-[15px] font-semibold text-slate-800">Tidak ada item ditemukan</p>
+        </div>
+      ) : view === 'list' ? (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[980px] text-[13px]">
+            <thead>
+              <tr className="text-[12.5px] text-slate-500 border-b border-slate-200">
+                <th className="text-left font-normal pl-3 pr-3 py-2">Judul</th>
+                <th className="text-left font-normal px-3 py-2 w-36">Assignee</th>
+                <th className="text-left font-normal px-3 py-2 w-[88px]">Deadline</th>
+                <th className="text-left font-normal px-3 py-2 w-24">Prioritas</th>
+                <th className="text-left font-normal px-3 py-2 w-32">Status</th>
+                <th className="text-right font-normal px-3 py-2 w-12">Pts</th>
+                <th className="text-left font-normal px-3 py-2 w-[84px]">Produk</th>
+                <th className="text-left font-normal px-3 py-2 w-40">Sprint</th>
+                <th className="w-[72px]"><span className="sr-only">Aksi</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {grouped ? groupedStatuses.map(s => {
+                const list = items.filter(i => i.status === s);
+                const closed = collapsedGroups.has(s);
+                return [
+                  <tr key={`g-${s}`}>
+                    <td colSpan={9} className="pt-4 pb-1.5">
+                      <div className="flex items-center gap-2">
+                        <button type="button" onClick={() => toggleGroup(s)} aria-expanded={!closed}
+                          aria-label={`${closed ? 'Buka' : 'Tutup'} grup ${STATUS_MAP[s].label}`}
+                          className="w-6 h-6 grid place-items-center rounded-md text-slate-500 hover:bg-slate-100">
+                          <ChevronDown className={`w-4 h-4 transition-transform ${closed ? '-rotate-90' : ''}`} />
+                        </button>
+                        <StatusBadge status={s} variant="solid" />
+                        <span className="text-[12.5px] text-slate-400 tabular-nums">{list.length}</span>
+                        {canCreate && (
+                          <button type="button" title={`Tambah item ${STATUS_MAP[s].label}`} onClick={() => openNew(s)}
+                            className="w-6 h-6 grid place-items-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800">
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>,
+                  ...(closed ? [] : list.map(itemRow)),
+                ];
+              }) : items.map(itemRow)}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="flex gap-3 overflow-x-auto pb-4 items-start">
+          {STATUSES.map(s => {
+            const list = items.filter(i => i.status === s);
+            return (
+              <div key={s} className="w-[272px] shrink-0 bg-slate-100/80 rounded-xl p-2 flex flex-col gap-2">
+                <div className="flex items-center gap-2 px-1 pt-0.5">
+                  <StatusBadge status={s} variant="solid" />
+                  <span className="text-[12.5px] text-slate-400 tabular-nums">{list.length}</span>
+                  {canCreate && (
+                    <button type="button" title={`Tambah item ${STATUS_MAP[s].label}`} onClick={() => openNew(s)}
+                      className="ml-auto w-6 h-6 grid place-items-center rounded-md text-slate-500 hover:bg-slate-200/70 hover:text-slate-800">
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                {list.map(item => (
+                  <div key={item.id} onClick={() => openItem(item)}
+                    className={`bg-white border border-slate-200 rounded-[10px] px-3 py-2.5 flex flex-col gap-2 text-left hover:border-slate-300 hover:shadow-sm transition ${canEdit ? 'cursor-pointer' : ''}`}>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <StatusMenuButton variant="icon" status={item.status} canChange={canEdit} onChange={st => quickStatus(item.id, st)} />
+                      <span className="font-mono text-[11.5px] text-slate-400">{item.code}</span>
+                      <TypeTag type={item.type} />
+                      <span className="ml-auto"><ProductTag item={item} /></span>
+                    </div>
+                    <p className={`text-[13.5px] font-medium leading-snug ${item.type === 'epic' ? 'text-purple-700' : 'text-slate-800'}`}>{item.title}</p>
+                    {item.parent_code && (
+                      <span className="self-start inline-flex items-center gap-0.5 font-mono text-[11px] text-slate-600 bg-slate-100 rounded px-1.5 leading-[18px]">
+                        <Link2 className="w-2.5 h-2.5" />{item.parent_code}
+                      </span>
+                    )}
+                    <div className="flex items-center gap-2.5 text-xs text-slate-500 min-h-6">
+                      <span title={`Prioritas ${item.priority}`}><PriorityFlag priority={item.priority} /></span>
+                      <span className="tabular-nums">{item.type === 'independent' ? pointsCell(item) : `${item.story_points} pt`}</span>
+                      <Deadline item={item} />
+                      <span className="ml-auto" onClick={stop}>
+                        {item.assignees?.length > 0 && <AssigneeStack assignees={item.assignees} showName={false} />}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                {canCreate && (
+                  <button type="button" onClick={() => openNew(s)}
+                    className="flex items-center gap-1.5 px-1.5 py-1.5 rounded-md text-[13px] text-slate-400 hover:bg-slate-200/70 hover:text-slate-800">
+                    <Plus className="w-3.5 h-3.5" />Tambah Item
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <Modal open={modal.open} onClose={closeModal}
         title={modal.item ? `Edit Item — ${modal.item.code}` : 'Tambah Backlog Item'} size="lg">
         <ItemForm
-          item={modal.item} products={products} users={users}
+          item={modal.item} defaults={modal.defaults} products={products} users={users}
           sprints={sprints} features={features} epics={epics}
-          onSave={() => { setModal({ open: false, item: null }); load(); }}
-          onClose={() => setModal({ open: false, item: null })}
-          onOpenItem={childItem => setModal({ open: true, item: childItem })}
+          onSave={() => { closeModal(); load(); }}
+          onClose={closeModal}
+          onOpenItem={childItem => setModal({ open: true, item: childItem, defaults: null })}
         />
       </Modal>
     </div>
