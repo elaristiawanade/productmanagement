@@ -58,4 +58,12 @@
   .label      { @apply block text-xs font-medium text-slate-500 mb-1.5; }
   .select     { @apply input appearance-none; }
   .table-row  { @apply hover:bg-slate-50 border-b border-slate-100 transition-colors; }
+
+  /* Status pill (StatusBadge): soft tint of the status hue --c, readable in both themes */
+  .status-pill { @apply inline-flex items-center rounded-md font-semibold uppercase tracking-[.05em] whitespace-nowrap;
+    background: color-mix(in srgb, var(--c) 12%, rgb(var(--panel)));
+    color: color-mix(in srgb, var(--c) 80%, #000); }
+  [data-theme="dark"] .status-pill { background: color-mix(in srgb, var(--c) 20%, rgb(var(--panel))); color: color-mix(in srgb, var(--c) 55%, #fff); }
+  .status-pill.solid, [data-theme="dark"] .status-pill.solid { background: var(--c); color: #fff; }
+  .status-pill.neutral, [data-theme="dark"] .status-pill.neutral { @apply bg-slate-200/70 text-slate-600; }
 }

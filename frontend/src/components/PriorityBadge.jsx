@@ -1,15 +1,26 @@
+// ClickUp-style priority: a coloured flag + label. Same keys/labels as before; unknown falls back to medium.
 const P = {
-  critical: { label: 'Critical', cls: 'bg-red-100 text-red-700',       dot: 'bg-red-500'    },
-  high:     { label: 'High',     cls: 'bg-orange-100 text-orange-700', dot: 'bg-orange-500' },
-  medium:   { label: 'Medium',   cls: 'bg-yellow-100 text-yellow-700', dot: 'bg-yellow-500' },
-  low:      { label: 'Low',      cls: 'bg-slate-100 text-slate-600',   dot: 'bg-slate-400'  },
+  critical: { label: 'Critical', c: '#E5484D' },
+  high:     { label: 'High',     c: '#E8920F' },
+  medium:   { label: 'Medium',   c: '#4F7FE6' },
+  low:      { label: 'Low',      c: '#A1A7B0' },
 };
+
+export function PriorityFlag({ priority, size = 14 }) {
+  const p = P[priority] ?? P.medium;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={p.c} stroke={p.c} strokeWidth="2"
+      strokeLinejoin="round" strokeLinecap="round" className="shrink-0" aria-hidden="true">
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><path d="M4 22v-7" />
+    </svg>
+  );
+}
 
 export default function PriorityBadge({ priority }) {
   const p = P[priority] ?? P.medium;
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${p.cls}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${p.dot}`} />
+    <span className="inline-flex items-center gap-1.5 text-[12.5px] text-slate-600 whitespace-nowrap">
+      <PriorityFlag priority={priority} />
       {p.label}
     </span>
   );

@@ -35,14 +35,14 @@ export default function LinkInsertButton({ onInsert }) {
       <button
         type="button"
         title="Sisipkan tautan"
-        className="text-slate-400 hover:text-indigo-600 transition-colors p-1.5 shrink-0"
+        className="text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors p-1.5 shrink-0"
         onClick={() => setOpen(o => !o)}
       >
         <Link2 className="w-3.5 h-3.5" />
       </button>
       {open && (
-        <div className="absolute bottom-full right-0 mb-1.5 w-64 bg-white border border-slate-200 rounded-lg shadow-lg z-50 p-3 space-y-2">
-          <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Sisipkan Tautan</p>
+        <div className="absolute bottom-full right-0 mb-1.5 w-64 bg-white border border-slate-200 rounded-lg shadow-pop z-50 p-3 space-y-2">
+          <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-[.06em]">Sisipkan Tautan</p>
           <input
             ref={urlRef}
             className="input text-xs py-1.5"

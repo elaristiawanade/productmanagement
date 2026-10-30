@@ -48,7 +48,7 @@ export default function SearchableSelect({
     <div className="relative" ref={ref}>
       <button type="button" disabled={disabled}
         onClick={() => setOpen(o => !o)}
-        className={`select w-full flex items-center justify-between gap-2 text-left ${!selected ? 'text-slate-400' : 'text-slate-700'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}>
+        className={`select w-full flex items-center justify-between gap-2 text-left ${!selected ? 'text-slate-400' : 'text-slate-800'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}>
         <span className="flex items-center gap-1.5 min-w-0">
           {selected?.badge && (
             <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${selected.badge.className}`}>
@@ -60,8 +60,8 @@ export default function SearchableSelect({
         <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute z-40 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
-          <div className="relative border-b border-slate-100">
+        <div className="absolute z-40 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-pop overflow-hidden">
+          <div className="relative border-b border-slate-200">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
             <input
               ref={inputRef}
@@ -69,13 +69,13 @@ export default function SearchableSelect({
               onChange={e => setQuery(e.target.value)}
               onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); setQuery(''); } }}
               placeholder={searchPlaceholder}
-              className="w-full pl-8 pr-2 py-2 text-sm focus:outline-none"
+              className="w-full pl-8 pr-2 py-2 text-[13px] bg-transparent text-slate-800 placeholder:text-slate-400 focus:outline-none"
             />
           </div>
-          <div className="max-h-56 overflow-y-auto py-1">
+          <div className="max-h-56 overflow-y-auto p-1">
             {emptyOptionLabel && (
               <button type="button" onClick={() => pick('')}
-                className={`w-full text-left px-3 py-1.5 text-sm truncate transition-colors ${!value ? 'text-indigo-700 bg-indigo-50/50 font-medium' : 'text-slate-500 hover:bg-slate-50'}`}>
+                className={`w-full text-left px-2 py-1.5 rounded-md text-[13px] truncate transition-colors ${!value ? 'text-indigo-800 bg-indigo-50 font-medium' : 'text-slate-500 hover:bg-slate-100'}`}>
                 {emptyOptionLabel}
               </button>
             )}
@@ -86,8 +86,8 @@ export default function SearchableSelect({
             ) : (
               filtered.map(o => (
                 <button key={o.value} type="button" onClick={() => pick(o.value)}
-                  style={o.depth ? { paddingLeft: `${0.75 + o.depth * 0.9}rem` } : undefined}
-                  className={`w-full text-left px-3 py-1.5 text-sm transition-colors flex items-center gap-1.5 min-w-0 ${String(o.value) === String(value) ? 'text-indigo-700 bg-indigo-50/50 font-medium' : 'text-slate-600 hover:bg-slate-50'}`}>
+                  style={o.depth ? { paddingLeft: `${0.5 + o.depth * 0.9}rem` } : undefined}
+                  className={`w-full text-left px-2 py-1.5 rounded-md text-[13px] transition-colors flex items-center gap-1.5 min-w-0 ${String(o.value) === String(value) ? 'text-indigo-800 bg-indigo-50 font-medium' : 'text-slate-700 hover:bg-slate-100'}`}>
                   {o.badge && (
                     <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${o.badge.className}`}>
                       {o.badge.text}
