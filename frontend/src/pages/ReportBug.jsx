@@ -204,9 +204,10 @@ export default function ReportBug() {
                     <div key={idx} className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-50 aspect-video cursor-pointer"
                       onClick={() => setPreviewImage({ url: p.url, name: p.name })}>
                       <img src={p.url} alt={p.name} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors pointer-events-none">
                         <button type="button" onClick={(e) => { e.stopPropagation(); removePendingFile(idx); }}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
+                          title="Hapus lampiran" aria-label="Hapus lampiran"
+                          className="pointer-events-auto absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>

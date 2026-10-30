@@ -49,14 +49,14 @@ export default function LinkInsertButton({ onInsert }) {
             placeholder="URL (https://...)"
             value={url}
             onChange={e => setUrl(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); insert(); } if (e.key === 'Escape') setOpen(false); }}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); insert(); } if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } }}
           />
           <input
             className="input text-xs py-1.5"
             placeholder="Teks tampilan (opsional)"
             value={label}
             onChange={e => setLabel(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); insert(); } if (e.key === 'Escape') setOpen(false); }}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); insert(); } if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } }}
           />
           <button type="button" className="btn-primary text-xs py-1 px-2 w-full" onClick={insert} disabled={!url.trim()}>
             Sisipkan

@@ -243,7 +243,7 @@ function ActivitySection({ itemId, users = [] }) {
         selectMention(mentionSuggestions[mentionIdx].name);
         return;
       }
-      if (e.key === 'Escape') { setMentionOpen(false); return; }
+      if (e.key === 'Escape') { e.stopPropagation(); setMentionOpen(false); return; }
     }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -460,9 +460,10 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
 
   useEffect(() => {
     if (!previewImage && !previewDoc) return;
-    const handler = (e) => { if (e.key === 'Escape') { setPreviewImage(null); setPreviewDoc(null); } };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
+    // Capture + stopPropagation: Esc closes only the preview, not the item modal underneath
+    const handler = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setPreviewImage(null); setPreviewDoc(null); } };
+    document.addEventListener('keydown', handler, true);
+    return () => document.removeEventListener('keydown', handler, true);
   }, [previewImage, previewDoc]);
 
   const insertNotesLink = (snippet) => {
@@ -822,9 +823,10 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
                           <p className="text-[11px] text-slate-500 text-center truncate w-full">{att.original_name}</p>
                         </div>
                       )}
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors pointer-events-none">
                         <button type="button" onClick={(e) => { e.stopPropagation(); deleteAttachment(att.id); }}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
+                          title="Hapus lampiran" aria-label="Hapus lampiran"
+                          className="pointer-events-auto absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
