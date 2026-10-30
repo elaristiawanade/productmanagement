@@ -4,6 +4,34 @@ import {
   PieChart, Pie, Cell
 } from 'recharts';
 import { useChartTheme } from '../utils/chartTheme';
+
+const RESULT_LINES = [
+  { key: 'pass_count',    name: 'Pass',    color: '#1F9D55' },
+  { key: 'fail_count',    name: 'Fail',    color: '#E5484D' },
+  { key: 'blocked_count', name: 'Blocked', color: '#D9891A' },
+];
+
+// One product's sprints in time order (rows come sorted from /qa/dashboard). The x label drops the
+// product code ("HRS Sprint 2" -> "Sprint 2"); the tooltip still shows the full sprint name.
+function SprintTrend({ rows, ct, yMax, height, compact = false }) {
+  const code = rows[0]?.product_code;
+  const data = rows.map(r => ({ ...r, label: code ? String(r.sprint).replace(new RegExp(`^${code}\\s*`), '') : r.sprint }));
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart data={data} margin={{ top: 5, right: 12, left: -24, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} vertical={false} />
+        <XAxis dataKey="label" interval={0} tick={{ ...ct.axisTick, fontSize: compact ? 10 : 11 }} stroke={ct.line} padding={{ left: 10, right: 10 }} />
+        <YAxis tick={ct.axisTick} stroke={ct.line} allowDecimals={false} domain={[0, yMax]} />
+        <Tooltip {...ct.tooltip} labelFormatter={(label, payload) => payload?.[0]?.payload?.sprint || label} />
+        {!compact && <Legend wrapperStyle={{ fontSize: 12 }} />}
+        {RESULT_LINES.map(l => (
+          <Line key={l.key} type="linear" dataKey={l.key} name={l.name} stroke={l.color} strokeWidth={2}
+            dot={{ r: compact ? 3 : 3.5, fill: l.color }} activeDot={{ r: 5 }} />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
 import { Plus, Pencil, Trash2, Play, CheckCircle2, XCircle, AlertCircle, Clock, Download, Upload, AlertTriangle } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
@@ -250,7 +278,6 @@ export default function QA() {
     }
   };
 
-  const PIE_COLORS = ['#10b981','#ef4444','#f59e0b','#94a3b8', ct.muted];
   const summary = dashboard?.summary || {};
 
   const totalPagesCases = Math.max(1, Math.ceil(testCases.length / perPageCases));
@@ -261,12 +288,23 @@ export default function QA() {
   const handlePerPageCases = (v) => { setPerPageCases(v); setPageCases(1); };
   const handlePerPageRuns  = (v) => { setPerPageRuns(v);  setPageRuns(1);  };
 
+  // Colour travels with each slice: zero slices are filtered out, so colouring by index would shift hues
   const passPieData = [
-    { name: 'Pass',    value: +summary.pass_count    || 0 },
-    { name: 'Fail',    value: +summary.fail_count    || 0 },
-    { name: 'Blocked', value: +summary.blocked_count || 0 },
-    { name: 'Pending', value: +summary.pending_count || 0 },
+    { name: 'Pass',    value: +summary.pass_count    || 0, color: '#1F9D55' },
+    { name: 'Fail',    value: +summary.fail_count    || 0, color: '#E5484D' },
+    { name: 'Blocked', value: +summary.blocked_count || 0, color: '#D9891A' },
+    { name: 'Pending', value: +summary.pending_count || 0, color: '#9AA0A9' },
   ].filter(d => d.value > 0);
+
+  // Test results per sprint, one group per product (rows arrive ordered by product, then sprint date).
+  // Small multiples share one Y scale so products can be compared at a glance.
+  const sprintRows   = dashboard?.bySprint || [];
+  const sprintGroups = [];
+  sprintRows.forEach(r => {
+    const last = sprintGroups[sprintGroups.length - 1];
+    if (last && last[0].product_id === r.product_id) last.push(r); else sprintGroups.push([r]);
+  });
+  const sprintYMax = Math.max(1, ...sprintRows.flatMap(r => RESULT_LINES.map(l => +r[l.key] || 0)));
 
   return (
     <div className="space-y-5">
@@ -312,24 +350,42 @@ export default function QA() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                {/* Pass/Fail by Sprint */}
-                <div className="card p-5">
-                  <h3 className="font-semibold text-slate-700 mb-4">Test Results per Sprint</h3>
-                  <ResponsiveContainer width="100%" height={240}>
-                    <LineChart data={dashboard?.bySprint || []} margin={{ top: 5, right: 16, left: -20, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} />
-                      {/* interval 0 + slant: show every sprint label instead of letting Recharts skip some */}
-                      <XAxis dataKey="sprint" interval={0} angle={-25} textAnchor="end" height={52}
-                        tick={{ ...ct.axisTick, fontSize: 10 }} stroke={ct.line} padding={{ left: 12, right: 12 }} />
-                      <YAxis tick={ct.axisTick} stroke={ct.line} allowDecimals={false} />
-                      <Tooltip {...ct.tooltip} />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Line type="linear" dataKey="pass_count"    name="Pass"    stroke="#1F9D55" strokeWidth={2} dot={{ r: 3.5, fill: '#1F9D55' }} activeDot={{ r: 5 }} />
-                      <Line type="linear" dataKey="fail_count"    name="Fail"    stroke="#E5484D" strokeWidth={2} dot={{ r: 3.5, fill: '#E5484D' }} activeDot={{ r: 5 }} />
-                      <Line type="linear" dataKey="blocked_count" name="Blocked" stroke="#D9891A" strokeWidth={2} dot={{ r: 3.5, fill: '#D9891A' }} activeDot={{ r: 5 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
+                {/* Pass/Fail by Sprint: one trend per product (small multiples), or a single chart when filtered */}
+                {sprintGroups.length > 1 ? (
+                  <div className="card p-5 lg:col-span-2">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-4">
+                      <h3 className="font-semibold text-slate-700">Test Results per Sprint</h3>
+                      <span className="text-xs text-slate-400">per produk · maks 6 sprint terakhir</span>
+                      <div className="flex items-center gap-3 ml-auto text-xs text-slate-600">
+                        {RESULT_LINES.map(l => (
+                          <span key={l.key} className="inline-flex items-center gap-1.5">
+                            <i className="w-3 h-0.5 rounded" style={{ background: l.color }} />{l.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-4">
+                      {sprintGroups.map(rows => (
+                        <div key={rows[0].product_id} className="min-w-0">
+                          <p className="flex items-center gap-1.5 text-[13px] font-medium text-slate-700 mb-1 pl-1">
+                            <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: rows[0].product_color || '#9A9CA4' }} />
+                            <span className="truncate">{rows[0].product_name}</span>
+                          </p>
+                          <SprintTrend rows={rows} ct={ct} yMax={sprintYMax} height={170} compact />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="card p-5">
+                    <h3 className="font-semibold text-slate-700 mb-4">
+                      Test Results per Sprint{sprintGroups[0] ? <span className="font-normal text-slate-400"> · {sprintGroups[0][0].product_name}</span> : null}
+                    </h3>
+                    {sprintGroups.length
+                      ? <SprintTrend rows={sprintGroups[0]} ct={ct} yMax={sprintYMax} height={240} />
+                      : <p className="text-center py-16 text-sm text-slate-400">Belum ada sprint</p>}
+                  </div>
+                )}
 
                 {/* Distribution Pie */}
                 <div className="card p-5">
@@ -337,16 +393,15 @@ export default function QA() {
                   <ResponsiveContainer width="100%" height={220}>
                     <PieChart>
                       <Pie data={passPieData} cx="50%" cy="50%" innerRadius={45} outerRadius={72} paddingAngle={3} dataKey="value" label={({ name, percent }) => `${name} ${(percent*100).toFixed(0)}%`} labelLine={false}>
-                        {passPieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
+                        {passPieData.map(d => <Cell key={d.name} fill={d.color} />)}
                       </Pie>
                       <Tooltip {...ct.tooltip} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-              </div>
 
-              {/* Recent Failures */}
-              <div className="card overflow-hidden">
+              {/* Recent Failures: beside the pie when the sprint charts take the full row, else full width */}
+              <div className={`card overflow-hidden ${sprintGroups.length > 1 ? '' : 'lg:col-span-2'}`}>
                 <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
                   <XCircle className="w-4 h-4 text-red-500" />
                   <h3 className="font-semibold text-slate-700">Recent Failures</h3>
@@ -367,6 +422,7 @@ export default function QA() {
                     </div>
                   ))}
                 </div>
+              </div>
               </div>
             </div>
           )}

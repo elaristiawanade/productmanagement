@@ -245,16 +245,31 @@ public class QaController {
             "GROUP BY p.id, p.name, p.color " +
             "ORDER BY p.id");
 
+        // Latest SPRINTS_PER_PRODUCT sprints of each product (or only the filtered product), returned
+        // oldest-first within each product so the UI can draw one trend line per product.
+        // (Previously: all products interleaved by start_date and the OLDEST 12 overall, ignoring the filter.)
+        final int SPRINTS_PER_PRODUCT = 6;
+        String sprintProductFilter = product_id != null ? "AND s.product_id = ? " : "";
+        Object[] sprintParams = product_id != null ? new Object[]{product_id, SPRINTS_PER_PRODUCT} : new Object[]{SPRINTS_PER_PRODUCT};
         List<Map<String, Object>> bySprint = jdbc.queryForList(
-            "SELECT s.name AS sprint, s.product_id, " +
-            "  COUNT(CASE WHEN tr.result='pass'    THEN 1 END) AS pass_count, " +
-            "  COUNT(CASE WHEN tr.result='fail'    THEN 1 END) AS fail_count, " +
-            "  COUNT(CASE WHEN tr.result='blocked' THEN 1 END) AS blocked_count " +
-            "FROM sprints s " +
-            "LEFT JOIN qa_test_runs tr ON tr.sprint_id = s.id " +
-            "GROUP BY s.id, s.name, s.product_id " +
-            "ORDER BY s.start_date NULLS LAST " +
-            "LIMIT 12");
+            "SELECT sprint_id, sprint, product_id, product_code, product_name, product_color, start_date, " +
+            "  pass_count, fail_count, blocked_count " +
+            "FROM ( " +
+            "  SELECT s.id AS sprint_id, s.name AS sprint, s.product_id, s.start_date, " +
+            "    p.code AS product_code, p.name AS product_name, p.color AS product_color, " +
+            "    COUNT(CASE WHEN tr.result='pass'    THEN 1 END) AS pass_count, " +
+            "    COUNT(CASE WHEN tr.result='fail'    THEN 1 END) AS fail_count, " +
+            "    COUNT(CASE WHEN tr.result='blocked' THEN 1 END) AS blocked_count, " +
+            "    ROW_NUMBER() OVER (PARTITION BY s.product_id ORDER BY s.start_date DESC NULLS LAST, s.id DESC) AS rn " +
+            "  FROM sprints s " +
+            "  LEFT JOIN products p ON p.id = s.product_id " +
+            "  LEFT JOIN qa_test_runs tr ON tr.sprint_id = s.id " +
+            "  WHERE 1=1 " + sprintProductFilter +
+            "  GROUP BY s.id, s.name, s.product_id, s.start_date, p.code, p.name, p.color " +
+            ") x " +
+            "WHERE rn <= ? " +
+            "ORDER BY product_id, start_date NULLS LAST, sprint_id",
+            sprintParams);
 
         List<Map<String, Object>> recentFails = jdbc.queryForList(
             "SELECT tr.id, tr.result, tr.notes, tr.bug_reference, tr.executed_at, " +
