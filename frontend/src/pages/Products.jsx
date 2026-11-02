@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Plus, Pencil, Trash2, Package, ExternalLink, ChevronDown, ChevronUp, Map } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import client from '../api/client';
+import { useDeepLink } from '../utils/deepLink';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
@@ -218,6 +219,41 @@ export default function Products() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Ctrl K palette: ?product= / ?epic= / ?feature= / ?roadmap=<id> open that record's edit form (when the role may edit it,
+  // otherwise just reveal it in the list); ?new=product|roadmap|epic|feature (+ &pid=<product> for epic/feature) open an empty form.
+  useDeepLink(['product', 'epic', 'feature', 'roadmap', 'new', 'pid'], (p) => {
+    const open = (type, data, productId = null) => setModal({ open: true, type, data, productId });
+    const find = (url, id) => client.get(url).then(r => r.data.find(x => String(x.id) === String(id)));
+    const pid = p.pid ? Number(p.pid) : null;
+    if (p.new) {
+      if (p.new === 'product' && can('products', 'create')) open('product', null);
+      else if (p.new === 'roadmap' && can('roadmap', 'create')) { setTab('roadmap'); open('roadmap', null, pid); }
+      else if (p.new === 'epic' && can('epics', 'create') && pid) open('epic', null, pid);
+      else if (p.new === 'feature' && can('features', 'create') && pid) open('feature', null, pid);
+      return;
+    }
+    const reveal = (productId) => { setTab('products'); setExpanded(e => ({ ...e, [productId]: true })); };
+    if (p.product) {
+      reveal(p.product);
+      if (can('products', 'update')) find('/products', p.product).then(x => x && open('product', x, x.id)).catch(() => {});
+    } else if (p.epic) {
+      find('/epics', p.epic).then(x => {
+        if (!x) return;
+        reveal(x.product_id);
+        if (can('epics', 'update')) open('epic', x, x.product_id);
+      }).catch(() => {});
+    } else if (p.feature) {
+      find('/features', p.feature).then(x => {
+        if (!x) return;
+        reveal(x.product_id);
+        if (can('features', 'update')) open('feature', x, x.product_id);
+      }).catch(() => {});
+    } else if (p.roadmap) {
+      setTab('roadmap');
+      if (can('roadmap', 'update')) find('/roadmap', p.roadmap).then(x => x && open('roadmap', x, x.product_id)).catch(() => {});
+    }
+  });
 
   const deleteProduct = async (id) => {
     if (!confirm('Hapus produk ini dan semua datanya?')) return;

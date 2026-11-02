@@ -20,8 +20,8 @@ client.interceptors.response.use(
       localStorage.removeItem('pt_user');
       window.location.href = '/login';
     }
-    const msg = err.response?.data?.error || 'Terjadi kesalahan';
-    toast.error(msg);
+    // `silent: true` in the request config (background lookups such as the Ctrl K palette) skips the toast
+    if (!err.config?.silent) toast.error(err.response?.data?.error || 'Terjadi kesalahan');
     return Promise.reject(err);
   }
 );

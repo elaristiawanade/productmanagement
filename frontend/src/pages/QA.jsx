@@ -35,6 +35,7 @@ function SprintTrend({ rows, ct, yMax, height, compact = false }) {
 }
 import { Plus, Pencil, Trash2, Play, CheckCircle2, XCircle, AlertCircle, Clock, Download, Upload, AlertTriangle } from 'lucide-react';
 import client from '../api/client';
+import { useDeepLink } from '../utils/deepLink';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
@@ -251,6 +252,22 @@ export default function QA() {
   }, [filters]);
 
   useEffect(() => { load(); }, [load]);
+
+  // ?case=<id> (Ctrl K palette) opens that test case's form (when the role may edit it), ?new=1 an empty one.
+  // The list is fetched unfiltered so a case outside the current product filter still opens.
+  useDeepLink(['case', 'new'], ({ case: caseId, new: isNew }) => {
+    setTab('cases');
+    if (caseId) {
+      if (!can('qa', 'update')) return;
+      client.get('/qa/test-cases').then(r => {
+        const found = r.data.find(t => String(t.id) === String(caseId));
+        if (found) setModal({ open: true, type: 'tc', data: found });
+        else toast.error('Test case tidak ditemukan');
+      }).catch(() => {});
+    } else if (isNew && can('qa', 'create')) {
+      setModal({ open: true, type: 'tc', data: null });
+    }
+  });
 
   const deleteTC = async (id) => {
     if (!confirm('Hapus test case ini?')) return;

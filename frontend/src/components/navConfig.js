@@ -34,7 +34,7 @@ export const SECTIONS = [
 ];
 
 // Pages reachable outside the menus still need a breadcrumb.
-const EXTRA_PAGES = { '/profile': { section: 'home', label: 'Profile Saya', icon: User } };
+export const EXTRA_PAGES ={ '/profile': { section: 'home', label: 'Profile Saya', icon: User } };
 
 export const visibleItems = (section, can) => section.items.filter(it => !it.gate || can(...it.gate));
 

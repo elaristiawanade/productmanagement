@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff, AlertTriangle, XCircle, Lightbulb } from 'lucide-react';
 import client from '../api/client';
+import { useDeepLink } from '../utils/deepLink';
 import PresenceDot from '../components/PresenceDot';
 import Modal from '../components/Modal';
 import StatusMenu from '../components/StatusMenu';
@@ -820,6 +821,22 @@ export default function BugsIncident() {
   }, [filters]);
 
   useEffect(() => { if (canAccess) load(); }, [load, canAccess]);
+
+  // ?bug=<id> (notification link, Ctrl K palette) opens that bug's form; ?new=1 (palette action) opens an empty one.
+  // The list is fetched unfiltered so a bug outside the current product filter still opens.
+  useDeepLink(['bug', 'new'], ({ bug, new: isNew }) => {
+    if (!canAccess) return;
+    setTab('bugs');
+    if (bug) {
+      client.get('/bugs').then(r => {
+        const found = r.data.find(b => String(b.id) === String(bug));
+        if (found) setModal({ open: true, type: 'bug', data: found });
+        else toast.error('Bug tidak ditemukan');
+      }).catch(() => {});
+    } else if (isNew) {
+      setModal({ open: true, type: 'bug', data: null });
+    }
+  });
   useEffect(() => { setPageBugs(1); }, [bugFilters, hideClosed, sortKey, sortDir]);
 
   // Cycle: click a new column -> its default direction: click again -> the

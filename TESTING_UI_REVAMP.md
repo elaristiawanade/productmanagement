@@ -28,6 +28,7 @@ Legenda: ✅ sudah diuji otomatis & lulus · 🧑 perlu dites manual · ⚠️ c
 - ✅ Command palette (Ctrl K): buka lewat tombol, cari item (HRS-2), Enter membuka halaman, Esc menutup
 - ✅ Sidebar bisa disembunyikan/ditampilkan
 - ✅ Menu per role identik dengan original (admin, manager, commissioner, SME, PO, dev, QA); selisih hanya shortcut produk baru
+- ✅ Pencarian menyeluruh (Ctrl K, branch improvement-V2): hasil Bug/Test Case/Sprint/Produk/Epic/Feature/Roadmap/User/Role/Departemen/Leader Task membuka form atau detail yang benar; aksi "… baru" membuka form kosong; diuji untuk admin, PO, developer, QA, manager, commissioner, SME — grup & aksi yang tidak diizinkan role tidak muncul dan tidak ada toast error
 - 🧑 Hotkey keyboard Ctrl+K sendiri, navigasi ↑↓ di palette
 - 🧑 Tampilan terang & gelap di semua halaman, lebar layar kecil/tablet, hover/fokus
 - 🧑 Sesi kedaluwarsa (token habis) → kembali ke login

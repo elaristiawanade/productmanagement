@@ -3,6 +3,7 @@ import { ChevronRight, ChevronDown, Search, ExternalLink, AlertCircle, Plus, Lay
 import { Link } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import client from '../api/client';
+import { useDeepLink } from '../utils/deepLink';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import AssigneeStack from '../components/AssigneeStack';
@@ -444,6 +445,9 @@ export default function EpicBoard() {
   }, []);
 
   useEffect(() => { loadProducts(); }, [loadProducts]);
+
+  // ?new=1 (Ctrl K palette action) opens the same form as the "Tambah Epic" button
+  useDeepLink(['new'], ({ new: isNew }) => { if (isNew && can('epics', 'create')) setShowAddModal(true); });
 
   const filtersActive = !!(search.trim() || filterStatus);
 

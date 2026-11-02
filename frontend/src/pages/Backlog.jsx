@@ -14,6 +14,7 @@ import SearchableSelect from '../components/SearchableSelect';
 import SearchableMultiSelect from '../components/SearchableMultiSelect';
 import AssigneeStack from '../components/AssigneeStack';
 import { renderWithLinks } from '../utils/linkify';
+import { useDeepLink } from '../utils/deepLink';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { format, parseISO, formatDistanceToNow } from 'date-fns';
@@ -1039,14 +1040,16 @@ export default function Backlog() {
     setPage(1);
   }, [productParam]);
 
-  // Auto-open item from URL ?item=123 (from notification click)
-  useEffect(() => {
-    const itemId = searchParams.get('item');
-    if (!itemId) return;
-    client.get(`/backlog/${itemId}`).then(res => {
-      setModal({ open: true, item: res.data, defaults: null });
-    }).catch(() => {});
-  }, [searchParams]);
+  // ?item=123 (notification click, Ctrl K palette) opens that item; ?new=1 (palette action) opens an empty form
+  useDeepLink(['item', 'new'], ({ item, new: isNew }) => {
+    if (item) {
+      client.get(`/backlog/${item}`).then(res => {
+        setModal({ open: true, item: res.data, defaults: null });
+      }).catch(() => {});
+    } else if (isNew && canCreate) {
+      setModal({ open: true, item: null, defaults: null });
+    }
+  });
 
   const deleteItem = async (id) => {
     if (!confirm('Hapus item ini?')) return;
