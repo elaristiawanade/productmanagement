@@ -194,7 +194,8 @@ Fitur baru setelah revamp (PRD 3.9, v3.9; `migration_v24.sql`). Diuji lewat API 
 
 ## 22. Author tiket (QA Module, Backlog)
 Fitur baru setelah revamp (PRD 3.2, 3.8, v3.10). Memakai `qa_test_cases.created_by` dan `backlog_items.created_by` yang sudah ada, tanpa migrasi; backend Backlog menambah `created_by_name` (JOIN `users`). Diuji di Chrome headless pada stack Docker lokal.
-- ✅ **QA** — kolom **Author** di tabel Test Cases (setelah *Fail*, sebelum *Produk*); klik baris tabel tetap tidak membuka apa pun (perilaku lama); modal Edit Test Case tidak berubah
+- ✅ **QA** — kolom **Author** di tabel Test Cases (setelah *Fail*, sebelum *Produk*); modal Edit Test Case tidak berubah
+- ✅ **QA** — klik baris membuka modal detail/edit (admin dan QA); tombol Run Test tetap membuka modal Run (bukan form edit); developer (tanpa `qa.update`) klik baris tidak membuka apa pun
 - ✅ **Bugs** — kolom Incident Author di tabel tidak berubah; modal Edit Bug tidak berubah
 - ✅ **Backlog** — klik item membuka modal Edit dengan baris *Author: <nama> · <tanggal>* di paling atas; tabel Backlog tidak ditambah kolom
 - ✅ `created_by` terisi di 160/160 test case dan 274/274 backlog item; build frontend dan backend lolos

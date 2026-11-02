@@ -529,7 +529,10 @@ export default function QA() {
                     <tbody>
                       {pagedCases.length === 0 && <tr><td colSpan={12} className="text-center py-10 text-slate-400">Belum ada test case</td></tr>}
                       {pagedCases.map(tc => (
-                        <tr key={tc.id} className="table-row">
+                        <tr key={tc.id}
+                          // Whole row opens the test case (same as the pencil, so only with qa.update); inner controls stop propagation
+                          onClick={() => { if (can('qa', 'update') && !window.getSelection?.().toString()) setModal({ open: true, type: 'tc', data: tc }); }}
+                          className={`table-row ${can('qa', 'update') ? 'cursor-pointer' : ''}`}>
                           <td className="px-4 py-3 whitespace-nowrap"><span className="font-mono text-xs text-slate-500">{tc.code}</span></td>
                           <td className="px-4 py-3 min-w-[200px] max-w-[260px]">
                             <p className="font-medium text-slate-700 truncate">{tc.title}</p>
@@ -559,7 +562,7 @@ export default function QA() {
                           <td className="px-3 py-3 text-xs text-slate-500 whitespace-nowrap">{tc.created_by_name || '—'}</td>
                           <td className="px-3 py-3 text-xs text-slate-500">{tc.product_code}</td>
                           <td className="px-3 py-3">
-                            <div className="flex items-center gap-1 justify-center">
+                            <div className="flex items-center gap-1 justify-center" onClick={e => e.stopPropagation()}>
                               {can('qa', 'run') && (
                                 <button className="btn-ghost btn-sm p-1.5 rounded-lg text-slate-600 hover:bg-slate-100" title="Run Test"
                                   onClick={() => setModal({ open: true, type: 'run', data: tc })}>
