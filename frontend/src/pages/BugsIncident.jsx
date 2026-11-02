@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
-import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff, AlertTriangle, XCircle, Lightbulb, HelpCircle } from 'lucide-react';
+import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Upload, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff, AlertTriangle, XCircle, Lightbulb, HelpCircle } from 'lucide-react';
 import client from '../api/client';
 import { useDeepLink } from '../utils/deepLink';
 import PresenceDot from '../components/PresenceDot';
@@ -17,6 +17,7 @@ import LinkInsertButton from '../components/LinkInsertButton';
 import SearchableSelect from '../components/SearchableSelect';
 import SearchableMultiSelect from '../components/SearchableMultiSelect';
 import AssigneeStack from '../components/AssigneeStack';
+import AttachmentSection from '../components/AttachmentSection';
 import { renderWithLinks } from '../utils/linkify';
 import { buildBacklogTreeOptions } from '../utils/backlogHierarchy';
 import { buildFeatureOptions, featureText } from '../utils/featureOptions';import { useAuth } from '../context/AuthContext';
@@ -354,97 +355,13 @@ function BugForm({ bug, products, backlogItems, features, users, onSave, onClose
     assignee_ids: (bug?.assignees || []).map(a => a.id),
   });
   const [saving, setSaving] = useState(false);
-  const [attachments, setAttachments] = useState([]);
-  const [pendingFiles, setPendingFiles] = useState([]);
-  const [uploading,   setUploading]   = useState(false);
-  const [previewImage, setPreviewImage] = useState(null);
-  const fileInputRef = useRef(null);
+  const attachRef = useRef(null);
   // Done items are hidden from new picks but the item currently linked stays visible
   // even if done, so editing an existing bug never silently unlinks it.
   const filteredItems = backlogItems.filter(b =>
     (!form.product_id || b.product_id === +form.product_id) &&
     (b.status !== 'done' || String(b.id) === String(form.backlog_item_id))
   );
-
-  useEffect(() => {
-    if (!previewImage) return;
-    // Capture + stopPropagation: Esc closes only the preview, not the bug modal underneath
-    const handler = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setPreviewImage(null); } };
-    document.addEventListener('keydown', handler, true);
-    return () => document.removeEventListener('keydown', handler, true);
-  }, [previewImage]);
-
-  const loadAttachments = useCallback(async () => {
-    if (!bug?.id) return;
-    try {
-      const res = await client.get(`/bugs/${bug.id}/attachments`);
-      setAttachments(res.data || []);
-    } catch { setAttachments([]); }
-  }, [bug?.id]);
-
-  useEffect(() => { loadAttachments(); }, [loadAttachments]);
-
-  // Revoke local object URLs for queued (not-yet-uploaded) images on unmount only.
-  const pendingFilesRef = useRef(pendingFiles);
-  pendingFilesRef.current = pendingFiles;
-  useEffect(() => () => { pendingFilesRef.current.forEach(p => URL.revokeObjectURL(p.url)); }, []);
-
-  const handleUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) { toast.error('Hanya file gambar yang diizinkan'); return; }
-    if (file.size > 10 * 1024 * 1024) { toast.error('Ukuran file maks 10MB'); return; }
-    if (fileInputRef.current) fileInputRef.current.value = '';
-
-    // Bug belum dibuat: simpan gambar sementara, unggah setelah bug tersimpan.
-    if (!bug?.id) {
-      setPendingFiles(pf => [...pf, { file, url: URL.createObjectURL(file), name: file.name }]);
-      return;
-    }
-
-    setUploading(true);
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      await client.post(`/bugs/${bug.id}/attachments`, fd);
-      toast.success('Gambar berhasil diunggah');
-      loadAttachments();
-    } catch (err) {
-      toast.error(err?.response?.data?.error || 'Gagal mengunggah gambar');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const removePendingFile = (idx) => {
-    setPendingFiles(pf => {
-      URL.revokeObjectURL(pf[idx].url);
-      return pf.filter((_, i) => i !== idx);
-    });
-  };
-
-  const deleteAttachment = async (id) => {
-    if (!confirm('Hapus lampiran ini?')) return;
-    try {
-      await client.delete(`/attachments/${id}`);
-      toast.success('Lampiran dihapus');
-      loadAttachments();
-    } catch { toast.error('Gagal menghapus'); }
-  };
-
-  const uploadPendingFiles = async (newBugId) => {
-    for (const p of pendingFiles) {
-      try {
-        const fd = new FormData();
-        fd.append('file', p.file);
-        await client.post(`/bugs/${newBugId}/attachments`, fd);
-      } catch {
-        toast.error(`Gagal mengunggah ${p.name}`);
-      } finally {
-        URL.revokeObjectURL(p.url);
-      }
-    }
-  };
 
   const save = async (e) => {
     e.preventDefault(); setSaving(true);
@@ -460,7 +377,7 @@ function BugForm({ bug, products, backlogItems, features, users, onSave, onClose
         toast.success('Bug diperbarui');
       } else {
         const res = await client.post('/bugs', payload);
-        if (pendingFiles.length) await uploadPendingFiles(res.data.id);
+        await attachRef.current?.uploadPending(res.data.id);
         toast.success('Bug dibuat');
       }
       onSave();
@@ -546,82 +463,7 @@ function BugForm({ bug, products, backlogItems, features, users, onSave, onClose
           onChange={vals => setForm(f => ({ ...f, assignee_ids: vals }))} />
       </div>
       {/* Attachments — queued locally until the bug is created, uploaded live once it exists */}
-      <div className="col-span-2">
-        <div className="border-t border-slate-100 pt-4">
-          <div className="flex items-center justify-between mb-3">
-            <label className="label mb-0 flex items-center gap-1.5">
-              <Paperclip className="w-3.5 h-3.5 text-slate-400" />
-              Lampiran Gambar
-              {(bug?.id ? attachments.length : pendingFiles.length) > 0 && (
-                <span className="text-xs font-normal text-slate-400 ml-1">({bug?.id ? attachments.length : pendingFiles.length})</span>
-              )}
-            </label>
-            <button type="button"
-              className="btn-secondary text-xs py-1 px-2 flex items-center gap-1.5"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}>
-              {uploading
-                ? <span className="w-3.5 h-3.5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-                : <Upload className="w-3.5 h-3.5" />}
-              {uploading ? 'Mengunggah...' : 'Unggah Gambar'}
-            </button>
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
-          </div>
-          {!bug?.id && (
-            <p className="text-xs text-slate-400 -mt-2 mb-3">Gambar akan diunggah setelah bug disimpan.</p>
-          )}
-          {(bug?.id ? attachments.length : pendingFiles.length) === 0 ? (
-            <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center cursor-pointer hover:border-slate-400 hover:bg-slate-50 transition-colors"
-              onClick={() => fileInputRef.current?.click()}>
-              <ImageIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-              <p className="text-xs text-slate-400">Klik untuk unggah gambar</p>
-              <p className="text-xs text-slate-300 mt-0.5">JPG, PNG, GIF, WEBP • Maks 10MB</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-2">
-              {bug?.id
-                ? attachments.map(att => (
-                    <div key={att.id} className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-50 aspect-video cursor-pointer"
-                      onClick={() => setPreviewImage({ url: `/api/attachments/file/${att.filename}`, name: att.original_name })}>
-                      <img src={`/api/attachments/file/${att.filename}`} alt={att.original_name}
-                        className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors pointer-events-none">
-                        <button type="button" onClick={(e) => { e.stopPropagation(); deleteAttachment(att.id); }}
-                          title="Hapus lampiran" aria-label="Hapus lampiran"
-                          className="pointer-events-auto absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      <p className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs px-1.5 py-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                        {att.original_name}
-                      </p>
-                    </div>
-                  ))
-                : pendingFiles.map((p, idx) => (
-                    <div key={idx} className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-50 aspect-video cursor-pointer"
-                      onClick={() => setPreviewImage({ url: p.url, name: p.name })}>
-                      <img src={p.url} alt={p.name} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors pointer-events-none">
-                        <button type="button" onClick={(e) => { e.stopPropagation(); removePendingFile(idx); }}
-                          title="Hapus lampiran" aria-label="Hapus lampiran"
-                          className="pointer-events-auto absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      <p className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs px-1.5 py-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                        {p.name}
-                      </p>
-                    </div>
-                  ))}
-              <button type="button" onClick={() => fileInputRef.current?.click()}
-                className="aspect-video rounded-lg border-2 border-dashed border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-colors flex flex-col items-center justify-center gap-1">
-                <Upload className="w-4 h-4 text-slate-400" />
-                <span className="text-xs text-slate-400">Tambah</span>
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+      <AttachmentSection ref={attachRef} basePath="/bugs" deletePath="/bugs/attachments" entityId={bug?.id} noun="bug" />
 
       {bug?.id && (
         <div className="col-span-2">
@@ -634,17 +476,6 @@ function BugForm({ bug, products, backlogItems, features, users, onSave, onClose
         <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Menyimpan...' : (bug?.id ? 'Perbarui' : 'Buat Bug')}</button>
       </div>
 
-      {previewImage && (
-        <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6"
-          onClick={() => setPreviewImage(null)}>
-          <button type="button" onClick={() => setPreviewImage(null)}
-            className="absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2">
-            <X className="w-5 h-5" />
-          </button>
-          <img src={previewImage.url} alt={previewImage.name}
-            className="max-w-full max-h-full rounded-lg shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
-        </div>
-      )}
     </form>
   );
 }

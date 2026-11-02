@@ -41,7 +41,8 @@ import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import SearchableSelect from '../components/SearchableSelect';
 import { buildBacklogTreeOptions } from '../utils/backlogHierarchy';
-import { buildFeatureOptions, featureText } from '../utils/featureOptions';import { useAuth } from '../context/AuthContext';
+import { buildFeatureOptions, featureText } from '../utils/featureOptions';
+import AttachmentSection from '../components/AttachmentSection';import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { format, parseISO } from 'date-fns';
 
@@ -62,6 +63,7 @@ function TestCaseForm({ tc, products, backlogItems, features, onSave, onClose })
     status: tc?.status || 'draft', priority: tc?.priority || 'medium',
   });
   const [saving, setSaving] = useState(false);
+  const attachRef = useRef(null);
   // Done items are hidden from new picks (QA shouldn't pile onto closed work) but the
   // item currently linked stays visible even if done, so editing never silently unlinks it.
   const filteredItems = backlogItems.filter(b =>
@@ -75,7 +77,11 @@ function TestCaseForm({ tc, products, backlogItems, features, onSave, onClose })
     setSaving(true);
     try {
       if (tc?.id) { await client.put(`/qa/test-cases/${tc.id}`, form); toast.success('Test case diperbarui'); }
-      else        { await client.post('/qa/test-cases', form);          toast.success('Test case dibuat'); }
+      else {
+        const res = await client.post('/qa/test-cases', form);
+        await attachRef.current?.uploadPending(res.data.id);
+        toast.success('Test case dibuat');
+      }
       onSave();
     } catch {} finally { setSaving(false); }
   };
@@ -139,6 +145,8 @@ function TestCaseForm({ tc, products, backlogItems, features, onSave, onClose })
           {['critical','high','medium','low'].map(p => <option key={p} value={p}>{p}</option>)}
         </select>
       </div>
+      {/* Attachments — queued locally until the test case is created, uploaded live once it exists */}
+      <AttachmentSection ref={attachRef} basePath="/qa/test-cases" deletePath="/qa/attachments" entityId={tc?.id} noun="test case" />
       <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-slate-100">
         <button type="button" className="btn-secondary" onClick={onClose}>Batal</button>
         <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Menyimpan...' : (tc?.id ? 'Perbarui' : 'Buat Test Case')}</button>

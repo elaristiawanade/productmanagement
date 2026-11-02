@@ -1,6 +1,7 @@
 package com.producttracker.controller;
 
 import com.producttracker.config.BugHelper;
+import com.producttracker.config.PermissionHelper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
@@ -143,19 +144,74 @@ public class AttachmentController {
         if (!bugHelper.canAccess(principal)) {
             return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses ke modul Bugs Incident"));
         }
+        // Same file types and size limit as Backlog attachments
+        return storeUpload("bug_attachments", "bug_id", "bugs", id, "Bug tidak ditemukan", file, principal);
+    }
+
+    @DeleteMapping("/bugs/attachments/{id}")
+    public ResponseEntity<?> deleteBugAttachment(@PathVariable Long id, @AuthenticationPrincipal Object principal) {
+        if (!bugHelper.canAccess(principal)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses ke modul Bugs Incident"));
+        }
+        return deleteScoped("bug_attachments", id);
+    }
+
+    // ── QA test case attachments ─────────────────────────────────────────────
+
+    @GetMapping("/qa/test-cases/{id}/attachments")
+    public ResponseEntity<?> listQaAttachments(@PathVariable Long id) {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+            "SELECT a.*, u.name AS uploaded_by_name " +
+            "FROM qa_attachments a " +
+            "LEFT JOIN users u ON u.id = a.uploaded_by " +
+            "WHERE a.test_case_id = ? ORDER BY a.created_at",
+            id
+        );
+        rows.forEach(r -> r.put("url", "/api/attachments/file/" + r.get("filename")));
+        return ResponseEntity.ok(rows);
+    }
+
+    // `create` is enough: a new test case's queued files are uploaded right after it is created
+    @PostMapping("/qa/test-cases/{id}/attachments")
+    public ResponseEntity<?> uploadQaAttachment(@PathVariable Long id,
+                                                @RequestParam("file") MultipartFile file,
+                                                @AuthenticationPrincipal Object principal) {
+        if (!PermissionHelper.can(principal, "qa", "create") && !PermissionHelper.can(principal, "qa", "update")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk mengunggah lampiran test case"));
+        }
+        return storeUpload("qa_attachments", "test_case_id", "qa_test_cases", id, "Test case tidak ditemukan", file, principal);
+    }
+
+    @DeleteMapping("/qa/attachments/{id}")
+    public ResponseEntity<?> deleteQaAttachment(@PathVariable Long id, @AuthenticationPrincipal Object principal) {
+        if (!PermissionHelper.can(principal, "qa", "update")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk menghapus lampiran test case"));
+        }
+        return deleteScoped("qa_attachments", id);
+    }
+
+    /**
+     * Validates the file (same rules as Backlog), stores it on disk and records it in `table`.
+     * `table`, `ownerColumn` and `ownerTable` are internal constants, never request input.
+     */
+    private ResponseEntity<?> storeUpload(String table, String ownerColumn, String ownerTable, Long ownerId,
+                                          String notFoundMessage, MultipartFile file, Object principal) {
         String contentType = file.getContentType();
-        if (contentType == null || !contentType.startsWith("image/")) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Hanya file gambar yang diperbolehkan (JPEG, PNG, GIF, WebP)"));
+        String original = file.getOriginalFilename() != null ? file.getOriginalFilename() : "upload";
+        if (!isAllowedBacklogFile(contentType, original)) {
+            return ResponseEntity.badRequest().body(Map.of("error", BACKLOG_ALLOWED_MESSAGE));
         }
         if (file.getSize() > 10L * 1024 * 1024) {
             return ResponseEntity.badRequest().body(Map.of("error", "Ukuran file maksimal 10MB"));
+        }
+        if (jdbc.queryForList("SELECT 1 FROM " + ownerTable + " WHERE id = ?", ownerId).isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("error", notFoundMessage));
         }
 
         try {
             Path uploadPath = Paths.get(uploadDir).toAbsolutePath();
             Files.createDirectories(uploadPath);
 
-            String original = file.getOriginalFilename() != null ? file.getOriginalFilename() : "upload";
             String ext = original.contains(".") ? original.substring(original.lastIndexOf(".")) : "";
             String filename = UUID.randomUUID().toString() + ext;
 
@@ -164,9 +220,9 @@ public class AttachmentController {
             @SuppressWarnings("unchecked")
             Map<String, Object> user = principal instanceof Map ? (Map<String, Object>) principal : null;
             Map<String, Object> row = jdbc.queryForMap(
-                "INSERT INTO bug_attachments (bug_id, filename, original_name, file_size, mime_type, uploaded_by) " +
+                "INSERT INTO " + table + " (" + ownerColumn + ", filename, original_name, file_size, mime_type, uploaded_by) " +
                 "VALUES (?,?,?,?,?,?) RETURNING *",
-                id, filename, original, file.getSize(), contentType,
+                ownerId, filename, original, file.getSize(), contentType,
                 user != null ? user.get("id") : null
             );
             row.put("url", "/api/attachments/file/" + filename);
@@ -174,6 +230,16 @@ public class AttachmentController {
         } catch (IOException e) {
             return ResponseEntity.status(500).body(Map.of("error", "Gagal menyimpan file"));
         }
+    }
+
+    /** Deletes one attachment from a single table; ids are only unique per table, so never search across tables. */
+    private ResponseEntity<?> deleteScoped(String table, Long id) {
+        List<Map<String, Object>> rows = jdbc.queryForList("SELECT filename FROM " + table + " WHERE id = ?", id);
+        if (rows.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "Lampiran tidak ditemukan"));
+        String filename = (String) rows.get(0).get("filename");
+        jdbc.update("DELETE FROM " + table + " WHERE id = ?", id);
+        deleteFileQuietly(filename);
+        return ResponseEntity.ok(Map.of("message", "Lampiran dihapus"));
     }
 
     @PostMapping("/public/bugs/{id}/attachments")
@@ -219,27 +285,12 @@ public class AttachmentController {
         }
     }
 
+    // Backlog attachments only. Attachment ids are unique per table, not across tables, so bug and QA
+    // attachments have their own delete routes — falling back to another table here could delete the
+    // wrong file when two tables share the same id.
     @DeleteMapping("/attachments/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
-        List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT filename FROM backlog_attachments WHERE id = ?", id
-        );
-        if (!rows.isEmpty()) {
-            String filename = (String) rows.get(0).get("filename");
-            jdbc.update("DELETE FROM backlog_attachments WHERE id = ?", id);
-            deleteFileQuietly(filename);
-            return ResponseEntity.ok(Map.of("message", "Lampiran dihapus"));
-        }
-
-        rows = jdbc.queryForList("SELECT filename FROM bug_attachments WHERE id = ?", id);
-        if (!rows.isEmpty()) {
-            String filename = (String) rows.get(0).get("filename");
-            jdbc.update("DELETE FROM bug_attachments WHERE id = ?", id);
-            deleteFileQuietly(filename);
-            return ResponseEntity.ok(Map.of("message", "Lampiran dihapus"));
-        }
-
-        return ResponseEntity.status(404).body(Map.of("error", "Lampiran tidak ditemukan"));
+        return deleteScoped("backlog_attachments", id);
     }
 
     private void deleteFileQuietly(String filename) {
@@ -282,8 +333,9 @@ public class AttachmentController {
     private String lookupOriginalName(String filename) {
         List<String> names = jdbc.queryForList(
             "SELECT original_name FROM backlog_attachments WHERE filename = ? " +
-            "UNION ALL SELECT original_name FROM bug_attachments WHERE filename = ?",
-            String.class, filename, filename
+            "UNION ALL SELECT original_name FROM bug_attachments WHERE filename = ? " +
+            "UNION ALL SELECT original_name FROM qa_attachments WHERE filename = ?",
+            String.class, filename, filename, filename
         );
         return names.isEmpty() ? null : names.get(0);
     }
