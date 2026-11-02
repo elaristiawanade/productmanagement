@@ -28,7 +28,7 @@ Legenda: ✅ sudah diuji otomatis & lulus · 🧑 perlu dites manual · ⚠️ c
 - ✅ Command palette (Ctrl K): buka lewat tombol, cari item (HRS-2), Enter membuka halaman, Esc menutup
 - ✅ Sidebar bisa disembunyikan/ditampilkan
 - ✅ Menu per role identik dengan original (admin, manager, commissioner, SME, PO, dev, QA); selisih hanya shortcut produk baru
-- ✅ Pencarian menyeluruh (Ctrl K, branch improvement-V2): hasil Bug/Test Case/Sprint/Produk/Epic/Feature/Roadmap/User/Role/Departemen/Leader Task membuka form atau detail yang benar; aksi "… baru" membuka form kosong; diuji untuk admin, PO, developer, QA, manager, commissioner, SME — grup & aksi yang tidak diizinkan role tidak muncul dan tidak ada toast error
+- ✅ Pencarian menyeluruh Ctrl K: halaman, aksi "… baru", dan semua record sesuai permission role (hasil uji lengkap: bagian 20)
 - 🧑 Hotkey keyboard Ctrl+K sendiri, navigasi ↑↓ di palette
 - 🧑 Tampilan terang & gelap di semua halaman, lebar layar kecil/tablet, hover/fokus
 - 🧑 Sesi kedaluwarsa (token habis) → kembali ke login
@@ -167,3 +167,14 @@ Fitur baru setelah revamp (PRD 3.8, 3.9; `migration_v23.sql`). Diuji lewat API p
 - 🧑 Export CSV memuat kolom `Features`; round-trip export → import tidak error
 - 🧑 Hapus sebuah feature di Products → test case/bug terkait tetap ada dengan Feature `—`
 - ⚠️ Data lama tidak punya feature (tidak bisa diturunkan dari backlog item, relasinya ke roadmap); isi manual lewat Edit
+
+## 20. Pencarian menyeluruh Ctrl K (branch `improvement-V2`, PRD 3.16 & v3.8)
+Frontend saja (tanpa perubahan backend/database). Diuji otomatis (Chrome headless) pada dev server Vite dan ulang sebagai smoke test di container :8500, dengan data dummy lokal.
+- ✅ **Hasil membuka form/detail yang benar** (admin): Backlog item, Bug, Test case, Produk, Epic produk, Feature, Roadmap, User, Role, Departemen → modal *Edit …* terbuka; Leader task → panel detail; Sprint → sprint terpilih di produk yang benar (dari halaman lain maupun dari `/sprints`)
+- ✅ **Aksi "… baru"** (13 aksi: Backlog, Bug, Test case, Sprint, Produk, Epic, Roadmap, Leader task, User, Role, Departemen, Feature per produk, Epic produk) membuka form kosong; parameter `?new=` dihapus dari URL setelah dipakai
+- ✅ **Permission per role** — admin, PO, developer, QA, manager, commissioner, SME: aksi dan grup hasil sama persis dengan izin role (0 pelanggaran); tidak ada toast error karena grup tak diizinkan tidak pernah diminta ke server
+- ✅ **Deep link tanpa izin** — `?new=…` tidak membuka form bila role tidak punya izin buat; role yang hanya boleh melihat (mis. developer pada Test case/Produk/Roadmap) diantar ke halaman tanpa form
+- ✅ **Memperbaiki bug lama**: link notifikasi `/bugs?bug=ID` kini membuka bug; memilih item/bug yang sama dua kali berturut-turut tetap membuka modal
+- ✅ **Race Sprints** (ditemukan saat uji, sudah diperbaiki): respons `/products` yang datang belakangan tidak lagi menimpa produk dari deep link
+- 🧑 Cek manual: tampilan palette di tema gelap & layar kecil, navigasi ↑↓ + Enter pada hasil campuran, role kustom dengan kombinasi izin tidak umum
+- ⚠️ Test run, Standup (riwayat), dan Leader Notes tidak ikut dicari (tidak punya form/detail sendiri); tiap grup hasil dibatasi 5 baris (Backlog & Leader task 6)
