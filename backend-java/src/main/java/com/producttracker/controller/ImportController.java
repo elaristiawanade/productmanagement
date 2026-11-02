@@ -260,6 +260,8 @@ public class ImportController {
                         }
                     }
 
+                    Long featureId = resolveFeatureId(col(rec, "Features", "Feature"), productId);
+
                     Long assignedTo = resolveUser(col(rec, "Assigned To", "Assignee"));
 
                     String reportedByRaw = col(rec, "Reported By", "Incident Author");
@@ -271,9 +273,9 @@ public class ImportController {
 
                     Map<String, Object> row = jdbc.queryForMap(
                         "INSERT INTO bugs " +
-                        "(backlog_item_id, product_id, code, title, description, steps_to_reproduce, severity, priority, stage, reported_by, reporter_name, assigned_to, created_at, closed_at) " +
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?, COALESCE(?::timestamp, NOW()), ?) RETURNING id",
-                        backlogItemId, productId, code, title,
+                        "(backlog_item_id, product_id, feature_id, code, title, description, steps_to_reproduce, severity, priority, stage, reported_by, reporter_name, assigned_to, created_at, closed_at) " +
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, COALESCE(?::timestamp, NOW()), ?) RETURNING id",
+                        backlogItemId, productId, featureId, code, title,
                         description.isBlank() ? null : description,
                         steps.isBlank() ? null : steps,
                         severity, priority, stage,
@@ -382,11 +384,13 @@ public class ImportController {
                     String status            = normalizeEnum(col(rec, "Status"), TC_STATUS_VALUES, "draft");
                     String priority          = normalizeEnum(col(rec, "Prioritas", "Priority"), SEVERITY_VALUES, "medium");
 
+                    Long featureId = resolveFeatureId(col(rec, "Features", "Feature"), productId);
+
                     jdbc.update(
                         "INSERT INTO qa_test_cases " +
-                        "(backlog_item_id, product_id, code, title, description, steps, expected_result, status, priority, created_by) " +
-                        "VALUES (?,?,?,?,?,?,?,?,?,?)",
-                        backlogItemId, productId, code, title,
+                        "(backlog_item_id, product_id, feature_id, code, title, description, steps, expected_result, status, priority, created_by) " +
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                        backlogItemId, productId, featureId, code, title,
                         description.isBlank() ? null : description,
                         steps.isBlank() ? null : steps,
                         expectedResult.isBlank() ? null : expectedResult,
@@ -430,6 +434,18 @@ public class ImportController {
         if (value == null || value.isBlank()) return fallback;
         String v = value.trim().toLowerCase().replace(" ", "_");
         return allowed.contains(v) ? v : fallback;
+    }
+
+    // Optional "Features" column, same "[CODE] Name" shape the Export CSV writes (a bare code works too).
+    // Matched within the row's product; an empty or unknown value just leaves the feature unset.
+    private Long resolveFeatureId(String value, Long productId) {
+        if (value == null || value.isBlank()) return null;
+        Matcher m = Pattern.compile("^\\[(.+?)\\]").matcher(value);
+        String featureCode = m.find() ? m.group(1).trim() : value.trim();
+        List<Map<String, Object>> rows = jdbc.queryForList(
+            "SELECT id FROM features WHERE product_id=? AND code ILIKE ? LIMIT 1", productId, featureCode
+        );
+        return rows.isEmpty() ? null : toLong(rows.get(0).get("id"));
     }
 
     private Long resolveUser(String value) {

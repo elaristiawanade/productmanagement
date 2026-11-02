@@ -60,6 +60,7 @@ public class BugController {
             "SELECT b.*, " +
             "  bi.code AS item_code, bi.title AS item_title, " +
             "  p.name AS product_name, p.code AS product_code, " +
+            "  f.code AS feature_code, f.name AS feature_name, " +
             "  ru.name AS reported_by_name, au.name AS assigned_to_name, " +
             "  COUNT(bp.id)          AS update_count, " +
             "  MAX(bp.created_at)    AS last_update, " +
@@ -70,11 +71,12 @@ public class BugController {
             "FROM bugs b " +
             "LEFT JOIN backlog_items bi ON bi.id = b.backlog_item_id " +
             "LEFT JOIN products      p  ON p.id  = b.product_id " +
+            "LEFT JOIN features      f  ON f.id  = b.feature_id " +
             "LEFT JOIN users         ru ON ru.id = b.reported_by " +
             "LEFT JOIN users         au ON au.id = b.assigned_to " +
             "LEFT JOIN bug_progress_updates bp ON bp.bug_id = b.id " +
             where +
-            "GROUP BY b.id, bi.code, bi.title, p.name, p.code, ru.name, au.name " +
+            "GROUP BY b.id, bi.code, bi.title, p.name, p.code, f.code, f.name, ru.name, au.name " +
             "ORDER BY b.product_id, b.code",
             params.toArray());
         assigneeSupport.enrich(rows);
@@ -93,6 +95,10 @@ public class BugController {
         String initialStage = "improvement".equals(body.get("stage")) ? "improvement" : "open";
 
         Long productId = toLong(body.get("product_id"));
+        Long featureId = toLong(body.get("feature_id"));
+        if (!featureMatchesProduct(featureId, productId)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Feature tidak sesuai dengan produk yang dipilih"));
+        }
         String bugCode = (String) body.get("code");
         if (bugCode == null || bugCode.isBlank()) {
             List<Map<String, Object>> pRows = jdbc.queryForList(
@@ -119,9 +125,9 @@ public class BugController {
         try {
             Map<String, Object> row = jdbc.queryForMap(
                 "INSERT INTO bugs " +
-                "(backlog_item_id, product_id, code, title, description, steps_to_reproduce, severity, priority, stage, reported_by, assigned_to) " +
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?) RETURNING *",
-                toLong(body.get("backlog_item_id")), productId, bugCode,
+                "(backlog_item_id, product_id, feature_id, code, title, description, steps_to_reproduce, severity, priority, stage, reported_by, assigned_to) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) RETURNING *",
+                toLong(body.get("backlog_item_id")), productId, featureId, bugCode,
                 body.get("title"), body.get("description"), body.get("steps_to_reproduce"),
                 orDefault(body.get("severity"), "medium"),
                 orDefault(body.get("priority"), "medium"),
@@ -159,11 +165,17 @@ public class BugController {
         Map<String, Object> before = bugDetail(id);
         if (before == null) return ResponseEntity.status(404).body(Map.of("error", "Bug tidak ditemukan"));
 
+        // product_id is not editable on an existing bug, so the feature is checked against the stored one
+        Long featureId = toLong(body.get("feature_id"));
+        if (!featureMatchesProduct(featureId, toLong(before.get("product_id")))) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Feature tidak sesuai dengan produk bug ini"));
+        }
+
         int updated = jdbc.update(
-            "UPDATE bugs SET title=?,description=?,steps_to_reproduce=?,severity=?,priority=?,assigned_to=?,backlog_item_id=? WHERE id=?",
+            "UPDATE bugs SET title=?,description=?,steps_to_reproduce=?,severity=?,priority=?,assigned_to=?,backlog_item_id=?,feature_id=? WHERE id=?",
             body.get("title"), body.get("description"), body.get("steps_to_reproduce"),
             body.get("severity"), body.get("priority"),
-            toLong(body.get("assigned_to")), toLong(body.get("backlog_item_id")), id
+            toLong(body.get("assigned_to")), toLong(body.get("backlog_item_id")), featureId, id
         );
         if (updated == 0) return ResponseEntity.status(404).body(Map.of("error", "Bug tidak ditemukan"));
 
@@ -498,6 +510,13 @@ public class BugController {
         if (rows.isEmpty()) return null;
         assigneeSupport.enrich(rows);
         return rows.get(0);
+    }
+
+    /** A feature is optional; when given it must belong to the same product as the bug. */
+    private boolean featureMatchesProduct(Long featureId, Long productId) {
+        if (featureId == null) return true;
+        List<Map<String, Object>> rows = jdbc.queryForList("SELECT product_id FROM features WHERE id=?", featureId);
+        return !rows.isEmpty() && productId != null && productId.equals(toLong(rows.get(0).get("product_id")));
     }
 
     @SuppressWarnings("unchecked")

@@ -154,6 +154,7 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v20.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v21.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v22.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v23.sql"
 ```
 
 > **Penting:** `migration_v10.sql` menambahkan kolom `users.department`, yang di-query
@@ -188,6 +189,15 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 > ```
 > Tanpa tabel ini, `/api/presence` gagal sehingga titik status tidak muncul; bagian aplikasi lain
 > tetap berjalan. Migrasinya additive (`CREATE TABLE IF NOT EXISTS`), tidak mengubah data lama.
+
+> **Penting juga:** `migration_v23.sql` menambah kolom `feature_id` di tabel `bugs` dan `qa_test_cases`
+> (kolom/dropdown **Features** di QA Module & Bugs Incident). **Jalankan SEBELUM backend baru naik** —
+> INSERT/UPDATE bug dan test case di backend baru menyebut kolom ini, jadi tanpa migrasi create/edit
+> gagal `500`. Pada database yang sudah ada jalankan manual (**backup dulu**):
+> ```bash
+> docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v23.sql
+> ```
+> Migrasinya additive dan idempotent (`ADD COLUMN IF NOT EXISTS`); data lama tidak berubah (Features `—`).
 
 ---
 
@@ -249,7 +259,8 @@ product-tracker/
 │       ├── migration_v19.sql
 │       ├── migration_v20.sql
 │       ├── migration_v21.sql
-│       └── migration_v22.sql
+│       ├── migration_v22.sql
+│       └── migration_v23.sql
 ├── backend-java/          # Spring Boot API (port 4000)
 │   ├── src/
 │   ├── pom.xml

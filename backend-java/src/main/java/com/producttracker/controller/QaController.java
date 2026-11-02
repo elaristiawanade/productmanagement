@@ -37,6 +37,7 @@ public class QaController {
             "SELECT tc.*, " +
             "  bi.code AS item_code, bi.title AS item_title, " +
             "  p.name AS product_name, p.code AS product_code, " +
+            "  f.code AS feature_code, f.name AS feature_name, " +
             "  u.name AS created_by_name, " +
             "  COUNT(tr.id)                                      AS run_count, " +
             "  COUNT(CASE WHEN tr.result='pass'  THEN 1 END)     AS pass_count, " +
@@ -45,10 +46,11 @@ public class QaController {
             "FROM qa_test_cases tc " +
             "LEFT JOIN backlog_items bi ON bi.id = tc.backlog_item_id " +
             "LEFT JOIN products      p  ON p.id  = tc.product_id " +
+            "LEFT JOIN features      f  ON f.id  = tc.feature_id " +
             "LEFT JOIN users         u  ON u.id  = tc.created_by " +
             "LEFT JOIN qa_test_runs  tr ON tr.test_case_id = tc.id " +
             where +
-            "GROUP BY tc.id, bi.code, bi.title, p.name, p.code, u.name " +
+            "GROUP BY tc.id, bi.code, bi.title, p.name, p.code, f.code, f.name, u.name " +
             "ORDER BY tc.product_id, tc.code",
             params.toArray());
         return ResponseEntity.ok(rows);
@@ -81,13 +83,18 @@ public class QaController {
             tcCode = "TC-" + String.format("%03d", lastNum + 1);
         }
 
+        Long featureId = toLong(body.get("feature_id"));
+        if (!featureMatchesProduct(featureId, toLong(body.get("product_id")))) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Feature tidak sesuai dengan produk yang dipilih"));
+        }
+
         Map<String, Object> user = toMap(principal);
         try {
             Map<String, Object> row = jdbc.queryForMap(
                 "INSERT INTO qa_test_cases " +
-                "(backlog_item_id, product_id, code, title, description, steps, expected_result, status, priority, created_by) " +
-                "VALUES (?,?,?,?,?,?,?,?,?,?) RETURNING *",
-                toLong(body.get("backlog_item_id")), toLong(body.get("product_id")), tcCode,
+                "(backlog_item_id, product_id, feature_id, code, title, description, steps, expected_result, status, priority, created_by) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?) RETURNING *",
+                toLong(body.get("backlog_item_id")), toLong(body.get("product_id")), featureId, tcCode,
                 body.get("title"), body.get("description"),
                 body.get("steps"), body.get("expected_result"),
                 orDefault(body.get("status"), "draft"),
@@ -107,11 +114,18 @@ public class QaController {
         if (!PermissionHelper.can(principal, "qa", "update")) {
             return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk mengubah test case"));
         }
+        // product_id is not editable on an existing test case, so the feature is checked against the stored one
+        List<Map<String, Object>> current = jdbc.queryForList("SELECT product_id FROM qa_test_cases WHERE id=?", id);
+        if (current.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "Test case tidak ditemukan"));
+        Long featureId = toLong(body.get("feature_id"));
+        if (!featureMatchesProduct(featureId, toLong(current.get(0).get("product_id")))) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Feature tidak sesuai dengan produk test case ini"));
+        }
         int updated = jdbc.update(
-            "UPDATE qa_test_cases SET title=?,description=?,steps=?,expected_result=?,status=?,priority=? WHERE id=?",
+            "UPDATE qa_test_cases SET title=?,description=?,steps=?,expected_result=?,status=?,priority=?,feature_id=? WHERE id=?",
             body.get("title"), body.get("description"),
             body.get("steps"), body.get("expected_result"),
-            body.get("status"), body.get("priority"), id
+            body.get("status"), body.get("priority"), featureId, id
         );
         if (updated == 0) return ResponseEntity.status(404).body(Map.of("error", "Test case tidak ditemukan"));
         Map<String, Object> row = jdbc.queryForMap("SELECT * FROM qa_test_cases WHERE id=?", id);
@@ -291,6 +305,13 @@ public class QaController {
             "bySprint", bySprint,
             "recentFails", recentFails
         ));
+    }
+
+    /** A feature is optional; when given it must belong to the same product as the test case. */
+    private boolean featureMatchesProduct(Long featureId, Long productId) {
+        if (featureId == null) return true;
+        List<Map<String, Object>> rows = jdbc.queryForList("SELECT product_id FROM features WHERE id=?", featureId);
+        return !rows.isEmpty() && productId != null && productId.equals(toLong(rows.get(0).get("product_id")));
     }
 
     @SuppressWarnings("unchecked")

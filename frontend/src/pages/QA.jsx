@@ -40,6 +40,7 @@ import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import SearchableSelect from '../components/SearchableSelect';
 import { buildBacklogTreeOptions } from '../utils/backlogHierarchy';
+import { buildFeatureOptions, featureText } from '../utils/featureOptions';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { format, parseISO } from 'date-fns';
@@ -52,9 +53,10 @@ const RESULT_ICONS = {
   skip:    { icon: Clock,        cls: 'text-slate-300'   },
 };
 
-function TestCaseForm({ tc, products, backlogItems, onSave, onClose }) {
+function TestCaseForm({ tc, products, backlogItems, features, onSave, onClose }) {
   const [form, setForm] = useState({
     product_id: tc?.product_id || '', backlog_item_id: tc?.backlog_item_id || '',
+    feature_id: tc?.feature_id || '',
     title: tc?.title || '', description: tc?.description || '',
     steps: tc?.steps || '', expected_result: tc?.expected_result || '',
     status: tc?.status || 'draft', priority: tc?.priority || 'medium',
@@ -82,7 +84,7 @@ function TestCaseForm({ tc, products, backlogItems, onSave, onClose }) {
     <form onSubmit={save} className="grid grid-cols-2 gap-4">
       <div>
         <label className="label">Produk *</label>
-        <select className="select" value={form.product_id} onChange={e => setForm(f => ({ ...f, product_id: e.target.value, backlog_item_id: '' }))} required>
+        <select className="select" value={form.product_id} onChange={e => setForm(f => ({ ...f, product_id: e.target.value, backlog_item_id: '', feature_id: '' }))} required>
           <option value="">Pilih produk</option>
           {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
@@ -95,6 +97,18 @@ function TestCaseForm({ tc, products, backlogItems, onSave, onClose }) {
           options={buildBacklogTreeOptions(filteredItems)}
           placeholder="Pilih item"
           searchPlaceholder="Cari backlog item..."
+        />
+      </div>
+      <div className="col-span-2">
+        <label className="label">Feature (opsional)</label>
+        <SearchableSelect
+          value={form.feature_id}
+          onChange={v => setForm(f => ({ ...f, feature_id: v }))}
+          options={buildFeatureOptions(features, products, form.product_id)}
+          placeholder="— Tidak terkait —"
+          emptyOptionLabel="— Tidak terkait —"
+          searchPlaceholder="Cari kode produk, kode atau nama feature..."
+          emptyMessage="Belum ada feature di produk ini"
         />
       </div>
       <div className="col-span-2">
@@ -193,6 +207,7 @@ export default function QA() {
   const [testCases,    setTestCases]   = useState([]);
   const [testRuns,     setTestRuns]    = useState([]);
   const [backlogItems, setBacklogItems] = useState([]);
+  const [features,     setFeatures]    = useState([]);
   const [sprints,      setSprints]     = useState([]);
   const [dashboard,    setDashboard]   = useState(null);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -215,11 +230,12 @@ export default function QA() {
     setLoading(true);
     try {
       const params = filters.product_id ? { product_id: filters.product_id } : {};
-      const [pr, tc, tr, bl, sp, db] = await Promise.all([
+      const [pr, tc, tr, bl, ft, sp, db] = await Promise.all([
         products.length ? null : client.get('/products'),
         client.get('/qa/test-cases', { params }),
         client.get('/qa/test-runs',  { params }),
         backlogItems.length ? null : client.get('/backlog', { params: { limit: 2000 } }),
+        features.length ? null : client.get('/features'),
         sprints.length ? null : client.get('/sprints'),
         client.get('/qa/dashboard',  { params }),
       ]);
@@ -227,6 +243,7 @@ export default function QA() {
       setTestCases(tc.data);
       setTestRuns(tr.data);
       if (bl) setBacklogItems(bl.data.items);
+      if (ft) setFeatures(ft.data);
       if (sp) setSprints(sp.data);
       setDashboard(db.data);
     } finally { setLoading(false); }
@@ -247,10 +264,11 @@ export default function QA() {
   };
 
   const exportTestCasesCSV = () => {
-    const headers = ['Kode', 'Judul', 'Deskripsi', 'Langkah', 'Expected Result', 'Status', 'Prioritas', 'Backlog Item', 'Produk'];
+    const headers = ['Kode', 'Judul', 'Deskripsi', 'Langkah', 'Expected Result', 'Status', 'Prioritas', 'Backlog Item', 'Features', 'Produk'];
     const rows = testCases.map(tc => [
       tc.code, tc.title, tc.description, tc.steps, tc.expected_result, tc.status, tc.priority,
       tc.item_code ? `[${tc.item_code}] ${tc.item_title || ''}` : '',
+      featureText(tc),
       tc.product_code || tc.product_name || '',
     ]);
     const csv = [headers, ...rows].map(r => r.map(csvEscape).join(',')).join('\n');
@@ -474,12 +492,13 @@ export default function QA() {
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1080px] text-sm">
+                  <table className="w-full min-w-[1300px] text-sm">
                     <thead>
                       <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 whitespace-nowrap">
                         <th className="text-left px-4 py-3">Kode</th>
                         <th className="text-left px-4 py-3">Judul</th>
                         <th className="text-left px-3 py-3">Item</th>
+                        <th className="text-left px-3 py-3">Features</th>
                         <th className="text-center px-3 py-3">Prioritas</th>
                         <th className="text-center px-3 py-3">Status</th>
                         <th className="text-center px-3 py-3">Runs</th>
@@ -490,7 +509,7 @@ export default function QA() {
                       </tr>
                     </thead>
                     <tbody>
-                      {pagedCases.length === 0 && <tr><td colSpan={10} className="text-center py-10 text-slate-400">Belum ada test case</td></tr>}
+                      {pagedCases.length === 0 && <tr><td colSpan={11} className="text-center py-10 text-slate-400">Belum ada test case</td></tr>}
                       {pagedCases.map(tc => (
                         <tr key={tc.id} className="table-row">
                           <td className="px-4 py-3 whitespace-nowrap"><span className="font-mono text-xs text-slate-500">{tc.code}</span></td>
@@ -503,6 +522,14 @@ export default function QA() {
                               <div className="flex items-center gap-1 min-w-[170px] max-w-[240px]" title={`[${tc.item_code}] ${tc.item_title || ''}`}>
                                 <span className="font-mono text-slate-400 shrink-0 whitespace-nowrap">[{tc.item_code}]</span>
                                 <span className="truncate">{tc.item_title}</span>
+                              </div>
+                            ) : '—'}
+                          </td>
+                          <td className="px-3 py-3 text-xs text-slate-500">
+                            {tc.feature_code ? (
+                              <div className="flex items-center gap-1 min-w-[150px] max-w-[220px]" title={featureText(tc)}>
+                                <span className="font-mono text-slate-400 shrink-0 whitespace-nowrap">[{tc.feature_code}]</span>
+                                <span className="truncate">{tc.feature_name}</span>
                               </div>
                             ) : '—'}
                           </td>
@@ -641,7 +668,7 @@ export default function QA() {
       {/* Modals */}
       <Modal open={modal.open && modal.type === 'tc'} onClose={() => setModal({ ...modal, open: false })}
         title={modal.data ? 'Edit Test Case' : 'Buat Test Case'} size="lg">
-        <TestCaseForm tc={modal.data} products={products} backlogItems={backlogItems}
+        <TestCaseForm tc={modal.data} products={products} backlogItems={backlogItems} features={features}
           onSave={() => { setModal({ ...modal, open: false }); load(); }}
           onClose={() => setModal({ ...modal, open: false })} />
       </Modal>

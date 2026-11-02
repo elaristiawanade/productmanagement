@@ -152,3 +152,17 @@ Diuji otomatis (Chrome headless) dengan data dummy berawalan `ZZDUMMY`: Backlog 
 - ✅ **Sidebar produk** — di `/backlog`, `/qa`, `/bugs` muncul daftar produk, klik memfilter lewat `?product=ID`, dropdown halaman ikut sinkron (12 cek lulus)
 - 🧑 Cek manual di browser: 100 → 30 pada QA Module & Bugs Incident, filter produk dari sidebar, tema gelap
 - ⚠️ Pilihan baris per halaman tiap halaman berdiri sendiri dan kembali ke default saat refresh; Standup & Users (10/50/100) dan My Tasks (10/20/50) belum disamakan
+
+## 19. Kolom & dropdown Feature (QA Module, Bugs Incident)
+Fitur baru setelah revamp (PRD 3.8, 3.9; `migration_v23.sql`). Diuji lewat API pada stack Docker lokal dengan data uji berawalan `ZZFEATTEST` (sudah dihapus setelah uji; jumlah bug/test case kembali seperti semula).
+- ✅ **API list** — `GET /api/qa/test-cases` dan `GET /api/bugs` mengembalikan `feature_id`, `feature_code`, `feature_name` (`null` untuk data lama)
+- ✅ **Create** test case dan bug dengan `feature_id` → tersimpan; `feature_id: ""` atau tanpa feature → `null` (opsional)
+- ✅ **Update** — ganti feature, lalu kosongkan (`""`) → `null`
+- ✅ **Validasi** — feature milik produk lain ditolak `400` di create dan update (test case dan bug)
+- ✅ **Import CSV** (bugs dan test case) — kolom `Features` format `[KODE] Nama` dan kode saja terbaca; kode tidak dikenal atau kosong → feature kosong tanpa error
+- ✅ Build frontend lolos; backend ter-compile lewat `docker compose build`
+- ✅ Dicek manual di browser (pemilik, 2 Nov 2026): kolom **Features** muncul setelah *Item* di tabel Test Cases dan Bugs, `—` untuk data lama
+- ✅ Dicek manual di browser (pemilik, 2 Nov 2026): form Buat/Edit, dropdown **Feature (opsional)** bisa dicari lewat kode produk (mis. `HRS`), kode feature, dan nama; opsi tersaring ke produk terpilih; ganti produk mereset Feature
+- 🧑 Export CSV memuat kolom `Features`; round-trip export → import tidak error
+- 🧑 Hapus sebuah feature di Products → test case/bug terkait tetap ada dengan Feature `—`
+- ⚠️ Data lama tidak punya feature (tidak bisa diturunkan dari backlog item, relasinya ke roadmap); isi manual lewat Edit

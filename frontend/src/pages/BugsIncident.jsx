@@ -18,6 +18,7 @@ import SearchableMultiSelect from '../components/SearchableMultiSelect';
 import AssigneeStack from '../components/AssigneeStack';
 import { renderWithLinks } from '../utils/linkify';
 import { buildBacklogTreeOptions } from '../utils/backlogHierarchy';
+import { buildFeatureOptions, featureText } from '../utils/featureOptions';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import {
@@ -322,9 +323,10 @@ function ActivitySection({ bugId, users = [] }) {
   );
 }
 
-function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
+function BugForm({ bug, products, backlogItems, features, users, onSave, onClose }) {
   const [form, setForm] = useState({
     product_id: bug?.product_id || '', backlog_item_id: bug?.backlog_item_id || '',
+    feature_id: bug?.feature_id || '',
     title: bug?.title || '', description: bug?.description || '',
     steps_to_reproduce: bug?.steps_to_reproduce || '',
     severity: bug?.severity || 'medium', priority: bug?.priority || 'medium',
@@ -449,7 +451,7 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
     <form onSubmit={save} className="grid grid-cols-2 gap-4">
       <div>
         <label className="label">Produk *</label>
-        <select className="select" value={form.product_id} onChange={e => setForm(f => ({ ...f, product_id: e.target.value, backlog_item_id: '' }))} required>
+        <select className="select" value={form.product_id} onChange={e => setForm(f => ({ ...f, product_id: e.target.value, backlog_item_id: '', feature_id: '' }))} required>
           <option value="">Pilih produk</option>
           {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
@@ -463,6 +465,18 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
           placeholder="— Tidak terkait —"
           emptyOptionLabel="— Tidak terkait —"
           searchPlaceholder="Cari backlog item..."
+        />
+      </div>
+      <div className="col-span-2">
+        <label className="label">Feature (opsional)</label>
+        <SearchableSelect
+          value={form.feature_id}
+          onChange={v => setForm(f => ({ ...f, feature_id: v }))}
+          options={buildFeatureOptions(features, products, form.product_id)}
+          placeholder="— Tidak terkait —"
+          emptyOptionLabel="— Tidak terkait —"
+          searchPlaceholder="Cari kode produk, kode atau nama feature..."
+          emptyMessage="Belum ada feature di produk ini"
         />
       </div>
       <div className="col-span-2">
@@ -750,6 +764,7 @@ export default function BugsIncident() {
   const [bugs,         setBugs]        = useState([]);
   const [progress,     setProgress]    = useState([]);
   const [backlogItems, setBacklogItems] = useState([]);
+  const [features,     setFeatures]    = useState([]);
   const [users,        setUsers]       = useState([]);
   const [dashboard,    setDashboard]   = useState(null);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -784,11 +799,12 @@ export default function BugsIncident() {
     setLoading(true);
     try {
       const params = filters.product_id ? { product_id: filters.product_id } : {};
-      const [pr, bg, pg, bl, us, db] = await Promise.all([
+      const [pr, bg, pg, bl, ft, us, db] = await Promise.all([
         products.length ? null : client.get('/products'),
         client.get('/bugs',          { params }),
         client.get('/bugs/progress', { params }),
         backlogItems.length ? null : client.get('/backlog', { params: { limit: 2000 } }),
+        features.length ? null : client.get('/features'),
         users.length ? null : client.get('/users'),
         client.get('/bugs/dashboard', { params }),
       ]);
@@ -796,6 +812,7 @@ export default function BugsIncident() {
       setBugs(bg.data);
       setProgress(pg.data);
       if (bl) setBacklogItems(bl.data.items);
+      if (ft) setFeatures(ft.data);
       if (us) setUsers(us.data);
       setDashboard(db.data);
     } finally { setLoading(false); }
@@ -863,10 +880,11 @@ export default function BugsIncident() {
   };
 
   const exportBugsCSV = () => {
-    const headers = ['Kode', 'Judul', 'Deskripsi', 'Langkah Reproduksi', 'Severity', 'Prioritas', 'Stage', 'Backlog Item', 'Produk', 'Assigned To', 'Reported By', 'Tanggal Incident', 'Tanggal Closed', 'Update Terakhir', 'Update Terakhir Oleh'];
+    const headers = ['Kode', 'Judul', 'Deskripsi', 'Langkah Reproduksi', 'Severity', 'Prioritas', 'Stage', 'Backlog Item', 'Features', 'Produk', 'Assigned To', 'Reported By', 'Tanggal Incident', 'Tanggal Closed', 'Update Terakhir', 'Update Terakhir Oleh'];
     const rows = sortedBugs.map(b => [
       b.code, b.title, b.description, b.steps_to_reproduce, b.severity, b.priority, b.stage,
       b.item_code ? `[${b.item_code}] ${b.item_title || ''}` : '',
+      featureText(b),
       b.product_code || b.product_name || '',
       (b.assignees || []).map(a => a.name).join(', ') || b.assigned_to_name || '',
       b.reported_by_name || b.reporter_name || b.reporter_email || '',
@@ -1173,12 +1191,13 @@ export default function BugsIncident() {
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1320px] text-sm">
+                  <table className="w-full min-w-[1540px] text-sm">
                     <thead>
                       <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 whitespace-nowrap">
                         <th className="text-left px-4 py-3">Kode</th>
                         <th className="text-left px-4 py-3">Judul</th>
                         <th className="text-left px-3 py-3">Item</th>
+                        <th className="text-left px-3 py-3">Features</th>
                         {renderSortableTh('severity', 'Severity')}
                         {renderSortableTh('priority', 'Prioritas')}
                         {renderSortableTh('stage', 'Stage')}
@@ -1192,7 +1211,7 @@ export default function BugsIncident() {
                       </tr>
                     </thead>
                     <tbody>
-                      {pagedBugs.length === 0 && <tr><td colSpan={13} className="text-center py-10 text-slate-400">Belum ada bug</td></tr>}
+                      {pagedBugs.length === 0 && <tr><td colSpan={14} className="text-center py-10 text-slate-400">Belum ada bug</td></tr>}
                       {pagedBugs.map(b => (
                         <tr key={b.id}
                           // Whole row opens the bug (same as the pencil, so only with bugs.access); inner controls stop propagation
@@ -1209,6 +1228,14 @@ export default function BugsIncident() {
                               <div className="flex items-center gap-1 min-w-[170px] max-w-[240px]" title={`[${b.item_code}] ${b.item_title || ''}`}>
                                 <span className="font-mono text-slate-400 shrink-0 whitespace-nowrap">[{b.item_code}]</span>
                                 <span className="truncate">{b.item_title}</span>
+                              </div>
+                            ) : '—'}
+                          </td>
+                          <td className="px-3 py-3 text-xs text-slate-500">
+                            {b.feature_code ? (
+                              <div className="flex items-center gap-1 min-w-[150px] max-w-[220px]" title={featureText(b)}>
+                                <span className="font-mono text-slate-400 shrink-0 whitespace-nowrap">[{b.feature_code}]</span>
+                                <span className="truncate">{b.feature_name}</span>
                               </div>
                             ) : '—'}
                           </td>
@@ -1361,7 +1388,7 @@ export default function BugsIncident() {
       {/* Modals */}
       <Modal open={modal.open && modal.type === 'bug'} onClose={() => setModal({ ...modal, open: false })}
         title={modal.data ? 'Edit Bug' : 'Buat Bug'} size="lg">
-        <BugForm bug={modal.data} products={products} backlogItems={backlogItems} users={users}
+        <BugForm bug={modal.data} products={products} backlogItems={backlogItems} features={features} users={users}
           onSave={() => { setModal({ ...modal, open: false }); load(); }}
           onClose={() => setModal({ ...modal, open: false })} />
       </Modal>
