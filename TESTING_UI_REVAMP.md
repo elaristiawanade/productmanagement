@@ -202,3 +202,20 @@ Fitur baru setelah revamp (PRD 3.2, 3.8, v3.10). Memakai `qa_test_cases.created_
 - 🧑 Backlog: cek Author dari tampilan Board, item anak (Story → Task), dan deep link Ctrl K / notifikasi `?item=ID`
 - 🧑 Backlog: item yang dibuat lewat Import Jira/CSV menampilkan user yang meng-import; user pembuat yang sudah dihapus tampil `—`
 - 🧑 Export CSV QA memuat kolom `Author`; Import CSV QA mengabaikannya (Author = user yang meng-import)
+
+## 23. Lampiran file di Bugs Incident dan QA Module
+Fitur baru setelah revamp (PRD 3.8, 3.9, v3.11; `migration_v25.sql`). Diuji lewat API (curl) dan Chrome headless pada stack Docker lokal dengan data uji berawalan `ZZATT` (record dan file uji sudah dihapus; folder upload kembali seperti semula).
+- ✅ **Bugs, tipe diterima** — `.docx` `.xlsx` `.pptx` `.pdf` `.txt` `.csv` `.zip` → 201 (MIME kosong/`octet-stream` tetap diterima lewat ekstensi, seperti Backlog)
+- ✅ **Tipe ditolak** — `.exe` `.html` `.svg` → 400 pesan daftar format yang diizinkan (Bugs dan QA); sebelumnya Bugs menerima `image/svg+xml`
+- ✅ **QA** — upload/list/hapus lampiran test case; `.docx` `.xlsx` `.pdf` 201; test case/bug yang tidak ada → 404 (bukan 500)
+- ✅ **Izin** — developer (tanpa `bugs.access`/`qa.create`/`qa.update`) upload ke bug dan QA → 403, hapus → 403; QA engineer → 201
+- ✅ **Unduh** — header `Content-Disposition` memakai nama asli file (`laporan.docx`, `data.xlsx`) untuk lampiran bug dan QA
+- ✅ **Hapus** — `DELETE /api/bugs/attachments/:id` dan `/api/qa/attachments/:id` menghapus baris + file di disk; `DELETE /api/attachments/:id` kini khusus Backlog (id lampiran bug → 404, lampiran bug tidak ikut terhapus)
+- ✅ **UI Bugs** — Buat Bug: pilih 3 file (docx/txt/csv) → tile + keterangan "diunggah setelah bug disimpan"; setelah disimpan dan dibuka lagi 3 tile ada; klik tile TXT → preview isi, Esc hanya menutup preview (modal bug tetap terbuka); tombol X menghapus; tile gambar tampil sebagai thumbnail dan preview gambar penuh layar (Esc hanya menutup preview)
+- ✅ **UI QA** — Edit Test Case: unggah `.xlsx` → tile muncul dan toast sukses
+- ✅ Build frontend dan backend lolos
+- 🧑 Buat Test Case baru dengan file diantrekan lalu disimpan (jalur kode sama dengan Buat Bug, belum diklik langsung di UI)
+- 🧑 Buka file Word/Excel/ZIP sungguhan dari tile (diunduh/dibuka di tab baru) dan preview PDF sungguhan
+- 🧑 Form Lapor Bug Publik tetap hanya menerima gambar (tidak diubah)
+- ⚠️ File >10MB lewat API tidak dibalas server (menggantung) — sama persis di endpoint Backlog lama; UI menolaknya lebih dulu dengan pesan "Ukuran file maks 10MB"
+- ⚠️ Menghapus bug/test case ikut menghapus baris lampiran, tetapi file di disk tidak ikut terhapus (sama seperti Backlog/Bugs sebelumnya)
