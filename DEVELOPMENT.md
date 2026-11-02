@@ -153,6 +153,7 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v19.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v20.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v21.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v22.sql"
 ```
 
 > **Penting:** `migration_v10.sql` menambahkan kolom `users.department`, yang di-query
@@ -175,6 +176,18 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 > `git pull`, `PermissionHelper.can()`/`AuthContext.can()` akan selalu mengembalikan `false`
 > untuk role selain `super_admin` (karena membaca key nested yang belum ada) — gejalanya mirip
 > catatan di atas: tombol/menu hilang tanpa error jelas.
+>
+> `migration_v21.sql` juga **belum dipasang** di mount `docker-entrypoint-initdb.d` pada
+> `docker-compose.yml` (mount berhenti di v20 lalu lompat ke v22), jadi di Docker selalu jalankan manual.
+
+> **Penting juga:** `migration_v22.sql` membuat tabel `user_presence` (titik status
+> online/away/offline di avatar, lihat PRD 3.16). Pada database yang sudah ada, jalankan manual
+> sebelum/saat backend baru naik — **backup database dulu**:
+> ```bash
+> docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v22.sql
+> ```
+> Tanpa tabel ini, `/api/presence` gagal sehingga titik status tidak muncul; bagian aplikasi lain
+> tetap berjalan. Migrasinya additive (`CREATE TABLE IF NOT EXISTS`), tidak mengubah data lama.
 
 ---
 
@@ -235,7 +248,8 @@ product-tracker/
 │       ├── migration_v18.sql
 │       ├── migration_v19.sql
 │       ├── migration_v20.sql
-│       └── migration_v21.sql
+│       ├── migration_v21.sql
+│       └── migration_v22.sql
 ├── backend-java/          # Spring Boot API (port 4000)
 │   ├── src/
 │   ├── pom.xml

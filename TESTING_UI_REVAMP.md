@@ -1,6 +1,6 @@
 # Checklist Paritas Fitur — UI Original vs UI Revamp
 
-Tujuan: memastikan semua fitur & fungsi versi **original** (commit `1ee9fbf`, sebelum revamp) masih ada dan bekerja di UI **baru** (branch `feature/presence-status`, http://localhost:8500).
+Tujuan: memastikan semua fitur & fungsi versi **original** (commit `1ee9fbf`, sebelum revamp) masih ada dan bekerja di UI **baru** (branch `ui-revamp`, http://localhost:8500).
 
 Legenda: ✅ sudah diuji otomatis & lulus · 🧑 perlu dites manual · ⚠️ catatan
 
@@ -14,7 +14,7 @@ Legenda: ✅ sudah diuji otomatis & lulus · 🧑 perlu dites manual · ⚠️ c
 - Banding struktur: **tidak ada fitur/tombol/kolom/field yang hilang**. Akses route 7 role identik (0 perbedaan).
 - Tes fungsional: semua alur lulus. Kegagalan di tengah proses semuanya salah skrip tes (selector/label), bukan bug aplikasi, dan sudah diulang sampai lulus.
 - Perubahan yang **disengaja** (bukan hilang): kolom *Kode* + *Tipe* di Backlog digabung jadi satu kolom *Item*; dropdown status/stage/sprint berubah jadi pill-menu; shortcut produk di sidebar; tampilan Board; Ctrl K; slider tema; titik presence.
-- ⚠️ **Masalah lama (ada juga di original, bukan regresi revamp):**
+- ⚠️ **Masalah lama (ada juga di original, bukan regresi revamp) — ketiganya sudah diperbaiki di branch ini:**
   1. **Test run tanpa memilih Sprint → gagal 500 "Internal server error"** (`sprint_id` dikirim `''`, backend `Long.parseLong("")`). Dengan Sprint dipilih berhasil.
   2. **Menghapus komentar di modal Backlog menutup modal** (perilaku sama di original).
   3. PRD 3.5 menulis kartu Kanban Sprint punya dropdown status inline — di kedua versi **tidak ada**; PRD yang usang.
@@ -48,7 +48,8 @@ Legenda: ✅ sudah diuji otomatis & lulus · 🧑 perlu dites manual · ⚠️ c
 - ✅ Pencarian teks; chip Epic & ✅ Selesai; item done disembunyikan default; filter Assignee (cari + multi); deep link `?item=`; tombol Import Jira; tampilan Board
 - ✅ Hapus Task/Independent/Story + toast "Item dihapus"
 - ✅ Daftar item sama persis dengan original (23 dari 23, kode identik)
-- 🧑 Pindah sprint inline betul-betul dijalankan; filter Produk/Status/Prioritas/Tipe/range deadline; limit per halaman & pagination
+- ✅ Limit per halaman 10/30/50/100 langsung memuat ulang (lihat bagian 18)
+- 🧑 Pindah sprint inline betul-betul dijalankan; filter Produk/Status/Prioritas/Tipe/range deadline
 - 🧑 Lampiran PDF/Word/Excel/PowerPoint/ZIP (buka tab baru); batas 10 MB & tipe tidak didukung
 - 🧑 Group Status: tutup/buka grup, tombol "Tambah item <status>" di header grup
 - 🧑 Board: klik kartu membuka item, ikon status membuka menu
@@ -140,4 +141,14 @@ Legenda: ✅ sudah diuji otomatis & lulus · 🧑 perlu dites manual · ⚠️ c
 
 ## 17. Fitur baru (tidak ada di original)
 - 🧑 Titik presence online/away/offline (perlu 2 browser/user)
-- 🧑 Tampilan Board Backlog, shortcut produk sidebar, tema gelap
+- 🧑 Tampilan Board Backlog, tema gelap
+- 🧑 Daftar produk di sidebar untuk QA Module & Bugs Incident (hasil uji otomatis: bagian 18)
+
+## 18. Pagination & shortcut produk (ditambahkan setelah perbaikan)
+Diuji otomatis (Chrome headless) dengan data dummy berawalan `ZZDUMMY`: Backlog 240 item, Bugs 150 + Progress 150, Test Case 150 + Test Run 150.
+- ✅ **Backlog** — pilih 10/30/50/100 langsung memuat ulang tanpa menekan Group Status; 100 → 30 langsung; pager "1 / N" dan Next benar di mode 100
+- ✅ **QA (Test Cases, Test Runs) & Bugs (Bugs, Progress)** — opsi baris sama seperti Backlog (10/30/50/100); 100 → 30 berubah seketika (±0,2 detik), 30 → 50 → 10 langsung, dari halaman 3 ganti ke 100 kembali ke halaman 1, dari halaman 2 (mode 100) ke 30 kembali ke halaman 1 (32 cek lulus)
+- ✅ **Halaman melewati batas** — dari halaman jauh lalu ganti filter produk, tabel otomatis pindah ke halaman terakhir yang berisi data (sebelumnya "151–44 dari 44" kosong); 4 tabel lulus
+- ✅ **Sidebar produk** — di `/backlog`, `/qa`, `/bugs` muncul daftar produk, klik memfilter lewat `?product=ID`, dropdown halaman ikut sinkron (12 cek lulus)
+- 🧑 Cek manual di browser: 100 → 30 pada QA Module & Bugs Incident, filter produk dari sidebar, tema gelap
+- ⚠️ Pilihan baris per halaman tiap halaman berdiri sendiri dan kembali ke default saat refresh; Standup & Users (10/50/100) dan My Tasks (10/20/50) belum disamakan

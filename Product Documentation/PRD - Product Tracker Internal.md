@@ -3,8 +3,8 @@
 
 | | |
 |---|---|
-| **Versi** | 3.4 |
-| **Tanggal** | 28 Oktober 2026 |
+| **Versi** | 3.6 |
+| **Tanggal** | 2 November 2026 |
 | **Status** | Live — Production |
 | **Pemilik** | Tim Internal |
 
@@ -97,7 +97,7 @@ Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus 
 - Prioritas: `low`, `medium`, `high`, `critical`
 - Assign ke developer, set due date, set sprint, hubungkan ke epic/feature
 - **Pindah sprint langsung dari tabel:** kolom **Sprint** di tabel Backlog berupa dropdown — pilih sprint lain (atau kembali ke "Backlog (no sprint)") tanpa buka form edit, pola quick-update yang sama seperti kolom Status. Item tipe `independent` tidak punya dropdown ini karena tidak terikat sprint. Perubahan tercatat di log aktivitas item; tidak mengirim notifikasi email (beda dari perubahan status)
-- Pagination dengan limit per halaman yang dapat dikonfigurasi
+- **Pagination server-side** dengan pilihan baris per halaman **10 / 30 / 50 / 100** (default 30). Mengganti jumlah baris langsung memuat ulang data dan kembali ke halaman 1 — tidak perlu menekan filter/tombol lain dulu. Pilihan ini hanya berlaku di halaman Backlog (tidak dibagi ke QA/Bugs dan kembali ke default saat halaman di-refresh)
 - Import dari Jira (CSV)
 - **Lampiran** — unggah file ke backlog item: gambar (JPEG/PNG/GIF/WebP), PDF, Word, Excel, PowerPoint, ZIP, CSV, TXT (max 10MB per file, multi-file). Preview inline untuk gambar, PDF, TXT, dan CSV (dirender sebagai tabel) — tipe lain dibuka/diunduh di tab baru
 
@@ -217,7 +217,10 @@ Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus 
 - CRUD test case dengan link ke backlog item — field **Backlog Item** (wajib) memakai dropdown dengan kotak pencarian (pola dasar sama seperti 3.2 & 3.9), memudahkan pencarian saat daftar backlog item sudah banyak. Opsinya disusun **hierarkis** (Epic → Story → Task/Bug mengikuti `parent_id`, terindentasi per level; item `independent` di grup terpisah paling bawah) dengan **badge warna tipe** (Story/Task/Bug/Epic/Independent, sama seperti warna di tabel Backlog 3.2) di kiri kode — di tiap level, item diurutkan tipe dulu baru kode, supaya mis. Task tidak menyelip di antara daftar Story hanya karena kodenya lebih kecil. Item berstatus **`done` disembunyikan** dari pilihan baru (QA Test Case untuk item yang sudah selesai jarang relevan dibuat baru) — kecuali item itu sedang jadi pilihan test case yang sedang diedit, supaya tidak silently ke-unlink. Lebih kaya dari dropdown pencarian polos di 3.2 (Parent User Story/Parent Epic tidak ikut berubah, tetap teks biasa)
 - Test run management (kumpulan test case untuk satu sesi pengujian)
 - Eksekusi test case: `pass`, `fail`, `skip`, `blocked`
-- QA dashboard: statistik coverage, pass rate, item yang belum di-test
+- Eksekusi test case boleh **tanpa memilih Sprint** — field Sprint dikirim kosong (`""`) dan backend memperlakukannya sebagai tidak ada sprint (sebelumnya gagal `500` karena `Long.parseLong("")`)
+- QA dashboard: statistik coverage, pass rate, item yang belum di-test. Grafik **Test Results per Sprint** berupa tren per produk (6 sprint terbaru per produk, urut kronologis, skala sumbu Y sama): semua produk → satu grafik kecil per produk, satu produk dipilih → satu grafik penuh; label sumbu X "Sprint N", tooltip memakai nama sprint lengkap. Filter produk di dashboard ikut berlaku ke grafik ini
+- **Daftar produk di sidebar** — saat berada di QA Module, sidebar menampilkan daftar produk (pola sama seperti Backlog, lihat 3.16). Klik produk memfilter halaman lewat `/qa?product=ID`; filter produk di dropdown halaman dan di sidebar saling sinkron
+- **Pagination tabel (client-side)** — tab Test Cases dan Test Runs memakai pilihan baris per halaman **10 / 30 / 50 / 100** (default 10), sama seperti Backlog. Ganti jumlah baris langsung berubah (mis. 100 → 30 seketika) dan kembali ke halaman 1. Kalau halaman aktif melewati halaman terakhir setelah filter berubah (mis. dari halaman 16 lalu memilih produk dengan 44 data), halaman otomatis pindah ke halaman terakhir yang berisi data — bukan menampilkan tabel kosong "151–44 dari 44"
 - **Export & Import CSV** — tombol **Export CSV** dan **Import CSV** di tab Test Cases, pola sama seperti Bugs Incident (3.9). Export mengeluarkan kolom Kode, Judul, Deskripsi, Langkah, Expected Result, Status, Prioritas, Backlog Item, Produk (**tanpa** Run Count/Pass/Fail — angka itu agregat dari tabel `qa_test_runs`, bukan field test case, jadi tidak ikut diekspor supaya kolomnya tetap 1:1 importable). Cara pakai paling umum adalah round-trip: export → edit di Excel (pakai "Save As → CSV UTF-8", lihat catatan encoding di 3.9) → import balik. Kolom `Produk` di-resolve per baris; kolom `Backlog Item` (format `[KODE] Judul`, sama seperti hasil Export) **wajib** cocok dengan backlog item yang ada di produk tsb — beda dari Bugs Incident yang field ini opsional, di Test Case kolom `backlog_item_id` memang `NOT NULL` di skema, jadi baris dengan Backlog Item kosong atau kodenya tidak ditemukan masuk daftar error, bukan dibuat dengan nilai `NULL`. Kolom `Kode` kosong → auto-generate `TC-###` (algoritma sama persis dengan create manual, per produk); kode yang sudah ada di produk yang sama → baris di-skip (create-only, bukan upsert). Kolom `Status`/`Prioritas` yang tidak valid fallback ke default (`draft`/`medium`). Hasil akhir (dibuat/di-skip/error) ditampilkan di modal setelah proses selesai, tidak ada notifikasi/email terkirim. **Akses:** permission `qa.create` — sama seperti tombol "Buat Test Case"
 
 ---
@@ -239,6 +242,9 @@ Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus 
 - **Filter & pencarian** — cari berdasarkan judul/kode; filter multi-select stage, severity, prioritas, dan assignee (assignee bisa diketik untuk mencari nama — lihat pola `SearchableMultiSelect` di 3.2); filter produk di level halaman (memuat ulang data dari server). Toggle **"Sembunyikan Closed/Done"** aktif secara default sehingga bug yang sudah selesai (`done`) tidak memenuhi list — klik untuk menampilkannya kembali; filter ini independen dari filter multi-select Stage. Export hasil filter ke CSV (mengikuti urutan sort yang aktif)
 - **Sort kolom** — klik header kolom Severity, Prioritas, Stage, Tanggal Incident, Tanggal Closed, atau Update Terakhir untuk mengurutkan. Klik pertama: arah default kolom tsb (Severity/Prioritas dari Critical, Stage sesuai alur kerja Open→Done, tanggal dari yang terbaru); klik kedua: kebalikannya; klik ketiga: kembali ke urutan asli. Baris tanpa nilai (mis. bug yang belum closed) selalu ditampilkan paling bawah
 - **Import CSV** — tombol **Import CSV** di tab Bugs (sebelah Export CSV) untuk bikin bug secara massal dari file CSV. Format kolom persis sama dengan hasil **Export CSV** di atas, jadi cara pakai paling umum adalah round-trip: export → edit di Excel → import balik. **Catatan cara save di Excel:** pakai **File → Save As → "CSV UTF-8 (Comma delimited) (*.csv)"**, bukan opsi "CSV (Comma delimited)" polos — opsi terakhir itu defaultnya nulis ulang file pakai ANSI/Windows-1252, bukan UTF-8, meskipun ekstensinya tetap `.csv`. Kalau kepakai encoding yang salah, import tetap jalan normal, cuma karakter non-standar (nama dengan diakritik, dsb) di kolom terkait bisa tampil berantakan — bukan gagal total atau data hilang. Excel versi lama yang tidak punya opsi "CSV UTF-8" bisa pakai Google Sheets (**File → Download → Comma Separated Values**, selalu UTF-8) atau Notepad untuk perubahan kecil. Kolom `Produk` di-resolve **per baris** (satu file boleh berisi bug dari beberapa produk sekaligus, bukan satu produk per upload). Kolom `Kode` kosong → kode digenerate otomatis (mengikuti pola kode produk yang berjalan, sama seperti create manual); kode yang sudah ada **di produk yang sama** → baris tsb di-skip, bukan ditimpa (create-only, tidak ada mode upsert). Kolom `Assigned To`/`Reported By` dicocokkan ke akun user lewat nama/email — khusus `Reported By` yang tidak cocok akun manapun, teksnya tetap disimpan sebagai pelapor (pola sama seperti tiket dari Lapor Bug Publik, 3.15) alih-alih hilang begitu saja. Kolom `Tanggal Incident`/`Tanggal Closed` dipakai kalau terisi & formatnya valid — penting untuk migrasi data bug historis, bukan cuma tanggal saat file di-upload. Baris dengan produk yang tidak ditemukan dicatat di daftar error (bukan gagal diam-diam), baris lain di file yang sama tetap lanjut diproses. Hasil akhir (jumlah dibuat/di-skip/error, plus detail tiap error) ditampilkan di modal setelah proses selesai. Tidak ada notifikasi/email yang dikirim untuk bug hasil import (sama seperti Import Jira, 3.11) — menghindari spam notifikasi untuk migrasi data massal. **Akses:** sama seperti modul Bugs Incident (permission `access_bugs`), beda dari Import Jira (3.11) yang gate-nya PO/Manager/Admin
+
+- **Daftar produk di sidebar & pagination** — saat berada di Bugs Incident, sidebar menampilkan daftar produk dan klik produk memfilter lewat `/bugs?product=ID` (sinkron dengan dropdown produk di halaman). Tabel **Bugs** dan **Progress** memakai pilihan baris per halaman **10 / 30 / 50 / 100** (default 10), berubah langsung, dan otomatis pindah ke halaman terakhir yang berisi data kalau halaman aktif melewati batas setelah filter berubah — pola sama seperti QA Module (3.8). Pagination dilakukan di frontend atas data yang sudah dimuat penuh
+- Menghapus komentar di modal Edit Bug tidak menutup modal (tombol hapus bertipe `button`, bukan `submit`)
 
 **Stage bug** (dicatat sebagai histori di Progress, nilai stage terkini disimpan juga di data Bug untuk filter/tampilan cepat):
 
@@ -378,6 +384,22 @@ Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus 
 
 ---
 
+### 3.16 Antarmuka & Navigasi (UI Revamp)
+
+**Tujuan:** Penyegaran tampilan ala ClickUp dengan palet merah/putih/hitam. **Hanya perubahan UI** — semua fitur, field, endpoint, dan hak akses modul lain tetap sama seperti versi sebelumnya (diverifikasi lewat audit paritas, lihat `TESTING_UI_REVAMP.md`).
+
+**Fitur:**
+- **App shell** — top bar hitam, icon rail per section, sidebar per section yang bisa disembunyikan/ditampilkan. Breadcrumb memakai judul halaman asli. Status sidebar (`pt_sidebar_collapsed`) dan tema (`pt_theme`) disimpan per browser di `localStorage`, bukan di akun user
+- **Tema terang/gelap** — slider tema; warna lewat variabel CSS sehingga grafik dan komponen ikut berganti
+- **Backlog** — tampilan **List** dikelompokkan per status (kolom Kode + Tipe digabung jadi satu kolom **Item**) dan tampilan **Board**; status/prioritas/sprint diubah lewat menu pill (status pill, bendera prioritas); klik baris membuka detail
+- **Command palette (Ctrl/⌘ K)** — lompat ke halaman mana pun yang boleh dibuka user (mengikuti permission), atau cari Backlog item berdasarkan kode/judul (minimal 2 karakter); item dibuka lewat deep link `/backlog?item=ID` yang sama dengan notifikasi
+- **Daftar produk di sidebar** — di Backlog (`/backlog?product=ID`), QA Module (`/qa?product=ID`), dan Bugs Incident (`/bugs?product=ID`) sidebar menampilkan daftar produk sebagai shortcut filter. Produk aktif ditandai; klik menu halamannya (tanpa produk) menghapus filter. Filter berada di parameter URL `product` sehingga bisa di-bookmark dan sinkron dengan dropdown produk di halaman
+- **Status presence (online / away / offline)** — titik status di avatar (top bar, menu akun, AssigneeStack, Users, Team Workload, User Occupation, saran @mention). Tiap tab yang terbuka mengirim heartbeat ±30 detik dengan state `online` (tab terlihat, ada aktivitas < 5 menit) atau `away` (tab tersembunyi/diam). Status dihitung saat dibaca sehingga beberapa tab tidak saling menimpa: **online** = aktif ≤ 75 detik, **offline** = tanpa heartbeat > 150 detik atau sudah logout, selain itu **away**. Logout langsung mengirim offline
+
+**Catatan implementasi:** Presence disimpan di tabel terpisah `user_presence` (`migration_v22.sql`) — bukan kolom di `users` — karena trigger `BEFORE UPDATE` di `users` akan mengubah `updated_at` setiap heartbeat. Klien memakai `fetch` sendiri (tanpa toast/redirect interceptor axios) supaya galat heartbeat tidak mengganggu user. Pilihan baris per halaman tiap halaman berdiri sendiri (state lokal, tidak dibagi lintas halaman dan tidak disimpan di browser): Backlog 10/30/50/100 (default 30), QA & Bugs 10/30/50/100 (default 10); Standup dan Users 10/50/100; My Tasks 10/20/50.
+
+---
+
 ## 4. Alur Kerja Utama
 
 ### Alur Sprint Planning
@@ -471,6 +493,7 @@ Karyawan tanpa akun buka /report-bug (tanpa login)
 | `bug_progress_updates` | Histori perubahan stage bug (append-only log, tidak ada `updated_at`) |
 | `bug_activities` | Komentar & log perubahan per bug (`type`: `comment`/`change_log`), mirror `item_activities` milik Backlog |
 | `notifications` | Notifikasi per user |
+| `user_presence` | Status online/away/offline per user: `last_seen_at` (heartbeat apa pun), `last_active_at` (heartbeat dari tab terlihat & aktif); satu baris per user, dihapus saat logout (`migration_v22.sql`, lihat 3.16) |
 | `app_settings` | Key-value store untuk setting yang bisa diubah lewat UI tanpa restart — saat ini dipakai untuk config SMTP (`mail.*`), lihat 3.14 |
 
 ### Port
@@ -491,6 +514,13 @@ Karyawan tanpa akun buka /report-bug (tanpa login)
 POST /api/auth/login              Login, kembalikan JWT token
 GET  /api/auth/me                 Data user yang sedang login
 PUT  /api/auth/change-password    Ganti password sendiri (perlu currentPassword + newPassword)
+```
+
+### Presence
+```
+POST /api/presence/heartbeat      Heartbeat dari tab yang terbuka; body {state: "online" | "away"}
+POST /api/presence/offline        Tandai user offline seketika (dipanggil saat logout)
+GET  /api/presence                Status semua user: user_id, last_seen_at, last_active_at, status (online/away/offline)
 ```
 
 ### Backlog
@@ -747,6 +777,10 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | `migration_v16.sql` | Sederhanakan stage Bugs Incident jadi 4 tahap (`open, in_progress, ready_to_test, done`), tambah kolom `bugs.closed_at` |
 | `migration_v17.sql` | Tabel `app_settings` (key-value store) — dipakai pertama kali untuk config SMTP Notification Settings (3.14) |
 | `migration_v18.sql` | Kolom `bugs.reporter_name`, `bugs.reporter_email` (nullable) — identitas pelapor untuk tiket dari Lapor Bug Publik (3.15) |
+| `migration_v19.sql` | Multi-assignee untuk Backlog item |
+| `migration_v20.sql` | Multi-assignee untuk Bugs Incident |
+| `migration_v21.sql` | Matrix Modul × Aksi untuk `roles.permissions` (overwrite penuh 7 role default, lihat 3.10). **Belum dipasang di initdb `docker-compose.yml`** (mount berhenti di v20 lalu lompat ke v22), jadi jalankan manual pada database baru maupun lama |
+| `migration_v22.sql` | Tabel `user_presence` (status online/away/offline di avatar, 3.16). Dipasang di initdb `docker-compose.yml`, tetapi initdb hanya jalan saat volume pertama dibuat — **database production yang sudah ada wajib menjalankannya manual** sebelum/saat backend baru naik, kalau tidak endpoint `/api/presence` gagal (titik status tidak muncul, bagian aplikasi lain tidak terpengaruh) |
 
 ---
 
@@ -803,3 +837,5 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | 19 Okt 2026 | 3.3 | QA (3.8), Bugs Incident (3.9): dropdown **Backlog Item** sekarang menampilkan hierarki — opsi disusun Epic → Story → Task/Bug mengikuti `parent_id` (terindentasi per level, item tanpa parent yang valid tetap tampil sebagai root alih-alih hilang), item `independent` dikelompokkan terpisah di bawah. Tiap opsi dapat **badge warna tipe** (Story/Task/Bug/Epic/Independent) di kiri kode, warna sama seperti tabel Backlog (3.2). Di tiap level, urutan **tipe lebih diutamakan dari kode** (semua Story dulu baru Task, dst — bukan murni sort kode) supaya tipe yang sejenis tidak tercampur. Komponen `SearchableSelect` (2.4) diperluas dengan properti opsional `depth`/`badge`; dua pemakaian lain komponen ini (Parent User Story/Parent Epic di form Backlog, 3.2) tidak mengirim properti ini sehingga tampilannya tidak berubah. Fetch data backlog untuk kedua picker ini dinaikkan dari `limit=500` ke `limit=2000` supaya tree tidak terpotong di produk dengan ratusan item. Murni perubahan frontend (file baru `frontend/src/utils/backlogHierarchy.js`), tidak ada perubahan skema database atau endpoint baru |
 | 19 Okt 2026 | 3.3 | QA (3.8), Bugs Incident (3.9): item berstatus **`done` disembunyikan** dari pilihan baru di dropdown Backlog Item — mengurangi risiko salah pilih item yang sudah selesai saat membuat Test Case/Bug baru. Pengecualian: item yang sedang jadi pilihan pada Test Case/Bug yang **sedang diedit** tetap ditampilkan meski statusnya `done`, supaya form edit tidak terlihat seperti kehilangan link-nya. Filter ini murni baca `status` yang sudah ter-load (tidak ada request/endpoint baru), dan tidak pernah menulis ulang status apa pun — item kembali muncul di dropdown secara otomatis begitu statusnya diubah dari `done` lewat halaman Backlog (3.2) seperti biasa |
 | 28 Okt 2026 | 3.4 | Bugs Incident (3.9): tambah stage ke-6 **`improvement`** untuk masukan/ide yang ditemukan di produk dan bukan bug (stage biasa, bisa dipindah ke stage lain). Bisa dipilih langsung saat **Buat Bug** (field *Stage Awal*: Open/Improvement) dan lewat *Jenis Laporan* di form publik `/report-bug`; import CSV menerima Stage "Improvement". Kolom **Stage** di tabel Bugs sekarang dropdown untuk ganti stage cepat (memakai `POST /api/bugs/progress`, jadi histori/`closed_at`/notifikasi tetap konsisten). Tidak ada perubahan skema database |
+| 30 Okt 2026 | 3.5 | **UI Revamp ala ClickUp** (3.16) — palet merah/putih/hitam, app shell baru (top bar hitam, icon rail, sidebar per section, tema terang/gelap), Backlog List per status + Board, status pill, bendera prioritas, command palette Ctrl K, shortcut produk di sidebar. **Hanya perubahan UI**, tidak ada fitur yang dihapus (audit paritas original vs revamp: `TESTING_UI_REVAMP.md`). Tambah **status presence** online/away/offline di avatar: tabel `user_presence` (`migration_v22.sql`) + `GET /api/presence`, `POST /api/presence/heartbeat`, `POST /api/presence/offline`. QA (3.8): grafik Test Results per Sprint jadi tren per produk (backend `/api/qa/dashboard` `bySprint` sekarang ikut filter `product_id` dan mengambil 6 sprint **terbaru** per produk — sebelumnya 12 sprint terlama dan filter diabaikan) |
+| 2 Nov 2026 | 3.6 | Perbaikan dari uji paritas UI revamp: (1) QA (3.8) — Run Test tanpa memilih Sprint tidak lagi gagal `500` (`QaController.toLong` memperlakukan string kosong sebagai null); (2) Backlog (3.2), Bugs (3.9) — menghapus komentar tidak lagi menutup modal; (3) PRD 3.5 diluruskan: kartu Kanban Sprint display-only, status diubah dari Backlog/My Tasks. Backlog (3.2): mengganti baris per halaman (10/30/50/100) langsung memuat ulang data (sebelumnya baru berubah setelah menekan Group Status karena `perPage` tidak masuk dependency `useCallback`). QA (3.8) & Bugs Incident (3.9): daftar produk di sidebar (filter `?product=ID`), pilihan baris per halaman 10/30/50/100 yang berubah seketika, dan otomatis pindah ke halaman terakhir berisi data bila halaman aktif melewati batas. Tidak ada perubahan skema database |
