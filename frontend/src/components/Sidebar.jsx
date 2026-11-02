@@ -36,14 +36,17 @@ export default function Sidebar({ section, onCollapse }) {
   const { can } = useAuth();
   const location = useLocation();
   const [products, setProducts] = useState([]);
-  const isPlan = section.key === 'plan';
-  // Products shortcut list (Planning only): each opens the Backlog filtered to that product
-  const activeProduct = location.pathname === '/backlog' ? new URLSearchParams(location.search).get('product') : null;
+  // Products shortcut list (Planning + Quality): each opens the page filtered to that product —
+  // Backlog in Planning; QA Module or Bugs Incident (whichever is open, QA by default) in Quality
+  const productBase = section.key === 'plan' ? '/backlog'
+    : section.key === 'quality' ? (location.pathname === '/bugs' ? '/bugs' : '/qa')
+    : null;
+  const activeProduct = productBase && location.pathname === productBase ? new URLSearchParams(location.search).get('product') : null;
 
   useEffect(() => {
-    if (!isPlan || products.length) return;
+    if (!productBase || products.length) return;
     client.get('/products').then(r => setProducts(r.data || [])).catch(() => {});
-  }, [isPlan, products.length]);
+  }, [productBase, products.length]);
 
   const navCls = (on) => `flex items-center gap-2.5 h-8 px-2.5 rounded-lg text-[13.5px] whitespace-nowrap transition-colors
     ${on ? 'bg-slate-200/70 text-slate-800 font-medium' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-800'}`;
@@ -60,16 +63,16 @@ export default function Sidebar({ section, onCollapse }) {
       <nav className="flex flex-col gap-px px-2 pt-1 pb-4 overflow-y-auto">
         {visibleItems(section, can).map(({ to, label, icon: Icon }) => (
           <NavLink key={to} to={to} end={to === '/'}
-            className={({ isActive }) => navCls(isActive && !(to === '/backlog' && activeProduct))}>
+            className={({ isActive }) => navCls(isActive && !(to === productBase && activeProduct))}>
             <Icon className="w-4 h-4 shrink-0" />
             <span className="truncate">{label}</span>
           </NavLink>
         ))}
-        {isPlan && products.length > 0 && (
+        {productBase && products.length > 0 && (
           <>
             <p className="pt-[18px] pb-1.5 pl-2.5 text-[11px] font-semibold uppercase tracking-[.06em] text-slate-400">Products</p>
             {products.map(p => (
-              <Link key={p.id} to={`/backlog?product=${p.id}`} className={navCls(activeProduct === String(p.id))}>
+              <Link key={p.id} to={`${productBase}?product=${p.id}`} className={navCls(activeProduct === String(p.id))}>
                 <span className="w-5 h-5 rounded-[5px] grid place-items-center text-[11px] font-bold text-white shrink-0"
                   style={{ backgroundColor: p.color || '#9A9CA4' }}>
                   {(p.code || p.name || '?').charAt(0)}

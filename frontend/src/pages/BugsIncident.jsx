@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line
@@ -751,7 +752,12 @@ export default function BugsIncident() {
   const [backlogItems, setBacklogItems] = useState([]);
   const [users,        setUsers]       = useState([]);
   const [dashboard,    setDashboard]   = useState(null);
-  const [filters,      setFilters]     = useState({ product_id: '' });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const productParam = searchParams.get('product') || '';
+  const [filters,      setFilters]     = useState({ product_id: productParam });
+  // Sidebar product links (?product=ID) drive the product filter; the select below writes back to the URL
+  useEffect(() => { setFilters(f => f.product_id === productParam ? f : { ...f, product_id: productParam }); }, [productParam]);
+  const changeProduct = (v) => setSearchParams(p => { const n = new URLSearchParams(p); if (v) n.set('product', v); else n.delete('product'); return n; }, { replace: true });
   // Client-side only (Bugs tab list is already loaded in full per product, so these
   // don't need a round-trip to the backend like `filters.product_id` does).
   const [bugFilters,   setBugFilters]  = useState({ search: '', stage: [], severity: [], priority: [], assigned_to: [] });
@@ -956,7 +962,7 @@ export default function BugsIncident() {
           ))}
         </div>
         <div className="ml-auto pb-2">
-          <select className="select w-auto min-w-[160px]" value={filters.product_id} onChange={e => setFilters(f => ({ ...f, product_id: e.target.value }))}>
+          <select className="select w-auto min-w-[160px]" value={filters.product_id} onChange={e => changeProduct(e.target.value)}>
             <option value="">Semua Produk</option>
             {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
