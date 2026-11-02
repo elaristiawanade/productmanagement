@@ -36,7 +36,7 @@ function renderUrlToken(part, key) {
   const coreText = part.slice(0, part.length - trail.length);
   return [
     <a key={key} href={coreHref} target="_blank" rel="noopener noreferrer"
-      className="text-indigo-600 underline hover:text-indigo-700 break-all">
+      className="text-slate-800 underline underline-offset-2 decoration-slate-400 hover:decoration-slate-800 break-all">
       {coreText}
     </a>,
     trail,
@@ -50,7 +50,7 @@ export function renderWithLinks(text, keyPrefix = 'lnk') {
     if (md) {
       return [
         <a key={`${keyPrefix}-${i}`} href={md[2]} target="_blank" rel="noopener noreferrer"
-          className="text-indigo-600 underline hover:text-indigo-700 break-all">
+          className="text-slate-800 underline underline-offset-2 decoration-slate-400 hover:decoration-slate-800 break-all">
           {md[1]}
         </a>,
       ];

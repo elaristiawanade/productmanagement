@@ -9,6 +9,7 @@ import { id as localeId } from 'date-fns/locale';
 import client from '../api/client';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
+import StatusMenu from '../components/StatusMenu';
 import { useAuth } from '../context/AuthContext';
 import { renderWithLinks } from '../utils/linkify';
 import toast from 'react-hot-toast';
@@ -58,7 +59,7 @@ function TaskPanel({ item, onClose, onStatusChange, onMarkDone }) {
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <Link to={`/backlog?item=${item.id}`} onClick={onClose}
-              className="p-1.5 rounded-lg hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 transition-colors"
+              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-800 transition-colors"
               title="Edit lengkap di Backlog">
               <ExternalLink className="w-4 h-4" />
             </Link>
@@ -117,12 +118,12 @@ function TaskPanel({ item, onClose, onStatusChange, onMarkDone }) {
 
           {/* Parent */}
           {item.parent_code && (
-            <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
               <p className="text-xs text-slate-400 mb-1 flex items-center gap-1">
                 <Link2 className="w-3 h-3" /> Parent
               </p>
-              <p className="text-sm font-mono text-indigo-600">{item.parent_code}
-                {item.parent_title && <span className="font-sans font-normal text-indigo-500 ml-2">{item.parent_title}</span>}
+              <p className="text-sm font-mono text-slate-800">{item.parent_code}
+                {item.parent_title && <span className="font-sans font-normal text-slate-600 ml-2">{item.parent_title}</span>}
               </p>
             </div>
           )}
@@ -160,7 +161,7 @@ function TaskPanel({ item, onClose, onStatusChange, onMarkDone }) {
 
         <div className="px-5 py-3 border-t border-slate-100 shrink-0">
           <Link to={`/backlog?item=${item.id}`} onClick={onClose}
-            className="flex items-center justify-center gap-1.5 text-sm text-indigo-600 hover:underline">
+            className="flex items-center justify-center gap-1.5 text-sm text-slate-800 font-medium hover:underline underline-offset-2">
             <ExternalLink className="w-3.5 h-3.5" /> Edit lengkap di Backlog
           </Link>
         </div>
@@ -299,7 +300,7 @@ export default function MyTask() {
             {
               label: 'Aktif',
               value: stats.total - stats.done - items.filter(i => i.status === 'backlog').length,
-              color: 'bg-indigo-50 text-indigo-600',
+              color: 'bg-slate-100 text-slate-700',
               icon: Clock,
               action: () => { setTab('active'); setPage(1); }
             },
@@ -326,7 +327,7 @@ export default function MyTask() {
             },
           ].map(({ label, value, color, icon: Icon, action }) => (
             <button key={label}
-              className={`card p-4 flex items-center gap-3 text-left hover:shadow-md hover:ring-1 hover:ring-indigo-100 transition-all cursor-pointer`}
+              className="card p-4 flex items-center gap-3 text-left hover:border-slate-300 hover:bg-slate-50 transition-colors cursor-pointer"
               onClick={action}>
               <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
                 <Icon className="w-4 h-4" />
@@ -340,17 +341,17 @@ export default function MyTask() {
         </div>
 
         {/* Tabs */}
-        <div className="flex items-center gap-1 border-b border-slate-200 overflow-x-auto">
+        <div className="flex items-center gap-5 border-b border-slate-200 overflow-x-auto">
           {STATUS_TABS.map(t => (
             <button key={t.key}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors -mb-px
+              className={`flex items-center gap-1.5 h-10 text-[13.5px] whitespace-nowrap border-b-2 transition-colors -mb-px
                 ${tab === t.key
-                  ? 'border-indigo-600 text-indigo-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                  ? 'border-slate-800 text-slate-800 font-semibold'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'}`}
               onClick={() => { setTab(t.key); setPage(1); }}>
               {t.label}
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold
-                ${tab === t.key ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500'}`}>
+              <span className={`text-[11px] px-1.5 leading-[18px] rounded-full font-semibold
+                ${tab === t.key ? 'bg-slate-800 text-panel' : 'bg-slate-100 text-slate-500'}`}>
                 {tabCount(t.key)}
               </span>
             </button>
@@ -401,7 +402,7 @@ export default function MyTask() {
               <CheckCircle2 className="w-10 h-10 text-slate-200 mx-auto mb-3" />
               <p className="text-slate-400 font-medium">Tidak ada task ditemukan</p>
               {hasFilter && (
-                <button onClick={resetFilters} className="text-xs text-indigo-600 hover:underline mt-1">
+                <button onClick={resetFilters} className="text-xs text-slate-800 underline underline-offset-2 mt-1">
                   Hapus filter
                 </button>
               )}
@@ -424,7 +425,9 @@ export default function MyTask() {
                 <tbody className="divide-y divide-slate-50">
                   {paged.map(item => (
                     <tr key={item.id}
-                      className={`hover:bg-slate-50/80 transition-colors ${
+                      // Whole row opens the task panel (like the title); inner controls stop propagation
+                      onClick={() => { if (!window.getSelection?.().toString()) setPanel(item); }}
+                      className={`group cursor-pointer hover:bg-slate-50 transition-colors ${
                         item.is_delayed    ? 'bg-red-50/30' :
                         item.status === 'done' ? 'opacity-60' : ''
                       }`}>
@@ -434,13 +437,13 @@ export default function MyTask() {
                       </td>
                       <td className="px-4 py-3 max-w-[260px]">
                         <button className="text-left group w-full"
-                          onClick={() => setPanel(item)}>
+                          onClick={e => { e.stopPropagation(); setPanel(item); }}>
                           {(item.parent_code) && (
-                            <p className="text-[11px] text-indigo-400 flex items-center gap-1 mb-0.5">
+                            <p className="text-[11px] text-slate-500 font-mono flex items-center gap-1 mb-0.5">
                               <Link2 className="w-2.5 h-2.5" />{item.parent_code}
                             </p>
                           )}
-                          <p className={`font-medium truncate group-hover:text-indigo-600 transition-colors
+                          <p className={`font-medium truncate group-hover:underline underline-offset-2 transition-colors
                             ${item.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700'}`}
                             title={item.title}>
                             {item.title}
@@ -462,12 +465,7 @@ export default function MyTask() {
                         <PriorityBadge priority={item.priority} />
                       </td>
                       <td className="px-3 py-3 text-center">
-                        <select
-                          className="text-xs border-0 bg-transparent focus:ring-0 cursor-pointer"
-                          value={item.status}
-                          onChange={e => quickStatus(item.id, e.target.value)}>
-                          {STATUSES.map(s => <option key={s} value={s}>{s.replace('_',' ')}</option>)}
-                        </select>
+                        <StatusMenu status={item.status} statuses={STATUSES} onChange={s => quickStatus(item.id, s)} />
                       </td>
                       <td className="px-3 py-3 text-xs text-slate-500">{item.sprint_name || '—'}</td>
                       <td className="px-3 py-3 text-xs">
@@ -478,7 +476,7 @@ export default function MyTask() {
                           : <span className="text-slate-400">—</span>}
                       </td>
                       <td className="px-3 py-3 text-center">
-                        <div className="flex items-center gap-1 justify-center">
+                        <div className="flex items-center gap-1 justify-center" onClick={e => e.stopPropagation()}>
                           {item.status !== 'done' && (
                             <button title="Tandai selesai"
                               className="p-1 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition-colors"
@@ -487,7 +485,7 @@ export default function MyTask() {
                             </button>
                           )}
                           <Link to={`/backlog?item=${item.id}`}
-                            className="p-1 rounded hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 transition-colors"
+                            className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-800 transition-colors"
                             title="Buka di Backlog">
                             <ExternalLink className="w-3.5 h-3.5" />
                           </Link>

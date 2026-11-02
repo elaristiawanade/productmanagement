@@ -144,7 +144,7 @@ Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus 
 **Fitur:**
 - Buat, edit, mulai, dan selesaikan sprint per produk
 - Field sprint: nama, tanggal mulai/selesai, **capacity** (maks story points yang direncanakan, default 22 pts)
-- **Sprint board (Kanban):** Tampilan item dikelompokkan per kolom status (`todo`, `in_progress`, `in_review`, `done`, `blocked`). Status item diupdate via dropdown inline di masing-masing kartu
+- **Sprint board (Kanban):** Tampilan item dikelompokkan per kolom status (`todo`, `in_progress`, `in_review`, `done`, `blocked`). Kartu bersifat tampilan saja (kode, tipe, judul, story points) — status item diubah dari halaman Backlog atau My Tasks (menu status inline), bukan dari kartu Kanban
 - **Burndown chart:** Grafik poin tersisa vs ideal burndown per sprint
 - Lihat sprint aktif dan riwayat sprint
 

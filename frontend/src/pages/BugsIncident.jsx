@@ -5,7 +5,10 @@ import {
 } from 'recharts';
 import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff, AlertTriangle, XCircle, Lightbulb } from 'lucide-react';
 import client from '../api/client';
+import PresenceDot from '../components/PresenceDot';
 import Modal from '../components/Modal';
+import StatusMenu from '../components/StatusMenu';
+import { useChartTheme } from '../utils/chartTheme';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import LinkInsertButton from '../components/LinkInsertButton';
@@ -194,7 +197,7 @@ function ActivitySection({ bugId, users = [] }) {
         selectMention(mentionSuggestions[mentionIdx].name);
         return;
       }
-      if (e.key === 'Escape') { setMentionOpen(false); return; }
+      if (e.key === 'Escape') { e.stopPropagation(); setMentionOpen(false); return; }
     }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -257,7 +260,7 @@ function ActivitySection({ bugId, users = [] }) {
                   {act.created_at ? formatDistanceToNow(parseISO(act.created_at), { addSuffix: true, locale: localeId }) : ''}
                 </span>
                 {act.type === 'comment' && (user?.id === act.user_id || can('bugs', 'access')) && (
-                  <button onClick={() => deleteActivity(act.id)}
+                  <button type="button" onClick={() => deleteActivity(act.id)}
                     className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-red-500 ml-auto">
                     <X className="w-3 h-3" />
                   </button>
@@ -282,9 +285,10 @@ function ActivitySection({ bugId, users = [] }) {
               <button key={u.id} type="button"
                 className={`w-full text-left flex items-center gap-2 px-3 py-1.5 text-xs transition-colors ${i === mentionIdx ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'}`}
                 onMouseDown={e => { e.preventDefault(); selectMention(u.name); }}>
-                <span className="w-5 h-5 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0"
+                <span className="relative w-5 h-5 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0"
                   style={{ backgroundColor: u.avatar_color || '#6366f1' }}>
                   {u.name.charAt(0).toUpperCase()}
+                  <PresenceDot userId={u.id} size="sm" />
                 </span>
                 <span className="truncate">{u.name}</span>
               </button>
@@ -341,9 +345,10 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
 
   useEffect(() => {
     if (!previewImage) return;
-    const handler = (e) => { if (e.key === 'Escape') setPreviewImage(null); };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
+    // Capture + stopPropagation: Esc closes only the preview, not the bug modal underneath
+    const handler = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setPreviewImage(null); } };
+    document.addEventListener('keydown', handler, true);
+    return () => document.removeEventListener('keydown', handler, true);
   }, [previewImage]);
 
   const loadAttachments = useCallback(async () => {
@@ -525,7 +530,7 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
             <p className="text-xs text-slate-400 -mt-2 mb-3">Gambar akan diunggah setelah bug disimpan.</p>
           )}
           {(bug?.id ? attachments.length : pendingFiles.length) === 0 ? (
-            <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors"
+            <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center cursor-pointer hover:border-slate-400 hover:bg-slate-50 transition-colors"
               onClick={() => fileInputRef.current?.click()}>
               <ImageIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
               <p className="text-xs text-slate-400">Klik untuk unggah gambar</p>
@@ -539,9 +544,10 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
                       onClick={() => setPreviewImage({ url: `/api/attachments/file/${att.filename}`, name: att.original_name })}>
                       <img src={`/api/attachments/file/${att.filename}`} alt={att.original_name}
                         className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors pointer-events-none">
                         <button type="button" onClick={(e) => { e.stopPropagation(); deleteAttachment(att.id); }}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
+                          title="Hapus lampiran" aria-label="Hapus lampiran"
+                          className="pointer-events-auto absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -554,9 +560,10 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
                     <div key={idx} className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-50 aspect-video cursor-pointer"
                       onClick={() => setPreviewImage({ url: p.url, name: p.name })}>
                       <img src={p.url} alt={p.name} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors pointer-events-none">
                         <button type="button" onClick={(e) => { e.stopPropagation(); removePendingFile(idx); }}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
+                          title="Hapus lampiran" aria-label="Hapus lampiran"
+                          className="pointer-events-auto absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -566,7 +573,7 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
                     </div>
                   ))}
               <button type="button" onClick={() => fileInputRef.current?.click()}
-                className="aspect-video rounded-lg border-2 border-dashed border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors flex flex-col items-center justify-center gap-1">
+                className="aspect-video rounded-lg border-2 border-dashed border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-colors flex flex-col items-center justify-center gap-1">
                 <Upload className="w-4 h-4 text-slate-400" />
                 <span className="text-xs text-slate-400">Tambah</span>
               </button>
@@ -587,7 +594,7 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
       </div>
 
       {previewImage && (
-        <div className="fixed inset-0 z-[60] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-6"
+        <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6"
           onClick={() => setPreviewImage(null)}>
           <button type="button" onClick={() => setPreviewImage(null)}
             className="absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2">
@@ -636,7 +643,7 @@ function BugProgressForm({ bug, onSave, onClose }) {
           {STAGES.map(s => (
             <button type="button" key={s} onClick={() => setForm(f => ({ ...f, stage: s }))}
               className={`py-2 rounded-lg text-xs font-medium border transition-all
-                ${form.stage === s ? 'ring-2 ring-indigo-400 border-indigo-400' : 'border-slate-200 hover:bg-slate-50'}`}>
+                ${form.stage === s ? 'ring-1 ring-slate-800 border-slate-800 text-slate-800' : 'border-slate-200 hover:bg-slate-50'}`}>
               {STAGE_LABELS[s] || s}
             </button>
           ))}
@@ -700,7 +707,7 @@ function MultiSelect({ label, options, selected, onChange, minWidth = 130 }) {
   return (
     <div className="relative" ref={ref} style={{ minWidth }}>
       <button type="button" onClick={() => setOpen(o => !o)}
-        className={`select w-full flex items-center justify-between gap-2 ${count ? 'border-indigo-300 text-slate-700' : 'text-slate-500'}`}>
+        className={`chip w-full justify-between ${count ? 'chip-on' : ''}`}>
         <span className="truncate">{buttonLabel}</span>
         <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -719,7 +726,7 @@ function MultiSelect({ label, options, selected, onChange, minWidth = 130 }) {
             const on = selected.includes(o.v);
             return (
               <button key={o.v} type="button" onClick={() => toggle(o.v)}
-                className={`w-full text-left flex items-center gap-2 px-3 py-1.5 text-sm transition-colors ${on ? 'text-indigo-700 bg-indigo-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>
+                className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] text-slate-700 transition-colors hover:bg-slate-100">
                 <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${on ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}>
                   {on && <Check className="w-3 h-3 text-white" />}
                 </span>
@@ -757,6 +764,7 @@ export default function BugsIncident() {
   const [sortKey,      setSortKey]     = useState('created_at');
   const [sortDir,      setSortDir]     = useState('desc');
   const [trendPeriod,  setTrendPeriod] = useState('month');
+  const ct = useChartTheme();
   const [modal,        setModal]       = useState({ open: false, type: '', data: null });
   const [loading,      setLoading]     = useState(true);
   const [importing,    setImporting]   = useState(false);
@@ -806,7 +814,7 @@ export default function BugsIncident() {
 
   const sortIcon = (key) => {
     if (sortKey !== key) return <ArrowUpDown className="w-3 h-3 text-slate-300" />;
-    return sortDir === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600" /> : <ArrowDown className="w-3 h-3 text-indigo-600" />;
+    return sortDir === 'asc' ? <ArrowUp className="w-3 h-3 text-slate-800" /> : <ArrowDown className="w-3 h-3 text-slate-800" />;
   };
 
   const renderSortableTh = (key, label, align = 'center') => (
@@ -892,7 +900,8 @@ export default function BugsIncident() {
     }
   };
 
-  const STAGE_COLORS = { open: '#ef4444', in_progress: '#3b82f6', ready_to_test: '#f59e0b', reopen: '#a855f7', done: '#10b981', improvement: '#0ea5e9' };
+  // Same hues as the stage pills (StatusBadge)
+  const STAGE_COLORS = { open: '#E5484D', in_progress: '#3E63DD', ready_to_test: '#D9891A', reopen: '#9B51E0', done: '#1F9D55', improvement: '#0B8FCB' };
   const summary = dashboard?.summary || {};
 
   const filteredBugs = bugs.filter(b => {
@@ -941,7 +950,7 @@ export default function BugsIncident() {
           {[['dashboard','Bugs Dashboard'],['bugs','Bugs'],['progress','Progress']].map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)}
               className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors
-                ${tab === id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+                ${tab === id ? 'border-slate-800 text-slate-800 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
               {label}
             </button>
           ))}
@@ -982,10 +991,10 @@ export default function BugsIncident() {
                   <h3 className="font-semibold text-slate-700 mb-4">Bugs per Produk</h3>
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={dashboard?.byProduct || []} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis dataKey="product" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 11 }} />
-                      <Tooltip />
+                      <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} />
+                      <XAxis dataKey="product" tick={{ ...ct.axisTick, fontSize: 10 }} stroke={ct.line} />
+                      <YAxis tick={ct.axisTick} stroke={ct.line} />
+                      <Tooltip {...ct.tooltip} />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
                       <Bar dataKey="open_count"   name="Open"   fill="#ef4444" radius={[4,4,0,0]} />
                       <Bar dataKey="done_count"   name="Done"   fill="#10b981" radius={[4,4,0,0]} />
@@ -998,10 +1007,10 @@ export default function BugsIncident() {
                   <h3 className="font-semibold text-slate-700 mb-4">Distribusi Stage</h3>
                   <ResponsiveContainer width="100%" height={220}>
                     <PieChart>
-                      <Pie data={stagePieData} cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={3} dataKey="value" label={({ name, percent }) => `${name} ${(percent*100).toFixed(0)}%`} labelLine={false}>
+                      <Pie data={stagePieData} cx="50%" cy="50%" innerRadius={45} outerRadius={72} paddingAngle={3} dataKey="value" label={({ name, percent }) => `${name} ${(percent*100).toFixed(0)}%`} labelLine={false}>
                         {stagePieData.map((d, i) => <Cell key={i} fill={d.color} />)}
                       </Pie>
-                      <Tooltip />
+                      <Tooltip {...ct.tooltip} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -1015,7 +1024,7 @@ export default function BugsIncident() {
                     {[['week', 'Mingguan'], ['month', 'Bulanan'], ['year', 'Tahunan']].map(([v, l]) => (
                       <button key={v} type="button" onClick={() => setTrendPeriod(v)}
                         className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors
-                          ${trendPeriod === v ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                          ${trendPeriod === v ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                         {l}
                       </button>
                     ))}
@@ -1023,10 +1032,10 @@ export default function BugsIncident() {
                 </div>
                 <ResponsiveContainer width="100%" height={220}>
                   <LineChart data={trendData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                    <Tooltip />
+                    <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} />
+                    <XAxis dataKey="label" tick={ct.axisTick} stroke={ct.line} />
+                    <YAxis tick={ct.axisTick} stroke={ct.line} allowDecimals={false} />
+                    <Tooltip {...ct.tooltip} />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
                     <Line type="monotone" dataKey="opened_count" name="Dibuka"  stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
                     <Line type="monotone" dataKey="closed_count" name="Ditutup" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
@@ -1060,9 +1069,9 @@ export default function BugsIncident() {
 
                 <div className="card overflow-hidden">
                   <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4 text-indigo-500" />
+                    <MessageSquare className="w-4 h-4 text-slate-500" />
                     <h3 className="font-semibold text-slate-700">Recent Comments</h3>
-                    <span className="ml-auto text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">{dashboard?.recentComments?.length || 0}</span>
+                    <span className="ml-auto text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full">{dashboard?.recentComments?.length || 0}</span>
                   </div>
                   <div className="divide-y divide-slate-50 max-h-[400px] overflow-y-auto">
                     {dashboard?.recentComments?.length === 0 && <p className="text-center py-8 text-slate-400 text-sm">Belum ada komentar terkini</p>}
@@ -1154,9 +1163,9 @@ export default function BugsIncident() {
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-[1320px] text-sm">
                     <thead>
-                      <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                      <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 whitespace-nowrap">
                         <th className="text-left px-4 py-3">Kode</th>
                         <th className="text-left px-4 py-3">Judul</th>
                         <th className="text-left px-3 py-3">Item</th>
@@ -1175,27 +1184,28 @@ export default function BugsIncident() {
                     <tbody>
                       {pagedBugs.length === 0 && <tr><td colSpan={13} className="text-center py-10 text-slate-400">Belum ada bug</td></tr>}
                       {pagedBugs.map(b => (
-                        <tr key={b.id} className="table-row">
-                          <td className="px-4 py-3"><span className="font-mono text-xs text-slate-500">{b.code}</span></td>
-                          <td className="px-4 py-3 max-w-[220px]">
+                        <tr key={b.id}
+                          // Whole row opens the bug (same as the pencil, so only with bugs.access); inner controls stop propagation
+                          onClick={() => { if (canAccess && !window.getSelection?.().toString()) setModal({ open: true, type: 'bug', data: b }); }}
+                          className={`table-row ${canAccess ? 'cursor-pointer' : ''}`}>
+                          <td className="px-4 py-3 whitespace-nowrap"><span className="font-mono text-xs text-slate-500">{b.code}</span></td>
+                          <td className="px-4 py-3 min-w-[200px] max-w-[260px]">
                             <p className="font-medium text-slate-700 truncate">{b.title}</p>
                             {b.description && <p className="text-xs text-slate-400 truncate">{b.description}</p>}
                           </td>
                           <td className="px-3 py-3 text-xs text-slate-500">
-                            {b.item_code ? <><span className="font-mono text-slate-400">[{b.item_code}]</span> {b.item_title?.slice(0,30)}</> : '—'}
+                            {/* One line: code never wraps, title truncates (full text on hover) */}
+                            {b.item_code ? (
+                              <div className="flex items-center gap-1 min-w-[170px] max-w-[240px]" title={`[${b.item_code}] ${b.item_title || ''}`}>
+                                <span className="font-mono text-slate-400 shrink-0 whitespace-nowrap">[{b.item_code}]</span>
+                                <span className="truncate">{b.item_title}</span>
+                              </div>
+                            ) : '—'}
                           </td>
                           <td className="px-3 py-3 text-center"><PriorityBadge priority={b.severity} /></td>
                           <td className="px-3 py-3 text-center"><PriorityBadge priority={b.priority} /></td>
                           <td className="px-3 py-3 text-center">
-                            <select
-                              className="text-xs font-medium border-0 bg-transparent focus:ring-0 cursor-pointer"
-                              style={{ color: STAGE_COLORS[b.stage] }}
-                              value={b.stage}
-                              onChange={e => quickStage(b, e.target.value)}
-                              disabled={!canAccess}
-                            >
-                              {STAGES.map(s => <option key={s} value={s} style={{ color: '#0f172a' }}>{STAGE_LABELS[s]}</option>)}
-                            </select>
+                            <StatusMenu status={b.stage} statuses={STAGES} canChange={canAccess} onChange={s => quickStage(b, s)} />
                           </td>
                           <td className="px-3 py-3">
                             {b.assignees?.length > 0
@@ -1219,9 +1229,9 @@ export default function BugsIncident() {
                             ) : '—'}
                           </td>
                           <td className="px-3 py-3">
-                            <div className="flex items-center gap-1 justify-center">
+                            <div className="flex items-center gap-1 justify-center" onClick={e => e.stopPropagation()}>
                               {canAccess && (
-                                <button className="btn-ghost btn-sm p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50" title="Update Progress"
+                                <button className="btn-ghost btn-sm p-1.5 rounded-lg" title="Update Progress"
                                   onClick={() => setModal({ open: true, type: 'progress', data: b })}>
                                   <Wrench className="w-3.5 h-3.5" />
                                 </button>
@@ -1273,9 +1283,9 @@ export default function BugsIncident() {
                 </div>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full min-w-[960px] text-sm">
                   <thead>
-                    <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                    <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 whitespace-nowrap">
                       <th className="text-left px-4 py-3">Bug</th>
                       <th className="text-left px-3 py-3">Item</th>
                       <th className="text-center px-3 py-3">Stage</th>
@@ -1298,7 +1308,12 @@ export default function BugsIncident() {
                             </div>
                           </td>
                           <td className="px-3 py-3 text-xs text-slate-500">
-                            {p.item_code ? (<><span className="font-mono">[{p.item_code}]</span><span className="ml-1 text-slate-600 truncate max-w-[120px] inline-block align-bottom">{p.item_title?.slice(0,25)}</span></>) : '—'}
+                            {p.item_code ? (
+                              <div className="flex items-center gap-1 min-w-[170px] max-w-[240px]" title={`[${p.item_code}] ${p.item_title || ''}`}>
+                                <span className="font-mono shrink-0 whitespace-nowrap">[{p.item_code}]</span>
+                                <span className="text-slate-600 truncate">{p.item_title}</span>
+                              </div>
+                            ) : '—'}
                           </td>
                           <td className="px-3 py-3 text-center">
                             <div className="flex items-center gap-1.5 justify-center">

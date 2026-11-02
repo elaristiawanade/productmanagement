@@ -72,7 +72,7 @@ export default function ReportBug() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
         <div className="w-full max-w-sm text-center">
-          <div className="bg-white/90 backdrop-blur-md border border-white/60 rounded-2xl p-8 shadow-2xl">
+          <div className="bg-panel/90 backdrop-blur-md border border-slate-200 rounded-2xl p-8 shadow-2xl">
             <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 className="w-7 h-7 text-emerald-600" />
             </div>
@@ -192,7 +192,7 @@ export default function ReportBug() {
                 <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
               </div>
               {pendingFiles.length === 0 ? (
-                <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors"
+                <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center cursor-pointer hover:border-slate-400 hover:bg-slate-50 transition-colors"
                   onClick={() => fileInputRef.current?.click()}>
                   <ImageIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                   <p className="text-xs text-slate-400">Klik untuk unggah gambar</p>
@@ -204,16 +204,17 @@ export default function ReportBug() {
                     <div key={idx} className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-50 aspect-video cursor-pointer"
                       onClick={() => setPreviewImage({ url: p.url, name: p.name })}>
                       <img src={p.url} alt={p.name} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors pointer-events-none">
                         <button type="button" onClick={(e) => { e.stopPropagation(); removePendingFile(idx); }}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
+                          title="Hapus lampiran" aria-label="Hapus lampiran"
+                          className="pointer-events-auto absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
                   ))}
                   <button type="button" onClick={() => fileInputRef.current?.click()}
-                    className="aspect-video rounded-lg border-2 border-dashed border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors flex flex-col items-center justify-center gap-1">
+                    className="aspect-video rounded-lg border-2 border-dashed border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-colors flex flex-col items-center justify-center gap-1">
                     <Upload className="w-4 h-4 text-slate-400" />
                     <span className="text-xs text-slate-400">Tambah</span>
                   </button>
@@ -229,7 +230,7 @@ export default function ReportBug() {
       </div>
 
       {previewImage && (
-        <div className="fixed inset-0 z-[60] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-6"
+        <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6"
           onClick={() => setPreviewImage(null)}>
           <button type="button" onClick={() => setPreviewImage(null)}
             className="absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2">

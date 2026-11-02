@@ -1,8 +1,37 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts';
+import { useChartTheme } from '../utils/chartTheme';
+
+const RESULT_LINES = [
+  { key: 'pass_count',    name: 'Pass',    color: '#1F9D55' },
+  { key: 'fail_count',    name: 'Fail',    color: '#E5484D' },
+  { key: 'blocked_count', name: 'Blocked', color: '#D9891A' },
+];
+
+// One product's sprints in time order (rows come sorted from /qa/dashboard). The x label drops the
+// product code ("HRS Sprint 2" -> "Sprint 2"); the tooltip still shows the full sprint name.
+function SprintTrend({ rows, ct, yMax, height, compact = false }) {
+  const code = rows[0]?.product_code;
+  const data = rows.map(r => ({ ...r, label: code ? String(r.sprint).replace(new RegExp(`^${code}\\s*`), '') : r.sprint }));
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart data={data} margin={{ top: 5, right: 12, left: -24, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} vertical={false} />
+        <XAxis dataKey="label" interval={0} tick={{ ...ct.axisTick, fontSize: compact ? 10 : 11 }} stroke={ct.line} padding={{ left: 10, right: 10 }} />
+        <YAxis tick={ct.axisTick} stroke={ct.line} allowDecimals={false} domain={[0, yMax]} />
+        <Tooltip {...ct.tooltip} labelFormatter={(label, payload) => payload?.[0]?.payload?.sprint || label} />
+        {!compact && <Legend wrapperStyle={{ fontSize: 12 }} />}
+        {RESULT_LINES.map(l => (
+          <Line key={l.key} type="linear" dataKey={l.key} name={l.name} stroke={l.color} strokeWidth={2}
+            dot={{ r: compact ? 3 : 3.5, fill: l.color }} activeDot={{ r: 5 }} />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
 import { Plus, Pencil, Trash2, Play, CheckCircle2, XCircle, AlertCircle, Clock, Download, Upload, AlertTriangle } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
@@ -132,7 +161,7 @@ function TestRunForm({ tc, sprints, onSave, onClose }) {
           {['pass','fail','blocked','pending','skip'].map(r => (
             <button type="button" key={r} onClick={() => setForm(f => ({ ...f, result: r }))}
               className={`py-2 rounded-lg text-xs font-medium border transition-all
-                ${form.result === r ? 'ring-2 ring-indigo-400 border-indigo-400' : 'border-slate-200 hover:bg-slate-50'}`}>
+                ${form.result === r ? 'ring-1 ring-slate-800 border-slate-800 text-slate-800' : 'border-slate-200 hover:bg-slate-50'}`}>
               {r.charAt(0).toUpperCase()+r.slice(1)}
             </button>
           ))}
@@ -173,6 +202,7 @@ export default function QA() {
   const [perPageRuns,  setPerPageRuns] = useState(10);
   const [pageRuns,     setPageRuns]    = useState(1);
   const [importing,    setImporting]   = useState(false);
+  const ct = useChartTheme();
   const importInputRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -248,7 +278,6 @@ export default function QA() {
     }
   };
 
-  const PIE_COLORS = ['#10b981','#ef4444','#f59e0b','#94a3b8','#e2e8f0'];
   const summary = dashboard?.summary || {};
 
   const totalPagesCases = Math.max(1, Math.ceil(testCases.length / perPageCases));
@@ -259,12 +288,23 @@ export default function QA() {
   const handlePerPageCases = (v) => { setPerPageCases(v); setPageCases(1); };
   const handlePerPageRuns  = (v) => { setPerPageRuns(v);  setPageRuns(1);  };
 
+  // Colour travels with each slice: zero slices are filtered out, so colouring by index would shift hues
   const passPieData = [
-    { name: 'Pass',    value: +summary.pass_count    || 0 },
-    { name: 'Fail',    value: +summary.fail_count    || 0 },
-    { name: 'Blocked', value: +summary.blocked_count || 0 },
-    { name: 'Pending', value: +summary.pending_count || 0 },
+    { name: 'Pass',    value: +summary.pass_count    || 0, color: '#1F9D55' },
+    { name: 'Fail',    value: +summary.fail_count    || 0, color: '#E5484D' },
+    { name: 'Blocked', value: +summary.blocked_count || 0, color: '#D9891A' },
+    { name: 'Pending', value: +summary.pending_count || 0, color: '#9AA0A9' },
   ].filter(d => d.value > 0);
+
+  // Test results per sprint, one group per product (rows arrive ordered by product, then sprint date).
+  // Small multiples share one Y scale so products can be compared at a glance.
+  const sprintRows   = dashboard?.bySprint || [];
+  const sprintGroups = [];
+  sprintRows.forEach(r => {
+    const last = sprintGroups[sprintGroups.length - 1];
+    if (last && last[0].product_id === r.product_id) last.push(r); else sprintGroups.push([r]);
+  });
+  const sprintYMax = Math.max(1, ...sprintRows.flatMap(r => RESULT_LINES.map(l => +r[l.key] || 0)));
 
   return (
     <div className="space-y-5">
@@ -274,7 +314,7 @@ export default function QA() {
           {[['dashboard','QA Dashboard'],['cases','Test Cases'],['runs','Test Runs']].map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)}
               className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors
-                ${tab === id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+                ${tab === id ? 'border-slate-800 text-slate-800 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
               {label}
             </button>
           ))}
@@ -297,7 +337,7 @@ export default function QA() {
               {/* Stats */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
-                  { label: 'Total Test Cases', value: summary.total_cases, cls: 'bg-indigo-50 text-indigo-600' },
+                  { label: 'Total Test Cases', value: summary.total_cases, cls: 'bg-slate-100 text-slate-700' },
                   { label: 'Total Runs',        value: summary.total_runs,  cls: 'bg-blue-50 text-blue-600' },
                   { label: 'Pass Rate',         value: `${summary.pass_rate || 0}%`, cls: 'bg-emerald-50 text-emerald-600' },
                   { label: 'Failed',            value: summary.fail_count,  cls: 'bg-red-50 text-red-600' },
@@ -310,39 +350,58 @@ export default function QA() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                {/* Pass/Fail by Sprint */}
-                <div className="card p-5">
-                  <h3 className="font-semibold text-slate-700 mb-4">Test Results per Sprint</h3>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={dashboard?.bySprint || []} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis dataKey="sprint" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 11 }} />
-                      <Tooltip />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Bar dataKey="pass_count"    name="Pass"    fill="#10b981" radius={[4,4,0,0]} />
-                      <Bar dataKey="fail_count"    name="Fail"    fill="#ef4444" radius={[4,4,0,0]} />
-                      <Bar dataKey="blocked_count" name="Blocked" fill="#f59e0b" radius={[4,4,0,0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                {/* Pass/Fail by Sprint: one trend per product (small multiples), or a single chart when filtered */}
+                {sprintGroups.length > 1 ? (
+                  <div className="card p-5 lg:col-span-2">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-4">
+                      <h3 className="font-semibold text-slate-700">Test Results per Sprint</h3>
+                      <span className="text-xs text-slate-400">per produk · maks 6 sprint terakhir</span>
+                      <div className="flex items-center gap-3 ml-auto text-xs text-slate-600">
+                        {RESULT_LINES.map(l => (
+                          <span key={l.key} className="inline-flex items-center gap-1.5">
+                            <i className="w-3 h-0.5 rounded" style={{ background: l.color }} />{l.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-4">
+                      {sprintGroups.map(rows => (
+                        <div key={rows[0].product_id} className="min-w-0">
+                          <p className="flex items-center gap-1.5 text-[13px] font-medium text-slate-700 mb-1 pl-1">
+                            <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: rows[0].product_color || '#9A9CA4' }} />
+                            <span className="truncate">{rows[0].product_name}</span>
+                          </p>
+                          <SprintTrend rows={rows} ct={ct} yMax={sprintYMax} height={170} compact />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="card p-5">
+                    <h3 className="font-semibold text-slate-700 mb-4">
+                      Test Results per Sprint{sprintGroups[0] ? <span className="font-normal text-slate-400"> · {sprintGroups[0][0].product_name}</span> : null}
+                    </h3>
+                    {sprintGroups.length
+                      ? <SprintTrend rows={sprintGroups[0]} ct={ct} yMax={sprintYMax} height={240} />
+                      : <p className="text-center py-16 text-sm text-slate-400">Belum ada sprint</p>}
+                  </div>
+                )}
 
                 {/* Distribution Pie */}
                 <div className="card p-5">
                   <h3 className="font-semibold text-slate-700 mb-4">Overall Result Distribution</h3>
                   <ResponsiveContainer width="100%" height={220}>
                     <PieChart>
-                      <Pie data={passPieData} cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={3} dataKey="value" label={({ name, percent }) => `${name} ${(percent*100).toFixed(0)}%`} labelLine={false}>
-                        {passPieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
+                      <Pie data={passPieData} cx="50%" cy="50%" innerRadius={45} outerRadius={72} paddingAngle={3} dataKey="value" label={({ name, percent }) => `${name} ${(percent*100).toFixed(0)}%`} labelLine={false}>
+                        {passPieData.map(d => <Cell key={d.name} fill={d.color} />)}
                       </Pie>
-                      <Tooltip />
+                      <Tooltip {...ct.tooltip} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-              </div>
 
-              {/* Recent Failures */}
-              <div className="card overflow-hidden">
+              {/* Recent Failures: beside the pie when the sprint charts take the full row, else full width */}
+              <div className={`card overflow-hidden ${sprintGroups.length > 1 ? '' : 'lg:col-span-2'}`}>
                 <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
                   <XCircle className="w-4 h-4 text-red-500" />
                   <h3 className="font-semibold text-slate-700">Recent Failures</h3>
@@ -363,6 +422,7 @@ export default function QA() {
                     </div>
                   ))}
                 </div>
+              </div>
               </div>
             </div>
           )}
@@ -404,9 +464,9 @@ export default function QA() {
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-[1080px] text-sm">
                     <thead>
-                      <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                      <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 whitespace-nowrap">
                         <th className="text-left px-4 py-3">Kode</th>
                         <th className="text-left px-4 py-3">Judul</th>
                         <th className="text-left px-3 py-3">Item</th>
@@ -423,13 +483,18 @@ export default function QA() {
                       {pagedCases.length === 0 && <tr><td colSpan={10} className="text-center py-10 text-slate-400">Belum ada test case</td></tr>}
                       {pagedCases.map(tc => (
                         <tr key={tc.id} className="table-row">
-                          <td className="px-4 py-3"><span className="font-mono text-xs text-slate-500">{tc.code}</span></td>
-                          <td className="px-4 py-3 max-w-[220px]">
+                          <td className="px-4 py-3 whitespace-nowrap"><span className="font-mono text-xs text-slate-500">{tc.code}</span></td>
+                          <td className="px-4 py-3 min-w-[200px] max-w-[260px]">
                             <p className="font-medium text-slate-700 truncate">{tc.title}</p>
                             {tc.description && <p className="text-xs text-slate-400 truncate">{tc.description}</p>}
                           </td>
                           <td className="px-3 py-3 text-xs text-slate-500">
-                            <span className="font-mono text-slate-400">[{tc.item_code}]</span> {tc.item_title?.slice(0,30)}
+                            {tc.item_code ? (
+                              <div className="flex items-center gap-1 min-w-[170px] max-w-[240px]" title={`[${tc.item_code}] ${tc.item_title || ''}`}>
+                                <span className="font-mono text-slate-400 shrink-0 whitespace-nowrap">[{tc.item_code}]</span>
+                                <span className="truncate">{tc.item_title}</span>
+                              </div>
+                            ) : '—'}
                           </td>
                           <td className="px-3 py-3 text-center"><PriorityBadge priority={tc.priority} /></td>
                           <td className="px-3 py-3 text-center"><StatusBadge status={tc.status} /></td>
@@ -440,7 +505,7 @@ export default function QA() {
                           <td className="px-3 py-3">
                             <div className="flex items-center gap-1 justify-center">
                               {can('qa', 'run') && (
-                                <button className="btn-ghost btn-sm p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50" title="Run Test"
+                                <button className="btn-ghost btn-sm p-1.5 rounded-lg text-slate-600 hover:bg-slate-100" title="Run Test"
                                   onClick={() => setModal({ open: true, type: 'run', data: tc })}>
                                   <Play className="w-3.5 h-3.5" />
                                 </button>
@@ -492,9 +557,9 @@ export default function QA() {
                 </div>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full min-w-[1000px] text-sm">
                   <thead>
-                    <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                    <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 whitespace-nowrap">
                       <th className="text-left px-4 py-3">Test Case</th>
                       <th className="text-left px-3 py-3">Item</th>
                       <th className="text-center px-3 py-3">Hasil</th>
@@ -519,8 +584,12 @@ export default function QA() {
                             </div>
                           </td>
                           <td className="px-3 py-3 text-xs text-slate-500">
-                            <span className="font-mono">[{run.item_code}]</span>
-                            <span className="ml-1 text-slate-600 truncate max-w-[120px] inline-block align-bottom">{run.item_title?.slice(0,25)}</span>
+                            {run.item_code ? (
+                              <div className="flex items-center gap-1 min-w-[170px] max-w-[240px]" title={`[${run.item_code}] ${run.item_title || ''}`}>
+                                <span className="font-mono shrink-0 whitespace-nowrap">[{run.item_code}]</span>
+                                <span className="text-slate-600 truncate">{run.item_title}</span>
+                              </div>
+                            ) : '—'}
                           </td>
                           <td className="px-3 py-3 text-center">
                             <div className="flex items-center gap-1.5 justify-center">

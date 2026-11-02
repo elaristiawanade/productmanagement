@@ -19,16 +19,17 @@ export default function Modal({ open, onClose, title, children, size = 'md' }) {
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex min-h-screen items-start justify-center px-4 pt-10 pb-20">
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-        <div className={`relative w-full ${widths[size] || widths.md} bg-white rounded-2xl shadow-2xl`}>
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-            <h3 className="text-base font-semibold text-slate-800">{title}</h3>
-            <button onClick={onClose} className="btn-ghost btn-sm rounded-lg p-1.5">
+      <div className="flex min-h-screen items-start justify-center px-4 pt-[6vh] pb-20">
+        <div className="fixed inset-0 bg-black/40" onClick={onClose} />
+        <div className={`relative w-full ${widths[size] || widths.md} bg-white text-slate-800 rounded-xl shadow-[0_24px_64px_rgb(15_15_17/.25)] border border-slate-200`}>
+          <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-3 border-b border-slate-200">
+            <h3 className="text-base font-semibold text-slate-800 min-w-0">{title}</h3>
+            <button onClick={onClose} aria-label="Tutup"
+              className="w-7 h-7 grid place-items-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800 shrink-0">
               <X className="w-4 h-4" />
             </button>
           </div>
-          <div className="px-6 py-5">{children}</div>
+          <div className="px-5 py-5">{children}</div>
         </div>
       </div>
     </div>

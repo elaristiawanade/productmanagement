@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
+import { useChartTheme } from '../utils/chartTheme';
 import { Plus, Calendar, Target, Layers, ChevronDown, ChevronUp, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
@@ -111,6 +112,7 @@ export default function Sprints() {
   const [modal,        setModal]        = useState({ open: false, sprint: null });
   const [deleteConfirm, setDeleteConfirm] = useState(null); // sprint object
   const [loading,   setLoading]   = useState(false);
+  const ct = useChartTheme();
 
   useEffect(() => {
     client.get('/products').then(r => {
@@ -180,7 +182,7 @@ export default function Sprints() {
           {sprints.map(s => (
             <button key={s.id} onClick={() => setSelSprint(s)}
               className={`btn btn-sm border rounded-lg px-3 py-1.5 text-xs font-medium transition-all
-                ${selSprint?.id === s.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                ${selSprint?.id === s.id ? 'bg-indigo-50 text-indigo-800 border-indigo-200 font-medium' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
               {s.name}
               {s.status === 'active' && <span className="ml-1 w-1.5 h-1.5 bg-emerald-400 rounded-full inline-block" />}
             </button>
@@ -240,7 +242,7 @@ export default function Sprints() {
                 <span>Progress</span><span>{pct}%</span>
               </div>
               <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                <div className="h-full bg-slate-800 rounded-full transition-all" style={{ width: `${pct}%` }} />
               </div>
             </div>
           </div>
@@ -290,13 +292,13 @@ export default function Sprints() {
                   {burndown.length > 0 ? (
                     <ResponsiveContainer width="100%" height={220}>
                       <LineChart data={burndown} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                        <XAxis dataKey="day" label={{ value: 'Hari', position: 'insideBottom', offset: -2, fontSize: 11 }} tick={{ fontSize: 11 }} />
-                        <YAxis tick={{ fontSize: 11 }} />
-                        <Tooltip />
+                        <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} />
+                        <XAxis dataKey="day" label={{ value: 'Hari', position: 'insideBottom', offset: -2, fontSize: 11, fill: ct.tick }} tick={ct.axisTick} stroke={ct.line} />
+                        <YAxis tick={ct.axisTick} stroke={ct.line} />
+                        <Tooltip {...ct.tooltip} />
                         <Legend wrapperStyle={{ fontSize: 12 }} />
                         <Line type="monotone" dataKey="ideal_remaining"  name="Ideal"  stroke="#94a3b8" strokeDasharray="5 5" dot={false} strokeWidth={2} />
-                        <Line type="monotone" dataKey="actual_remaining" name="Actual" stroke="#4f46e5" dot={{ r: 4, fill: '#4f46e5' }} strokeWidth={2} />
+                        <Line type="monotone" dataKey="actual_remaining" name="Actual" stroke={ct.ink} dot={{ r: 4, fill: ct.ink }} strokeWidth={2} />
                       </LineChart>
                     </ResponsiveContainer>
                   ) : <p className="text-center py-10 text-slate-400 text-sm">Belum ada data burndown</p>}

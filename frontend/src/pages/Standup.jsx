@@ -222,11 +222,11 @@ function StandupImport({ onDone }) {
       <div className="card p-5 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Info className="w-4 h-4 text-indigo-500" />
+            <Info className="w-4 h-4 text-slate-500" />
             <h3 className="font-semibold text-slate-700">Format CSV</h3>
           </div>
           <button onClick={downloadTemplate}
-            className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 font-medium px-3 py-1.5 rounded-lg hover:bg-indigo-50 border border-indigo-200 transition-colors">
+            className="btn-secondary btn-sm">
             <FileDown className="w-3.5 h-3.5" /> Download Template
           </button>
         </div>
@@ -243,7 +243,7 @@ function StandupImport({ onDone }) {
             <tbody className="divide-y divide-slate-100">
               {CSV_COLUMNS.map(c => (
                 <tr key={c.key}>
-                  <td className="px-3 py-2 font-mono text-indigo-700 font-medium">{c.label}</td>
+                  <td className="px-3 py-2 font-mono text-slate-800 font-medium">{c.label}</td>
                   <td className="px-3 py-2 text-center">
                     {c.req
                       ? <span className="text-red-500 font-bold">✓</span>
@@ -266,7 +266,7 @@ function StandupImport({ onDone }) {
       {/* ── Upload area ── */}
       <div className="card p-5 space-y-4">
         <h3 className="font-semibold text-slate-700 flex items-center gap-2">
-          <Upload className="w-4 h-4 text-indigo-500" /> Upload File CSV / Excel
+          <Upload className="w-4 h-4 text-slate-500" /> Upload File CSV / Excel
         </h3>
 
         {!file ? (
@@ -276,7 +276,7 @@ function StandupImport({ onDone }) {
             onDrop={e => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
             onClick={() => inputRef.current?.click()}
             className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all
-              ${dragOver ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50'}`}>
+              ${dragOver ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-slate-400 hover:bg-slate-50'}`}>
             <Upload className="w-8 h-8 text-slate-300 mx-auto mb-3" />
             <p className="text-sm font-medium text-slate-600">Drag & drop file CSV atau Excel ke sini</p>
             <p className="text-xs text-slate-400 mt-1">atau klik untuk pilih file · .csv, .xlsx, .xls</p>
@@ -284,15 +284,15 @@ function StandupImport({ onDone }) {
               onChange={e => handleFiles(e.target.files)} />
           </div>
         ) : (
-          <div className="flex items-center gap-3 p-4 bg-indigo-50 border border-indigo-200 rounded-xl">
-            <div className="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center shrink-0">
-              <Upload className="w-4 h-4 text-white" />
+          <div className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+            <div className="w-9 h-9 rounded-lg bg-slate-200 flex items-center justify-center shrink-0">
+              <Upload className="w-4 h-4 text-slate-700" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-slate-700 truncate">{file.name}</p>
               <p className="text-xs text-slate-400">{(file.size / 1024).toFixed(1)} KB</p>
             </div>
-            <button onClick={clearFile} className="p-1.5 rounded-lg hover:bg-indigo-100 text-slate-400 hover:text-red-500 transition-colors">
+            <button onClick={clearFile} className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-red-500 transition-colors">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -452,7 +452,7 @@ export default function Standup() {
         ].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors
-              ${tab === id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+              ${tab === id ? 'border-slate-800 text-slate-800 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
             {label}
           </button>
         ))}
@@ -476,7 +476,7 @@ export default function Standup() {
           ) : (
             <div className="card p-6">
               <div className="flex items-center gap-2 mb-5">
-                <Calendar className="w-5 h-5 text-indigo-600" />
+                <Calendar className="w-5 h-5 text-slate-600" />
                 <h2 className="font-semibold text-slate-800">
                   Standup — {format(new Date(), 'EEEE, dd MMMM yyyy', { locale: idLocale })}
                 </h2>

@@ -267,7 +267,7 @@ export default function Products() {
         ].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors
-              ${tab === id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+              ${tab === id ? 'border-slate-800 text-slate-800 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
             {label}
           </button>
         ))}
@@ -310,14 +310,14 @@ export default function Products() {
                       <span>Done: <strong className="text-emerald-600">{product.done_items}</strong></span>
                       <span>Active Sprints: <strong className="text-blue-600">{product.active_sprints}</strong></span>
                       {product.repository_url && (
-                        <a href={product.repository_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-indigo-500 hover:text-indigo-700">
+                        <a href={product.repository_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-slate-600 hover:text-slate-800 underline underline-offset-2 decoration-slate-300">
                           <ExternalLink className="w-3 h-3" /> Repo
                         </a>
                       )}
                     </div>
                     <div className="mt-3 flex items-center gap-2">
                       <div className="flex-1 max-w-[200px] h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${pct}%` }} />
+                        <div className="h-full bg-slate-800 rounded-full" style={{ width: `${pct}%` }} />
                       </div>
                       <span className="text-xs text-slate-400">{pct}% selesai</span>
                     </div>
@@ -395,7 +395,7 @@ export default function Products() {
                                   <span className="font-mono text-xs text-slate-400 w-14 shrink-0">{f.code}</span>
                                   <span className="flex-1 font-medium text-slate-700 truncate">{f.name}</span>
                                   {f.is_roadmap_item && (
-                                    <span className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border bg-indigo-50 text-indigo-600 border-indigo-200" title="Tampil di Roadmap">
+                                    <span className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200" title="Tampil di Roadmap">
                                       <Map className="w-3 h-3" /> Roadmap
                                     </span>
                                   )}
@@ -404,7 +404,7 @@ export default function Products() {
                                   <span className="text-xs text-slate-400">{f.target_release || '—'}</span>
                                   <div className="flex items-center gap-1.5 w-24 shrink-0">
                                     <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                      <div className="h-full bg-indigo-400 rounded-full" style={{ width: `${pct2}%` }} />
+                                      <div className="h-full bg-slate-800 rounded-full" style={{ width: `${pct2}%` }} />
                                     </div>
                                     <span className="text-xs text-slate-400">{pct2}%</span>
                                   </div>
@@ -466,7 +466,7 @@ export default function Products() {
               return (
                 <button key={s.key}
                   onClick={() => setFilterRoadmapStatus(filterRoadmapStatus === s.key ? '' : s.key)}
-                  className={`card p-3 text-left transition-all ${filterRoadmapStatus === s.key ? 'ring-2 ring-indigo-500' : 'hover:shadow-md'}`}>
+                  className={`card p-3 text-left transition-all ${filterRoadmapStatus === s.key ? 'ring-2 ring-slate-800' : 'hover:border-slate-300 hover:bg-slate-50'}`}>
                   <p className="text-xl font-bold text-slate-800">{count}</p>
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full border mt-1 inline-block ${s.cls}`}>
                     {s.label}
