@@ -13,6 +13,7 @@ import LinkInsertButton from '../components/LinkInsertButton';
 import SearchableSelect from '../components/SearchableSelect';
 import SearchableMultiSelect from '../components/SearchableMultiSelect';
 import AssigneeStack from '../components/AssigneeStack';
+import AuthorLine from '../components/AuthorLine';
 import { renderWithLinks } from '../utils/linkify';
 import { useDeepLink } from '../utils/deepLink';
 import { useAuth } from '../context/AuthContext';
@@ -591,6 +592,7 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
 
   return (
     <form onSubmit={save} className="grid grid-cols-2 gap-4">
+      {item?.id && <AuthorLine name={item.created_by_name} date={item.created_at} />}
       <F label="Produk" required>
         <select className="select" value={form.product_id}
           onChange={e => setForm(f => ({ ...f, product_id: e.target.value, sprint_id: '', feature_id: '', parent_id: '' }))}

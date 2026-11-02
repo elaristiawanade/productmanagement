@@ -39,6 +39,7 @@ public class BacklogController {
         "e.name AS epic_name, e.code AS epic_code, " +
         "s.name AS sprint_name, " +
         "u.name AS assignee_name, u.avatar_color AS assignee_color, u.email AS assignee_email, " +
+        "cb.name AS created_by_name, " +
         "par.code AS parent_code, par.title AS parent_title, " +
         "CASE WHEN bi.deadline < NOW() AND bi.status NOT IN ('done','backlog') THEN true ELSE false END AS is_delayed, " +
         "(SELECT COALESCE(json_agg(json_build_object(" +
@@ -54,6 +55,7 @@ public class BacklogController {
         "LEFT JOIN epics    e        ON e.id   = bi.epic_id " +
         "LEFT JOIN sprints  s        ON s.id   = bi.sprint_id " +
         "LEFT JOIN users    u        ON u.id   = bi.assignee_id " +
+        "LEFT JOIN users    cb       ON cb.id  = bi.created_by " +
         "LEFT JOIN backlog_items par ON par.id = bi.parent_id ";
 
     // ─── LIST ──────────────────────────────────────────────────────────────

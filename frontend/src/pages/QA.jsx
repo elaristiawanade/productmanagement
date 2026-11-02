@@ -41,8 +41,7 @@ import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import SearchableSelect from '../components/SearchableSelect';
 import { buildBacklogTreeOptions } from '../utils/backlogHierarchy';
-import { buildFeatureOptions, featureText } from '../utils/featureOptions';
-import { useAuth } from '../context/AuthContext';
+import { buildFeatureOptions, featureText } from '../utils/featureOptions';import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { format, parseISO } from 'date-fns';
 
@@ -281,12 +280,13 @@ export default function QA() {
   };
 
   const exportTestCasesCSV = () => {
-    const headers = ['Kode', 'Judul', 'Deskripsi', 'Langkah', 'Expected Result', 'Status', 'Prioritas', 'Backlog Item', 'Features', 'Produk'];
+    const headers = ['Kode', 'Judul', 'Deskripsi', 'Langkah', 'Expected Result', 'Status', 'Prioritas', 'Backlog Item', 'Features', 'Produk', 'Author'];
     const rows = testCases.map(tc => [
       tc.code, tc.title, tc.description, tc.steps, tc.expected_result, tc.status, tc.priority,
       tc.item_code ? `[${tc.item_code}] ${tc.item_title || ''}` : '',
       featureText(tc),
       tc.product_code || tc.product_name || '',
+      tc.created_by_name || '',
     ]);
     const csv = [headers, ...rows].map(r => r.map(csvEscape).join(',')).join('\n');
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -509,7 +509,7 @@ export default function QA() {
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1300px] text-sm">
+                  <table className="w-full min-w-[1420px] text-sm">
                     <thead>
                       <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 whitespace-nowrap">
                         <th className="text-left px-4 py-3">Kode</th>
@@ -521,12 +521,13 @@ export default function QA() {
                         <th className="text-center px-3 py-3">Runs</th>
                         <th className="text-center px-3 py-3">Pass</th>
                         <th className="text-center px-3 py-3">Fail</th>
+                        <th className="text-left px-3 py-3">Author</th>
                         <th className="text-left px-3 py-3">Produk</th>
                         <th className="text-center px-3 py-3">Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {pagedCases.length === 0 && <tr><td colSpan={11} className="text-center py-10 text-slate-400">Belum ada test case</td></tr>}
+                      {pagedCases.length === 0 && <tr><td colSpan={12} className="text-center py-10 text-slate-400">Belum ada test case</td></tr>}
                       {pagedCases.map(tc => (
                         <tr key={tc.id} className="table-row">
                           <td className="px-4 py-3 whitespace-nowrap"><span className="font-mono text-xs text-slate-500">{tc.code}</span></td>
@@ -555,6 +556,7 @@ export default function QA() {
                           <td className="px-3 py-3 text-center text-slate-600 font-medium">{tc.run_count}</td>
                           <td className="px-3 py-3 text-center text-emerald-600 font-medium">{tc.pass_count}</td>
                           <td className="px-3 py-3 text-center text-red-600 font-medium">{tc.fail_count}</td>
+                          <td className="px-3 py-3 text-xs text-slate-500 whitespace-nowrap">{tc.created_by_name || '—'}</td>
                           <td className="px-3 py-3 text-xs text-slate-500">{tc.product_code}</td>
                           <td className="px-3 py-3">
                             <div className="flex items-center gap-1 justify-center">
