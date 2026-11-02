@@ -155,6 +155,7 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v21.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v22.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v23.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v24.sql"
 ```
 
 > **Penting:** `migration_v10.sql` menambahkan kolom `users.department`, yang di-query
@@ -198,6 +199,15 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 > docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v23.sql
 > ```
 > Migrasinya additive dan idempotent (`ADD COLUMN IF NOT EXISTS`); data lama tidak berubah (Features `—`).
+
+> **Penting juga:** `migration_v24.sql` menambah kolom `type` di tabel `bugs` (kolom/dropdown **Type**
+> di Bugs Incident: `bug` atau `inquiry`). **Jalankan SEBELUM backend baru naik** — INSERT/UPDATE bug
+> di backend baru menyebut kolom ini, jadi tanpa migrasi create/edit bug gagal `500`. Pada database
+> yang sudah ada jalankan manual (**backup dulu**):
+> ```bash
+> docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v24.sql
+> ```
+> Migrasinya additive dan idempotent; semua bug lama otomatis bertipe `bug`.
 
 ---
 
@@ -260,7 +270,8 @@ product-tracker/
 │       ├── migration_v20.sql
 │       ├── migration_v21.sql
 │       ├── migration_v22.sql
-│       └── migration_v23.sql
+│       ├── migration_v23.sql
+│       └── migration_v24.sql
 ├── backend-java/          # Spring Boot API (port 4000)
 │   ├── src/
 │   ├── pom.xml

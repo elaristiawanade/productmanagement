@@ -178,3 +178,26 @@ Frontend saja (tanpa perubahan backend/database). Diuji otomatis (Chrome headles
 - ✅ **Race Sprints** (ditemukan saat uji, sudah diperbaiki): respons `/products` yang datang belakangan tidak lagi menimpa produk dari deep link
 - 🧑 Cek manual: tampilan palette di tema gelap & layar kecil, navigasi ↑↓ + Enter pada hasil campuran, role kustom dengan kombinasi izin tidak umum
 - ⚠️ Test run, Standup (riwayat), dan Leader Notes tidak ikut dicari (tidak punya form/detail sendiri); tiap grup hasil dibatasi 5 baris (Backlog & Leader task 6)
+
+## 21. Type tiket di Bugs Incident (bug / inquiry)
+Fitur baru setelah revamp (PRD 3.9, v3.9; `migration_v24.sql`). Diuji lewat API dan Chrome headless pada stack Docker lokal dengan data uji berawalan `ZZTYPE` (sudah dihapus setelah uji; jumlah bug kembali seperti semula).
+- ✅ **Migrasi** — `migration_v24.sql` dijalankan pada DB berisi data: semua bug lama otomatis `bug`
+- ✅ **Create** tanpa `type` → `bug`; `type: "inquiry"` → `inquiry`; `type: "foo"` → `400`
+- ✅ **Update** tanpa `type` tidak menimpa nilai tersimpan (inquiry tetap inquiry); `type: "bug"` mengubahnya; `type` tidak valid → `400`
+- ✅ **Lapor Bug Publik** (`/api/public/bugs`) tanpa field type → tersimpan `bug` (form publik tidak berubah)
+- ✅ **Import CSV** — kolom `Type`: `Inquiry / Clarification` → inquiry, `bug` → bug, kosong → bug; ketiganya dibuat tanpa error
+- ✅ **UI** (Chrome headless) — kolom **Type** (badge) muncul setelah *Judul*, dropdown **Type (opsional)** di form Buat Bug (sebelah Stage Awal, default Bug), filter **Type** menyaring ke Inquiry / Clarification, form Edit memuat tipe tersimpan
+- ✅ Build frontend lolos; backend ter-compile lewat `docker compose build`
+- 🧑 Export CSV memuat kolom `Type`; round-trip export → import tidak error
+- 🧑 Cek manual di tema gelap dan layar sempit (tabel Bugs makin lebar, scroll horizontal)
+- ⚠️ Belum ada sort per kolom Type dan Type belum ada di form Lapor Bug Publik; label opsi di dropdown filter terpotong ("Inquiry / Clarificati…") karena lebar dropdown
+
+## 22. Author tiket (QA Module, Backlog)
+Fitur baru setelah revamp (PRD 3.2, 3.8, v3.10). Memakai `qa_test_cases.created_by` dan `backlog_items.created_by` yang sudah ada, tanpa migrasi; backend Backlog menambah `created_by_name` (JOIN `users`). Diuji di Chrome headless pada stack Docker lokal.
+- ✅ **QA** — kolom **Author** di tabel Test Cases (setelah *Fail*, sebelum *Produk*); klik baris tabel tetap tidak membuka apa pun (perilaku lama); modal Edit Test Case tidak berubah
+- ✅ **Bugs** — kolom Incident Author di tabel tidak berubah; modal Edit Bug tidak berubah
+- ✅ **Backlog** — klik item membuka modal Edit dengan baris *Author: <nama> · <tanggal>* di paling atas; tabel Backlog tidak ditambah kolom
+- ✅ `created_by` terisi di 160/160 test case dan 274/274 backlog item; build frontend dan backend lolos
+- 🧑 Backlog: cek Author dari tampilan Board, item anak (Story → Task), dan deep link Ctrl K / notifikasi `?item=ID`
+- 🧑 Backlog: item yang dibuat lewat Import Jira/CSV menampilkan user yang meng-import; user pembuat yang sudah dihapus tampil `—`
+- 🧑 Export CSV QA memuat kolom `Author`; Import CSV QA mengabaikannya (Author = user yang meng-import)
