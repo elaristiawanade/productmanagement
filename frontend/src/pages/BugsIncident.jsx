@@ -939,6 +939,10 @@ export default function BugsIncident() {
   const totalPagesProgress = Math.max(1, Math.ceil(progress.length / perPageProgress));
   const pagedProgress      = progress.slice((pageProgress - 1) * perPageProgress, pageProgress * perPageProgress);
 
+  // Data can shrink under the current page (product filter, reload): never sit on an empty page past the end
+  useEffect(() => { if (pageBugs > totalPagesBugs) setPageBugs(totalPagesBugs); }, [pageBugs, totalPagesBugs]);
+  useEffect(() => { if (pageProgress > totalPagesProgress) setPageProgress(totalPagesProgress); }, [pageProgress, totalPagesProgress]);
+
   const handlePerPageBugs     = (v) => { setPerPageBugs(v);     setPageBugs(1); };
   const handlePerPageProgress = (v) => { setPerPageProgress(v); setPageProgress(1); };
 
@@ -1163,7 +1167,7 @@ export default function BugsIncident() {
                     Tampilkan
                     <select className="border border-slate-200 rounded px-1.5 py-0.5 bg-white text-xs"
                       value={perPageBugs} onChange={e => handlePerPageBugs(+e.target.value)}>
-                      {[10, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+                      {[10, 30, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
                     </select>
                     baris
                   </div>
@@ -1283,7 +1287,7 @@ export default function BugsIncident() {
                   Tampilkan
                   <select className="border border-slate-200 rounded px-1.5 py-0.5 bg-white text-xs"
                     value={perPageProgress} onChange={e => handlePerPageProgress(+e.target.value)}>
-                    {[10, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+                    {[10, 30, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
                   </select>
                   baris
                 </div>

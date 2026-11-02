@@ -291,6 +291,10 @@ export default function QA() {
   const totalPagesRuns  = Math.max(1, Math.ceil(testRuns.length / perPageRuns));
   const pagedRuns       = testRuns.slice((pageRuns - 1) * perPageRuns, pageRuns * perPageRuns);
 
+  // Data can shrink under the current page (product filter, reload): never sit on an empty page past the end
+  useEffect(() => { if (pageCases > totalPagesCases) setPageCases(totalPagesCases); }, [pageCases, totalPagesCases]);
+  useEffect(() => { if (pageRuns > totalPagesRuns) setPageRuns(totalPagesRuns); }, [pageRuns, totalPagesRuns]);
+
   const handlePerPageCases = (v) => { setPerPageCases(v); setPageCases(1); };
   const handlePerPageRuns  = (v) => { setPerPageRuns(v);  setPageRuns(1);  };
 
@@ -464,7 +468,7 @@ export default function QA() {
                     Tampilkan
                     <select className="border border-slate-200 rounded px-1.5 py-0.5 bg-white text-xs"
                       value={perPageCases} onChange={e => handlePerPageCases(+e.target.value)}>
-                      {[10, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+                      {[10, 30, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
                     </select>
                     baris
                   </div>
@@ -557,7 +561,7 @@ export default function QA() {
                   Tampilkan
                   <select className="border border-slate-200 rounded px-1.5 py-0.5 bg-white text-xs"
                     value={perPageRuns} onChange={e => handlePerPageRuns(+e.target.value)}>
-                    {[10, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+                    {[10, 30, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
                   </select>
                   baris
                 </div>
