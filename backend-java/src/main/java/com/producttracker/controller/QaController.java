@@ -305,6 +305,8 @@ public class QaController {
     private Long toLong(Object v) {
         if (v == null) return null;
         if (v instanceof Number) return ((Number) v).longValue();
-        return Long.parseLong(v.toString());
+        // Empty selects (e.g. "no sprint") arrive as "" — treat as absent instead of failing with a 500
+        String s = v.toString().trim();
+        return s.isEmpty() ? null : Long.parseLong(s);
     }
 }

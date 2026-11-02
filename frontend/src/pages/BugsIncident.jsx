@@ -260,7 +260,7 @@ function ActivitySection({ bugId, users = [] }) {
                   {act.created_at ? formatDistanceToNow(parseISO(act.created_at), { addSuffix: true, locale: localeId }) : ''}
                 </span>
                 {act.type === 'comment' && (user?.id === act.user_id || can('bugs', 'access')) && (
-                  <button onClick={() => deleteActivity(act.id)}
+                  <button type="button" onClick={() => deleteActivity(act.id)}
                     className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-red-500 ml-auto">
                     <X className="w-3 h-3" />
                   </button>
