@@ -246,6 +246,7 @@ public class ImportController {
                     String severity     = normalizeEnum(col(rec, "Severity"), SEVERITY_VALUES, "medium");
                     String priority     = normalizeEnum(col(rec, "Prioritas", "Priority"), SEVERITY_VALUES, "medium");
                     String stage        = normalizeEnum(col(rec, "Stage"), STAGE_VALUES, "open");
+                    String type         = normalizeBugType(col(rec, "Type", "Tipe"));
 
                     Long backlogItemId = null;
                     String backlogCol = col(rec, "Backlog Item");
@@ -273,9 +274,9 @@ public class ImportController {
 
                     Map<String, Object> row = jdbc.queryForMap(
                         "INSERT INTO bugs " +
-                        "(backlog_item_id, product_id, feature_id, code, title, description, steps_to_reproduce, severity, priority, stage, reported_by, reporter_name, assigned_to, created_at, closed_at) " +
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, COALESCE(?::timestamp, NOW()), ?) RETURNING id",
-                        backlogItemId, productId, featureId, code, title,
+                        "(backlog_item_id, product_id, feature_id, type, code, title, description, steps_to_reproduce, severity, priority, stage, reported_by, reporter_name, assigned_to, created_at, closed_at) " +
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, COALESCE(?::timestamp, NOW()), ?) RETURNING id",
+                        backlogItemId, productId, featureId, type, code, title,
                         description.isBlank() ? null : description,
                         steps.isBlank() ? null : steps,
                         severity, priority, stage,
@@ -434,6 +435,14 @@ public class ImportController {
         if (value == null || value.isBlank()) return fallback;
         String v = value.trim().toLowerCase().replace(" ", "_");
         return allowed.contains(v) ? v : fallback;
+    }
+
+    // Optional "Type" column: the key the Export CSV writes ("bug" / "inquiry") or the UI label
+    // ("Inquiry / Clarification"). Empty or anything unrecognised imports as a regular bug.
+    private String normalizeBugType(String value) {
+        if (value == null) return "bug";
+        String v = value.trim().toLowerCase();
+        return (v.startsWith("inquiry") || v.startsWith("clarification")) ? "inquiry" : "bug";
     }
 
     // Optional "Features" column, same "[CODE] Name" shape the Export CSV writes (a bare code works too).

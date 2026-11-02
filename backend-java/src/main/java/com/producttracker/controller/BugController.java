@@ -35,6 +35,9 @@ public class BugController {
 
     private static final Pattern MENTION_PATTERN = Pattern.compile("@\\[([^\\]]+)\\]");
 
+    // Ticket type: a real bug, or an unclear report that needs clarification first.
+    private static final Set<String> BUG_TYPES = Set.of("bug", "inquiry");
+
     private ResponseEntity<?> forbidden() {
         return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses ke modul Bugs Incident"));
     }
@@ -99,6 +102,12 @@ public class BugController {
         if (!featureMatchesProduct(featureId, productId)) {
             return ResponseEntity.badRequest().body(Map.of("error", "Feature tidak sesuai dengan produk yang dipilih"));
         }
+        // Type is optional on create and defaults to a regular bug
+        String type = str(body.get("type")).trim();
+        if (type.isEmpty()) type = "bug";
+        if (!BUG_TYPES.contains(type)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Type harus bug atau inquiry"));
+        }
         String bugCode = (String) body.get("code");
         if (bugCode == null || bugCode.isBlank()) {
             List<Map<String, Object>> pRows = jdbc.queryForList(
@@ -125,9 +134,9 @@ public class BugController {
         try {
             Map<String, Object> row = jdbc.queryForMap(
                 "INSERT INTO bugs " +
-                "(backlog_item_id, product_id, feature_id, code, title, description, steps_to_reproduce, severity, priority, stage, reported_by, assigned_to) " +
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) RETURNING *",
-                toLong(body.get("backlog_item_id")), productId, featureId, bugCode,
+                "(backlog_item_id, product_id, feature_id, type, code, title, description, steps_to_reproduce, severity, priority, stage, reported_by, assigned_to) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING *",
+                toLong(body.get("backlog_item_id")), productId, featureId, type, bugCode,
                 body.get("title"), body.get("description"), body.get("steps_to_reproduce"),
                 orDefault(body.get("severity"), "medium"),
                 orDefault(body.get("priority"), "medium"),
@@ -171,11 +180,18 @@ public class BugController {
             return ResponseEntity.badRequest().body(Map.of("error", "Feature tidak sesuai dengan produk bug ini"));
         }
 
+        // Unlike the other columns, an absent type keeps the stored one (COALESCE) instead of being overwritten
+        String type = str(body.get("type")).trim();
+        if (!type.isEmpty() && !BUG_TYPES.contains(type)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Type harus bug atau inquiry"));
+        }
+
         int updated = jdbc.update(
-            "UPDATE bugs SET title=?,description=?,steps_to_reproduce=?,severity=?,priority=?,assigned_to=?,backlog_item_id=?,feature_id=? WHERE id=?",
+            "UPDATE bugs SET title=?,description=?,steps_to_reproduce=?,severity=?,priority=?,assigned_to=?,backlog_item_id=?,feature_id=?,type=COALESCE(?, type) WHERE id=?",
             body.get("title"), body.get("description"), body.get("steps_to_reproduce"),
             body.get("severity"), body.get("priority"),
-            toLong(body.get("assigned_to")), toLong(body.get("backlog_item_id")), featureId, id
+            toLong(body.get("assigned_to")), toLong(body.get("backlog_item_id")), featureId,
+            type.isEmpty() ? null : type, id
         );
         if (updated == 0) return ResponseEntity.status(404).body(Map.of("error", "Bug tidak ditemukan"));
 

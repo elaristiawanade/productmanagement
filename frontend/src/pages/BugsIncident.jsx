@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
-import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff, AlertTriangle, XCircle, Lightbulb } from 'lucide-react';
+import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff, AlertTriangle, XCircle, Lightbulb, HelpCircle } from 'lucide-react';
 import client from '../api/client';
 import { useDeepLink } from '../utils/deepLink';
 import PresenceDot from '../components/PresenceDot';
@@ -19,8 +19,7 @@ import SearchableMultiSelect from '../components/SearchableMultiSelect';
 import AssigneeStack from '../components/AssigneeStack';
 import { renderWithLinks } from '../utils/linkify';
 import { buildBacklogTreeOptions } from '../utils/backlogHierarchy';
-import { buildFeatureOptions, featureText } from '../utils/featureOptions';
-import { useAuth } from '../context/AuthContext';
+import { buildFeatureOptions, featureText } from '../utils/featureOptions';import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import {
   format, parseISO, formatDistanceToNow,
@@ -46,6 +45,25 @@ const STAGE_LABELS = {
 const INITIAL_STAGES = ['open', 'improvement'];
 const SEVERITIES = ['critical', 'high', 'medium', 'low'];
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
+
+// Ticket type: a real bug, or an unclear report that needs clarification first (independent of stage).
+const TYPES = ['bug', 'inquiry'];
+const TYPE_META = {
+  bug:     { label: 'Bug',                   c: '#E5484D', icon: BugIcon    },
+  inquiry: { label: 'Inquiry / Clarification', c: '#0B8FCB', icon: HelpCircle },
+};
+
+// Same pill look as the stage badge; unknown/missing type reads as a regular bug.
+function TypeBadge({ type }) {
+  const t = TYPE_META[type] ?? TYPE_META.bug;
+  const Icon = t.icon;
+  return (
+    <span className="status-pill h-6 px-2 gap-1.5 text-[11px]" style={{ '--c': t.c }}>
+      <Icon className="w-3 h-3 shrink-0" />
+      {t.label}
+    </span>
+  );
+}
 
 // ─── Bugs list sorting ─────────────────────────────────────────────────────
 // Rank maps give these string columns a real ordering (alphabetical order of
@@ -328,6 +346,7 @@ function BugForm({ bug, products, backlogItems, features, users, onSave, onClose
   const [form, setForm] = useState({
     product_id: bug?.product_id || '', backlog_item_id: bug?.backlog_item_id || '',
     feature_id: bug?.feature_id || '',
+    type: bug?.type || 'bug',
     title: bug?.title || '', description: bug?.description || '',
     steps_to_reproduce: bug?.steps_to_reproduce || '',
     severity: bug?.severity || 'medium', priority: bug?.priority || 'medium',
@@ -492,8 +511,14 @@ function BugForm({ bug, products, backlogItems, features, users, onSave, onClose
         <label className="label">Langkah Reproduksi</label>
         <textarea className="input h-24 resize-none font-mono text-xs" value={form.steps_to_reproduce} onChange={e => setForm(f => ({ ...f, steps_to_reproduce: e.target.value }))} placeholder="1. Buka halaman...\n2. Klik tombol...\n3. Bug muncul..." />
       </div>
+      <div className={bug?.id ? 'col-span-2' : ''}>
+        <label className="label">Type (opsional)</label>
+        <select className="select" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
+          {TYPES.map(t => <option key={t} value={t}>{TYPE_META[t].label}</option>)}
+        </select>
+      </div>
       {!bug?.id && (
-        <div className="col-span-2">
+        <div>
           <label className="label">Stage Awal</label>
           <select className="select" value={form.stage} onChange={e => setForm(f => ({ ...f, stage: e.target.value }))}>
             {INITIAL_STAGES.map(s => <option key={s} value={s}>{STAGE_LABELS[s]}</option>)}
@@ -776,7 +801,7 @@ export default function BugsIncident() {
   const changeProduct = (v) => setSearchParams(p => { const n = new URLSearchParams(p); if (v) n.set('product', v); else n.delete('product'); return n; }, { replace: true });
   // Client-side only (Bugs tab list is already loaded in full per product, so these
   // don't need a round-trip to the backend like `filters.product_id` does).
-  const [bugFilters,   setBugFilters]  = useState({ search: '', stage: [], severity: [], priority: [], assigned_to: [] });
+  const [bugFilters,   setBugFilters]  = useState({ search: '', type: [], stage: [], severity: [], priority: [], assigned_to: [] });
   // Default true: Closed/Done bugs are hidden from the list until the user opts back in.
   const [hideClosed,   setHideClosed]  = useState(true);
   // Default to newest-first (Tanggal Incident, desc) so a freshly-loaded/reported
@@ -897,9 +922,9 @@ export default function BugsIncident() {
   };
 
   const exportBugsCSV = () => {
-    const headers = ['Kode', 'Judul', 'Deskripsi', 'Langkah Reproduksi', 'Severity', 'Prioritas', 'Stage', 'Backlog Item', 'Features', 'Produk', 'Assigned To', 'Reported By', 'Tanggal Incident', 'Tanggal Closed', 'Update Terakhir', 'Update Terakhir Oleh'];
+    const headers = ['Kode', 'Judul', 'Type', 'Deskripsi', 'Langkah Reproduksi', 'Severity', 'Prioritas', 'Stage', 'Backlog Item', 'Features', 'Produk', 'Assigned To', 'Reported By', 'Tanggal Incident', 'Tanggal Closed', 'Update Terakhir', 'Update Terakhir Oleh'];
     const rows = sortedBugs.map(b => [
-      b.code, b.title, b.description, b.steps_to_reproduce, b.severity, b.priority, b.stage,
+      b.code, b.title, b.type || 'bug', b.description, b.steps_to_reproduce, b.severity, b.priority, b.stage,
       b.item_code ? `[${b.item_code}] ${b.item_title || ''}` : '',
       featureText(b),
       b.product_code || b.product_name || '',
@@ -951,6 +976,7 @@ export default function BugsIncident() {
       const q = bugFilters.search.toLowerCase();
       if (!(b.code?.toLowerCase().includes(q) || b.title?.toLowerCase().includes(q))) return false;
     }
+    if (bugFilters.type.length       && !bugFilters.type.includes(b.type || 'bug')) return false;
     if (bugFilters.stage.length      && !bugFilters.stage.includes(b.stage))       return false;
     if (bugFilters.severity.length   && !bugFilters.severity.includes(b.severity)) return false;
     if (bugFilters.priority.length   && !bugFilters.priority.includes(b.priority)) return false;
@@ -1154,7 +1180,8 @@ export default function BugsIncident() {
                   />
                 </div>
                 {[
-                  { key: 'stage',    label: 'Stage',     opts: STAGES.map(s => ({ v: s, l: STAGE_LABELS[s] || s })) },
+                  { key: 'type',     label: 'Type',      opts: TYPES.map(t => ({ v: t, l: TYPE_META[t].label })) },
+                  { key: 'stage',    label: 'Stage',    opts: STAGES.map(s => ({ v: s, l: STAGE_LABELS[s] || s })) },
                   { key: 'severity', label: 'Severity',  opts: SEVERITIES.map(s => ({ v: s, l: s })) },
                   { key: 'priority', label: 'Prioritas', opts: PRIORITIES.map(p => ({ v: p, l: p })) },
                 ].map(({ key, label, opts }) => (
@@ -1208,11 +1235,12 @@ export default function BugsIncident() {
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1540px] text-sm">
+                  <table className="w-full min-w-[1740px] text-sm">
                     <thead>
                       <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 whitespace-nowrap">
                         <th className="text-left px-4 py-3">Kode</th>
                         <th className="text-left px-4 py-3">Judul</th>
+                        <th className="text-left px-3 py-3">Type</th>
                         <th className="text-left px-3 py-3">Item</th>
                         <th className="text-left px-3 py-3">Features</th>
                         {renderSortableTh('severity', 'Severity')}
@@ -1228,7 +1256,7 @@ export default function BugsIncident() {
                       </tr>
                     </thead>
                     <tbody>
-                      {pagedBugs.length === 0 && <tr><td colSpan={14} className="text-center py-10 text-slate-400">Belum ada bug</td></tr>}
+                      {pagedBugs.length === 0 && <tr><td colSpan={15} className="text-center py-10 text-slate-400">Belum ada bug</td></tr>}
                       {pagedBugs.map(b => (
                         <tr key={b.id}
                           // Whole row opens the bug (same as the pencil, so only with bugs.access); inner controls stop propagation
@@ -1239,6 +1267,7 @@ export default function BugsIncident() {
                             <p className="font-medium text-slate-700 truncate">{b.title}</p>
                             {b.description && <p className="text-xs text-slate-400 truncate">{b.description}</p>}
                           </td>
+                          <td className="px-3 py-3"><TypeBadge type={b.type} /></td>
                           <td className="px-3 py-3 text-xs text-slate-500">
                             {/* One line: code never wraps, title truncates (full text on hover) */}
                             {b.item_code ? (
