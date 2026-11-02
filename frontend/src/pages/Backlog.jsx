@@ -1027,7 +1027,7 @@ export default function Backlog() {
       if (ep) setEpics(ep.data);
     } finally { setLoading(false); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters, page]);
+  }, [filters, page, perPage]);
 
   useEffect(() => { load(); }, [load]);
 
