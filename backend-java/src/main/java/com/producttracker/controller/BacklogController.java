@@ -257,6 +257,9 @@ public class BacklogController {
             // Activity log
             logActivity(newId, actor, "Item dibuat oleh " + actorName);
 
+            // Created straight into In Progress: start the epic above it as well
+            promoteEpicOnProgress(newId, actorName);
+
             // Notification to every assignee (primary + additional)
             notifyAssignees(item, actor != null ? toLong(actor.get("id")) : null,
                 "Kamu di-assign ke " + itemCode,
@@ -340,6 +343,9 @@ public class BacklogController {
             id
         );
 
+        // Moved into In Progress: start the epic above it as well
+        if (!"in_progress".equals(str(prev.get("status")))) promoteEpicOnProgress(id, actorName);
+
         // Cascade SP up: Story SP = Σ tasks, Epic SP = Σ stories
         Long oldParentId = toLong(prev.get("parent_id"));
         if (parentId != null) recalcAncestorSp(parentId);
@@ -414,6 +420,9 @@ public class BacklogController {
         Map<String, Object> actor = toMap(principal);
         String actorName = actor != null ? str(actor.get("name")) : "System";
         logActivity(id, null, "Status diubah dari \"" + oldStatus + "\" menjadi \"" + newStatus + "\" — oleh " + actorName);
+
+        // Moved into In Progress: start the epic above it as well
+        if (!"in_progress".equals(oldStatus)) promoteEpicOnProgress(id, actorName);
 
         // Fetch full item for Teams
         List<Map<String, Object>> detail = jdbc.queryForList(
@@ -687,6 +696,47 @@ public class BacklogController {
             );
             if (!rows.isEmpty() && rows.get(0).get("parent_id") != null) {
                 recalcAncestorSp(toLong(rows.get(0).get("parent_id")), visited);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    /**
+     * Rule: when a story/task is in_progress, the epic above it (found by walking up parent_id) moves to
+     * in_progress too, but only if that epic has not started yet (backlog/todo). Epics that are in_review,
+     * done or blocked are left alone. Callers invoke this only when the item has just moved to in_progress.
+     */
+    private void promoteEpicOnProgress(Long itemId, String actorName) {
+        try {
+            List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT code, type, status, parent_id FROM backlog_items WHERE id = ?", itemId
+            );
+            if (rows.isEmpty()) return;
+            Map<String, Object> row = rows.get(0);
+            String type = str(row.get("type"));
+            if (!"in_progress".equals(str(row.get("status"))) || !("story".equals(type) || "task".equals(type))) return;
+
+            String code = str(row.get("code"));
+            Set<Long> visited = new HashSet<>();   // guards against a corrupted parent_id chain (cycle)
+            visited.add(itemId);
+            Long current = toLong(row.get("parent_id"));
+            while (current != null && visited.add(current)) {
+                List<Map<String, Object>> parentRows = jdbc.queryForList(
+                    "SELECT type, status, parent_id FROM backlog_items WHERE id = ?", current
+                );
+                if (parentRows.isEmpty()) return;
+                Map<String, Object> parent = parentRows.get(0);
+                if ("epic".equals(str(parent.get("type")))) {
+                    String oldStatus = str(parent.get("status"));
+                    if ("backlog".equals(oldStatus) || "todo".equals(oldStatus)) {
+                        jdbc.update(
+                            "UPDATE backlog_items SET status='in_progress' WHERE id = ? AND status IN ('backlog','todo')", current
+                        );
+                        logActivity(current, null, "Status diubah otomatis dari \"" + oldStatus +
+                            "\" menjadi \"in_progress\" karena " + code + " In Progress — oleh " + actorName);
+                    }
+                    return;
+                }
+                current = toLong(parent.get("parent_id"));
             }
         } catch (Exception ignored) {}
     }
