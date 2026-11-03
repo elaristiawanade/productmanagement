@@ -219,3 +219,21 @@ Fitur baru setelah revamp (PRD 3.8, 3.9, v3.11; `migration_v25.sql`). Diuji lewa
 - 🧑 Form Lapor Bug Publik tetap hanya menerima gambar (tidak diubah)
 - ⚠️ File >10MB lewat API tidak dibalas server (menggantung) — sama persis di endpoint Backlog lama; UI menolaknya lebih dulu dengan pesan "Ukuran file maks 10MB"
 - ⚠️ Menghapus bug/test case ikut menghapus baris lampiran, tetapi file di disk tidak ikut terhapus (sama seperti Backlog/Bugs sebelumnya)
+
+## 24. Status Epic & Story otomatis mengikuti anak
+Fitur baru setelah revamp (PRD 3.2, v3.12). Backend saja (`BacklogController`), tanpa migrasi. Diuji lewat API (curl) pada stack Docker lokal dengan data uji berawalan `ZZ` (sudah dihapus setelah uji; item Backlog pengguna tidak berubah), lalu dikonfirmasi benar oleh pemilik lewat uji manual di halaman Backlog.
+- ✅ **Naik** — Task `in_progress` → Story dan Epic `in_progress`; Task lain `in_review` → Story dan Epic `in_review` walau Task pertama masih `in_progress`; anak `todo` → Story dan Epic `todo`
+- ✅ **Tidak mundur** — Task kembali ke `in_progress` (revisi) atau `backlog`: Story dan Epic tetap `in_review`
+- ✅ **`done` butuh semua anak** — satu Task `done` (yang lain belum): Story/Epic tidak `done`; Task terakhir `done` → Story otomatis `done`, Epic belum selama Story/Bug lain belum `done`
+- ✅ **Berantai satu aksi** — Bug terakhir `done` → Story `done` lalu Epic `done` sekaligus (Story dihitung sebelum Epic)
+- ✅ **`done` menetap** — Task baru di Story `done` dan Task dibuka lagi: Story dan Epic tetap `done`; Epic yang diubah manual ke `in_review` tidak digeser lagi oleh anak yang `todo`
+- ✅ **`blocked`** — anak `blocked` tidak menggeser induk; Epic `blocked` manual tidak ditimpa (Story di bawahnya tetap naik)
+- ✅ **Semua jalur** — `PATCH /status` (dropdown), `PUT` (form Edit), `POST` (Task dibuat langsung `in_review`), Bug langsung di bawah Epic
+- ✅ **Tanpa efek** — Epic tanpa anak tetap manual; item `independent` `in_progress` tidak error dan tidak mengubah apa pun
+- ✅ **Log aktivitas** — Story dan Epic mencatat `Status diubah otomatis dari "…" menjadi "…" karena …`; tidak ada exception di log backend
+- ✅ Build backend lolos (`docker compose build`, rebuild `--no-deps`)
+- 🧑 My Tasks: ubah status Task lalu refresh — status Epic/Story induk baru terlihat setelah refresh (halaman Backlog langsung ter-update)
+- 🧑 Board: geser kartu Task ke kolom In Progress / In Review / Done lalu cek Story dan Epic induknya
+- 🧑 Setelah deploy ke server kantor: ubah status satu anak dari Epic yang sudah ada — Epic lama baru menyesuaikan saat anaknya berubah (data lama tidak dikoreksi otomatis)
+- ⚠️ Hitung ulang hanya dipicu perubahan status atau pembuatan anak — ganti parent, hapus anak, atau Import Jira tidak memicunya
+- ⚠️ Anak yang langsung `done` dari `backlog` belum menaikkan induk selama anak lain belum `done` (sesuai aturan: hanya `todo`/`in_progress`/`in_review` yang menaikkan)
