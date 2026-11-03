@@ -257,8 +257,8 @@ public class BacklogController {
             // Activity log
             logActivity(newId, actor, "Item dibuat oleh " + actorName);
 
-            // Created straight into In Progress: start the epic above it as well
-            promoteEpicOnProgress(newId, actorName);
+            // A new child can move its story/epic forward
+            syncAncestorStatus(newId, actorName);
 
             // Notification to every assignee (primary + additional)
             notifyAssignees(item, actor != null ? toLong(actor.get("id")) : null,
@@ -343,8 +343,8 @@ public class BacklogController {
             id
         );
 
-        // Moved into In Progress: start the epic above it as well
-        if (!"in_progress".equals(str(prev.get("status")))) promoteEpicOnProgress(id, actorName);
+        // Status changed: let the story/epic above follow
+        if (!str(prev.get("status")).equals(str(body.get("status")))) syncAncestorStatus(id, actorName);
 
         // Cascade SP up: Story SP = Σ tasks, Epic SP = Σ stories
         Long oldParentId = toLong(prev.get("parent_id"));
@@ -421,8 +421,8 @@ public class BacklogController {
         String actorName = actor != null ? str(actor.get("name")) : "System";
         logActivity(id, null, "Status diubah dari \"" + oldStatus + "\" menjadi \"" + newStatus + "\" — oleh " + actorName);
 
-        // Moved into In Progress: start the epic above it as well
-        if (!"in_progress".equals(oldStatus)) promoteEpicOnProgress(id, actorName);
+        // Status changed: let the story/epic above follow
+        if (!oldStatus.equals(newStatus)) syncAncestorStatus(id, actorName);
 
         // Fetch full item for Teams
         List<Map<String, Object>> detail = jdbc.queryForList(
@@ -700,45 +700,82 @@ public class BacklogController {
         } catch (Exception ignored) {}
     }
 
+    // Forward-only status ladder for the parent (story/epic) auto-status rule. A status outside it (blocked,
+    // unknown) has index -1: it is never moved automatically and never moves a parent.
+    private static final List<String> STATUS_LADDER = List.of("backlog", "todo", "in_progress", "in_review", "done");
+
     /**
-     * Rule: when a story/task is in_progress, the epic above it (found by walking up parent_id) moves to
-     * in_progress too, but only if that epic has not started yet (backlog/todo). Epics that are in_review,
-     * done or blocked are left alone. Callers invoke this only when the item has just moved to in_progress.
+     * Rule: a story/epic follows its children, forward only. Walks up the parent_id chain from the item whose
+     * status just changed and, for every story/epic above it, moves that parent to the furthest of
+     * todo / in_progress / in_review reached by any child, or to done once ALL children are done. A parent
+     * never moves back, a done parent stays done and a blocked parent is left alone. Bottom-up, so a story
+     * that becomes done is already done when its epic is evaluated.
      */
-    private void promoteEpicOnProgress(Long itemId, String actorName) {
+    private void syncAncestorStatus(Long itemId, String actorName) {
         try {
             List<Map<String, Object>> rows = jdbc.queryForList(
-                "SELECT code, type, status, parent_id FROM backlog_items WHERE id = ?", itemId
+                "SELECT parent_id FROM backlog_items WHERE id = ?", itemId
             );
             if (rows.isEmpty()) return;
-            Map<String, Object> row = rows.get(0);
-            String type = str(row.get("type"));
-            if (!"in_progress".equals(str(row.get("status"))) || !("story".equals(type) || "task".equals(type))) return;
-
-            String code = str(row.get("code"));
             Set<Long> visited = new HashSet<>();   // guards against a corrupted parent_id chain (cycle)
             visited.add(itemId);
-            Long current = toLong(row.get("parent_id"));
+            Long current = toLong(rows.get(0).get("parent_id"));
             while (current != null && visited.add(current)) {
                 List<Map<String, Object>> parentRows = jdbc.queryForList(
                     "SELECT type, status, parent_id FROM backlog_items WHERE id = ?", current
                 );
                 if (parentRows.isEmpty()) return;
                 Map<String, Object> parent = parentRows.get(0);
-                if ("epic".equals(str(parent.get("type")))) {
-                    String oldStatus = str(parent.get("status"));
-                    if ("backlog".equals(oldStatus) || "todo".equals(oldStatus)) {
-                        jdbc.update(
-                            "UPDATE backlog_items SET status='in_progress' WHERE id = ? AND status IN ('backlog','todo')", current
-                        );
-                        logActivity(current, null, "Status diubah otomatis dari \"" + oldStatus +
-                            "\" menjadi \"in_progress\" karena " + code + " In Progress — oleh " + actorName);
-                    }
-                    return;
+                String parentType = str(parent.get("type"));
+                if ("story".equals(parentType) || "epic".equals(parentType)) {
+                    applyParentStatus(current, parentType, str(parent.get("status")), actorName);
                 }
                 current = toLong(parent.get("parent_id"));
             }
         } catch (Exception ignored) {}
+    }
+
+    private void applyParentStatus(Long parentId, String parentType, String currentStatus, String actorName) {
+        int currentRank = STATUS_LADDER.indexOf(currentStatus);
+        if (currentRank < 0 || "done".equals(currentStatus)) return;
+
+        // A story looks at its direct children; an epic at everything below it (stories, tasks, bugs)
+        List<String> childStatuses = "epic".equals(parentType)
+            ? jdbc.queryForList(
+                "WITH RECURSIVE d AS (" +
+                "  SELECT id, type, status FROM backlog_items WHERE parent_id = ? " +
+                "  UNION " +
+                "  SELECT b.id, b.type, b.status FROM backlog_items b JOIN d ON b.parent_id = d.id" +
+                ") SELECT status FROM d WHERE type NOT IN ('epic','independent')",
+                String.class, parentId)
+            : jdbc.queryForList(
+                "SELECT status FROM backlog_items WHERE parent_id = ? AND type NOT IN ('epic','independent')",
+                String.class, parentId);
+        if (childStatuses.isEmpty()) return;
+
+        String target;
+        String reason;
+        if (childStatuses.stream().allMatch(s -> "done".equals(s))) {
+            target = "done";
+            reason = "semua item di bawahnya Done";
+        } else {
+            int best = currentRank;
+            for (String s : childStatuses) {
+                int r = STATUS_LADDER.indexOf(s);
+                if (r >= 1 && r <= 3 && r > best) best = r;   // todo / in_progress / in_review only
+            }
+            if (best == currentRank) return;
+            target = STATUS_LADDER.get(best);
+            reason = "ada item di bawahnya berstatus " + target;
+        }
+
+        int updated = jdbc.update(
+            "UPDATE backlog_items SET status = ? WHERE id = ? AND status = ?", target, parentId, currentStatus
+        );
+        if (updated > 0) {
+            logActivity(parentId, null, "Status diubah otomatis dari \"" + currentStatus +
+                "\" menjadi \"" + target + "\" karena " + reason + " — oleh " + actorName);
+        }
     }
 
     /** Walks the would-be parent chain to detect whether assigning newParentId to itemId would create a cycle. */
