@@ -237,3 +237,16 @@ Fitur baru setelah revamp (PRD 3.2, v3.12). Backend saja (`BacklogController`), 
 - 🧑 Setelah deploy ke server kantor: ubah status satu anak dari Epic yang sudah ada — Epic lama baru menyesuaikan saat anaknya berubah (data lama tidak dikoreksi otomatis)
 - ⚠️ Hitung ulang hanya dipicu perubahan status atau pembuatan anak — ganti parent, hapus anak, atau Import Jira tidak memicunya
 - ⚠️ Anak yang langsung `done` dari `backlog` belum menaikkan induk selama anak lain belum `done` (sesuai aturan: hanya `todo`/`in_progress`/`in_review` yang menaikkan)
+
+## 25. Toast sukses create menampilkan kode baru
+Fitur baru setelah revamp (PRD 3.2, v3.13). Frontend saja (`utils/createdToast.jsx`), tanpa migrasi dan tanpa perubahan backend. Diuji di Chrome headless (login admin) pada stack Docker lokal dengan data uji berawalan `ZZTOAST` (sudah dihapus setelah uji).
+- ✅ **Backlog** (Tambah Item) — toast `Item HRS-103 ditambahkan`; kode sama persis dengan kode di database
+- ✅ **Bugs Incident** (Buat Bug) — toast `Bug HRS-053 dibuat`; cocok dengan database
+- ✅ **QA Module** (Buat Test Case) — toast `Test case TC-045 dibuat`; cocok dengan database
+- ✅ **Epic Board** (Tambah Epic) — toast `Epic HRS-104 dibuat` (sebelumnya tidak ada toast); cocok dengan database
+- ✅ Kode ditampilkan sebagai teks tebal monospace; toast masih terlihat setelah 4 detik (durasi 6 detik, bukan 3 detik bawaan)
+- ✅ Build frontend lolos; hanya `pt_frontend` yang di-rebuild (`--no-deps`)
+- 🧑 Kode yang diketik manual di form Backlog tampil apa adanya di toast; kode duplikat (409) tetap menampilkan toast error, bukan toast sukses
+- 🧑 Cek tampilan toast di tema gelap dan layar sempit; buat item lewat tombol "+" di header grup Backlog dan lewat Ctrl K ("… baru")
+- ⚠️ Toast edit ("Item diperbarui", dst.), toast error, dan hasil Import CSV/Jira (hanya jumlah) sengaja tidak diubah
+- ⚠️ Di form Bug dan Test Case, toast baru muncul setelah lampiran selesai diunggah; bila unggah lampiran gagal, toast sukses tidak tampil walau item sudah tersimpan (perilaku lama, tidak diubah)

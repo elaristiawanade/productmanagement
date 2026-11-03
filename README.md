@@ -7,7 +7,7 @@ Sistem tracking internal product development berbasis web dengan React + Node.js
 | Modul | Deskripsi |
 |-------|-----------|
 | **Dashboard** | Cross-project overview: workload, delayed items, sprint velocity, status distribution |
-| **Backlog** | CRUD backlog items dengan filter (assignee bisa diketik untuk mencari nama), quick-status & quick-sprint update langsung dari tabel, **Author** (pembuat item + tanggal) di paling atas modal saat item diklik, pagination server-side (10/30/50/100 baris, berubah langsung), tampilan List per status & Board, **status Epic & Story otomatis mengikuti anak** (naik mengikuti anak paling maju, `done` hanya bila semua anak `done`, tidak pernah mundur otomatis) |
+| **Backlog** | CRUD backlog items dengan filter (assignee bisa diketik untuk mencari nama), quick-status & quick-sprint update langsung dari tabel, **Author** (pembuat item + tanggal) di paling atas modal saat item diklik, pagination server-side (10/30/50/100 baris, berubah langsung), tampilan List per status & Board, **status Epic & Story otomatis mengikuti anak** (naik mengikuti anak paling maju, `done` hanya bila semua anak `done`, tidak pernah mundur otomatis), toast sukses create menampilkan **kode baru** (mis. `Item HRS-098 ditambahkan`, juga di Bugs, QA, dan Epic Board) |
 | **Sprints** | Sprint board (Kanban), burndown chart, epic overview, sprint planning |
 | **Products** | Manajemen produk, epic, dan feature per produk |
 | **Users & Roles** | Role dibuat bebas lewat UI (bukan daftar tetap) — tiap role diberi hak akses lewat matrix **Modul × Aksi** (Buat/Ubah/Hapus/dll per modul, cuma aksi yang relevan yang tampil). 7 role default ter-seed: Super Admin, Manager, PO, Developer, QA, SME, Commissioner |
