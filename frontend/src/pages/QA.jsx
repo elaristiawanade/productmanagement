@@ -36,6 +36,7 @@ function SprintTrend({ rows, ct, yMax, height, compact = false }) {
 import { Plus, Pencil, Trash2, Play, CheckCircle2, XCircle, AlertCircle, Clock, Download, Upload, AlertTriangle } from 'lucide-react';
 import client from '../api/client';
 import { useDeepLink } from '../utils/deepLink';
+import { toastCreated } from '../utils/createdToast';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
@@ -80,7 +81,7 @@ function TestCaseForm({ tc, products, backlogItems, features, onSave, onClose })
       else {
         const res = await client.post('/qa/test-cases', form);
         await attachRef.current?.uploadPending(res.data.id);
-        toast.success('Test case dibuat');
+        toastCreated('Test case', res.data?.code, 'dibuat');
       }
       onSave();
     } catch {} finally { setSaving(false); }

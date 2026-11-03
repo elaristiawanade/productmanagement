@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import client from '../api/client';
 import { useDeepLink } from '../utils/deepLink';
+import { toastCreated } from '../utils/createdToast';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import AssigneeStack from '../components/AssigneeStack';
@@ -360,7 +361,8 @@ function AddEpicModal({ products, onClose, onSaved }) {
     setSaving(true);
     setError('');
     try {
-      await client.post('/backlog', { ...form, type: 'epic' });
+      const res = await client.post('/backlog', { ...form, type: 'epic' });
+      toastCreated('Epic', res.data?.code, 'dibuat');
       onSaved();
       onClose();
     } catch (err) {

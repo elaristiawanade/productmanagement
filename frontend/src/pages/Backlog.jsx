@@ -16,6 +16,7 @@ import AssigneeStack from '../components/AssigneeStack';
 import AuthorLine from '../components/AuthorLine';
 import { renderWithLinks } from '../utils/linkify';
 import { useDeepLink } from '../utils/deepLink';
+import { toastCreated } from '../utils/createdToast';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { format, parseISO, formatDistanceToNow } from 'date-fns';
@@ -580,8 +581,8 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
         await client.put(`/backlog/${item.id}`, payload);
         toast.success('Item diperbarui');
       } else {
-        await client.post('/backlog', payload);
-        toast.success('Item ditambahkan');
+        const res = await client.post('/backlog', payload);
+        toastCreated('Item', res.data?.code, 'ditambahkan');
       }
       onSave();
     } catch (err) {

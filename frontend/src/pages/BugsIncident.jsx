@@ -7,6 +7,7 @@ import {
 import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Upload, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff, AlertTriangle, XCircle, Lightbulb, HelpCircle } from 'lucide-react';
 import client from '../api/client';
 import { useDeepLink } from '../utils/deepLink';
+import { toastCreated } from '../utils/createdToast';
 import PresenceDot from '../components/PresenceDot';
 import Modal from '../components/Modal';
 import StatusMenu from '../components/StatusMenu';
@@ -378,7 +379,7 @@ function BugForm({ bug, products, backlogItems, features, users, onSave, onClose
       } else {
         const res = await client.post('/bugs', payload);
         await attachRef.current?.uploadPending(res.data.id);
-        toast.success('Bug dibuat');
+        toastCreated('Bug', res.data?.code, 'dibuat');
       }
       onSave();
     } catch {} finally { setSaving(false); }
