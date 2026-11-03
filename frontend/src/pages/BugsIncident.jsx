@@ -1,10 +1,13 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
-import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Paperclip, Upload, Image as ImageIcon, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff, AlertTriangle, XCircle, Lightbulb } from 'lucide-react';
+import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Upload, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff, AlertTriangle, XCircle, Lightbulb, HelpCircle } from 'lucide-react';
 import client from '../api/client';
+import { useDeepLink } from '../utils/deepLink';
+import { toastCreated } from '../utils/createdToast';
 import PresenceDot from '../components/PresenceDot';
 import Modal from '../components/Modal';
 import StatusMenu from '../components/StatusMenu';
@@ -15,9 +18,10 @@ import LinkInsertButton from '../components/LinkInsertButton';
 import SearchableSelect from '../components/SearchableSelect';
 import SearchableMultiSelect from '../components/SearchableMultiSelect';
 import AssigneeStack from '../components/AssigneeStack';
+import AttachmentSection from '../components/AttachmentSection';
 import { renderWithLinks } from '../utils/linkify';
 import { buildBacklogTreeOptions } from '../utils/backlogHierarchy';
-import { useAuth } from '../context/AuthContext';
+import { buildFeatureOptions, featureText } from '../utils/featureOptions';import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import {
   format, parseISO, formatDistanceToNow,
@@ -43,6 +47,25 @@ const STAGE_LABELS = {
 const INITIAL_STAGES = ['open', 'improvement'];
 const SEVERITIES = ['critical', 'high', 'medium', 'low'];
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
+
+// Ticket type: a real bug, or an unclear report that needs clarification first (independent of stage).
+const TYPES = ['bug', 'inquiry'];
+const TYPE_META = {
+  bug:     { label: 'Bug',                   c: '#E5484D', icon: BugIcon    },
+  inquiry: { label: 'Inquiry / Clarification', c: '#0B8FCB', icon: HelpCircle },
+};
+
+// Same pill look as the stage badge; unknown/missing type reads as a regular bug.
+function TypeBadge({ type }) {
+  const t = TYPE_META[type] ?? TYPE_META.bug;
+  const Icon = t.icon;
+  return (
+    <span className="status-pill h-6 px-2 gap-1.5 text-[11px]" style={{ '--c': t.c }}>
+      <Icon className="w-3 h-3 shrink-0" />
+      {t.label}
+    </span>
+  );
+}
 
 // ─── Bugs list sorting ─────────────────────────────────────────────────────
 // Rank maps give these string columns a real ordering (alphabetical order of
@@ -321,9 +344,11 @@ function ActivitySection({ bugId, users = [] }) {
   );
 }
 
-function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
+function BugForm({ bug, products, backlogItems, features, users, onSave, onClose }) {
   const [form, setForm] = useState({
     product_id: bug?.product_id || '', backlog_item_id: bug?.backlog_item_id || '',
+    feature_id: bug?.feature_id || '',
+    type: bug?.type || 'bug',
     title: bug?.title || '', description: bug?.description || '',
     steps_to_reproduce: bug?.steps_to_reproduce || '',
     severity: bug?.severity || 'medium', priority: bug?.priority || 'medium',
@@ -331,97 +356,13 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
     assignee_ids: (bug?.assignees || []).map(a => a.id),
   });
   const [saving, setSaving] = useState(false);
-  const [attachments, setAttachments] = useState([]);
-  const [pendingFiles, setPendingFiles] = useState([]);
-  const [uploading,   setUploading]   = useState(false);
-  const [previewImage, setPreviewImage] = useState(null);
-  const fileInputRef = useRef(null);
+  const attachRef = useRef(null);
   // Done items are hidden from new picks but the item currently linked stays visible
   // even if done, so editing an existing bug never silently unlinks it.
   const filteredItems = backlogItems.filter(b =>
     (!form.product_id || b.product_id === +form.product_id) &&
     (b.status !== 'done' || String(b.id) === String(form.backlog_item_id))
   );
-
-  useEffect(() => {
-    if (!previewImage) return;
-    // Capture + stopPropagation: Esc closes only the preview, not the bug modal underneath
-    const handler = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setPreviewImage(null); } };
-    document.addEventListener('keydown', handler, true);
-    return () => document.removeEventListener('keydown', handler, true);
-  }, [previewImage]);
-
-  const loadAttachments = useCallback(async () => {
-    if (!bug?.id) return;
-    try {
-      const res = await client.get(`/bugs/${bug.id}/attachments`);
-      setAttachments(res.data || []);
-    } catch { setAttachments([]); }
-  }, [bug?.id]);
-
-  useEffect(() => { loadAttachments(); }, [loadAttachments]);
-
-  // Revoke local object URLs for queued (not-yet-uploaded) images on unmount only.
-  const pendingFilesRef = useRef(pendingFiles);
-  pendingFilesRef.current = pendingFiles;
-  useEffect(() => () => { pendingFilesRef.current.forEach(p => URL.revokeObjectURL(p.url)); }, []);
-
-  const handleUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) { toast.error('Hanya file gambar yang diizinkan'); return; }
-    if (file.size > 10 * 1024 * 1024) { toast.error('Ukuran file maks 10MB'); return; }
-    if (fileInputRef.current) fileInputRef.current.value = '';
-
-    // Bug belum dibuat: simpan gambar sementara, unggah setelah bug tersimpan.
-    if (!bug?.id) {
-      setPendingFiles(pf => [...pf, { file, url: URL.createObjectURL(file), name: file.name }]);
-      return;
-    }
-
-    setUploading(true);
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      await client.post(`/bugs/${bug.id}/attachments`, fd);
-      toast.success('Gambar berhasil diunggah');
-      loadAttachments();
-    } catch (err) {
-      toast.error(err?.response?.data?.error || 'Gagal mengunggah gambar');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const removePendingFile = (idx) => {
-    setPendingFiles(pf => {
-      URL.revokeObjectURL(pf[idx].url);
-      return pf.filter((_, i) => i !== idx);
-    });
-  };
-
-  const deleteAttachment = async (id) => {
-    if (!confirm('Hapus lampiran ini?')) return;
-    try {
-      await client.delete(`/attachments/${id}`);
-      toast.success('Lampiran dihapus');
-      loadAttachments();
-    } catch { toast.error('Gagal menghapus'); }
-  };
-
-  const uploadPendingFiles = async (newBugId) => {
-    for (const p of pendingFiles) {
-      try {
-        const fd = new FormData();
-        fd.append('file', p.file);
-        await client.post(`/bugs/${newBugId}/attachments`, fd);
-      } catch {
-        toast.error(`Gagal mengunggah ${p.name}`);
-      } finally {
-        URL.revokeObjectURL(p.url);
-      }
-    }
-  };
 
   const save = async (e) => {
     e.preventDefault(); setSaving(true);
@@ -437,8 +378,8 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
         toast.success('Bug diperbarui');
       } else {
         const res = await client.post('/bugs', payload);
-        if (pendingFiles.length) await uploadPendingFiles(res.data.id);
-        toast.success('Bug dibuat');
+        await attachRef.current?.uploadPending(res.data.id);
+        toastCreated('Bug', res.data?.code, 'dibuat');
       }
       onSave();
     } catch {} finally { setSaving(false); }
@@ -448,7 +389,7 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
     <form onSubmit={save} className="grid grid-cols-2 gap-4">
       <div>
         <label className="label">Produk *</label>
-        <select className="select" value={form.product_id} onChange={e => setForm(f => ({ ...f, product_id: e.target.value, backlog_item_id: '' }))} required>
+        <select className="select" value={form.product_id} onChange={e => setForm(f => ({ ...f, product_id: e.target.value, backlog_item_id: '', feature_id: '' }))} required>
           <option value="">Pilih produk</option>
           {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
@@ -465,6 +406,18 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
         />
       </div>
       <div className="col-span-2">
+        <label className="label">Feature (opsional)</label>
+        <SearchableSelect
+          value={form.feature_id}
+          onChange={v => setForm(f => ({ ...f, feature_id: v }))}
+          options={buildFeatureOptions(features, products, form.product_id)}
+          placeholder="— Tidak terkait —"
+          emptyOptionLabel="— Tidak terkait —"
+          searchPlaceholder="Cari kode produk, kode atau nama feature..."
+          emptyMessage="Belum ada feature di produk ini"
+        />
+      </div>
+      <div className="col-span-2">
         <label className="label">Judul Bug *</label>
         <input className="input" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} required />
       </div>
@@ -476,8 +429,14 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
         <label className="label">Langkah Reproduksi</label>
         <textarea className="input h-24 resize-none font-mono text-xs" value={form.steps_to_reproduce} onChange={e => setForm(f => ({ ...f, steps_to_reproduce: e.target.value }))} placeholder="1. Buka halaman...\n2. Klik tombol...\n3. Bug muncul..." />
       </div>
+      <div className={bug?.id ? 'col-span-2' : ''}>
+        <label className="label">Type (opsional)</label>
+        <select className="select" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
+          {TYPES.map(t => <option key={t} value={t}>{TYPE_META[t].label}</option>)}
+        </select>
+      </div>
       {!bug?.id && (
-        <div className="col-span-2">
+        <div>
           <label className="label">Stage Awal</label>
           <select className="select" value={form.stage} onChange={e => setForm(f => ({ ...f, stage: e.target.value }))}>
             {INITIAL_STAGES.map(s => <option key={s} value={s}>{STAGE_LABELS[s]}</option>)}
@@ -505,82 +464,7 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
           onChange={vals => setForm(f => ({ ...f, assignee_ids: vals }))} />
       </div>
       {/* Attachments — queued locally until the bug is created, uploaded live once it exists */}
-      <div className="col-span-2">
-        <div className="border-t border-slate-100 pt-4">
-          <div className="flex items-center justify-between mb-3">
-            <label className="label mb-0 flex items-center gap-1.5">
-              <Paperclip className="w-3.5 h-3.5 text-slate-400" />
-              Lampiran Gambar
-              {(bug?.id ? attachments.length : pendingFiles.length) > 0 && (
-                <span className="text-xs font-normal text-slate-400 ml-1">({bug?.id ? attachments.length : pendingFiles.length})</span>
-              )}
-            </label>
-            <button type="button"
-              className="btn-secondary text-xs py-1 px-2 flex items-center gap-1.5"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}>
-              {uploading
-                ? <span className="w-3.5 h-3.5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-                : <Upload className="w-3.5 h-3.5" />}
-              {uploading ? 'Mengunggah...' : 'Unggah Gambar'}
-            </button>
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
-          </div>
-          {!bug?.id && (
-            <p className="text-xs text-slate-400 -mt-2 mb-3">Gambar akan diunggah setelah bug disimpan.</p>
-          )}
-          {(bug?.id ? attachments.length : pendingFiles.length) === 0 ? (
-            <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center cursor-pointer hover:border-slate-400 hover:bg-slate-50 transition-colors"
-              onClick={() => fileInputRef.current?.click()}>
-              <ImageIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-              <p className="text-xs text-slate-400">Klik untuk unggah gambar</p>
-              <p className="text-xs text-slate-300 mt-0.5">JPG, PNG, GIF, WEBP • Maks 10MB</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-2">
-              {bug?.id
-                ? attachments.map(att => (
-                    <div key={att.id} className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-50 aspect-video cursor-pointer"
-                      onClick={() => setPreviewImage({ url: `/api/attachments/file/${att.filename}`, name: att.original_name })}>
-                      <img src={`/api/attachments/file/${att.filename}`} alt={att.original_name}
-                        className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors pointer-events-none">
-                        <button type="button" onClick={(e) => { e.stopPropagation(); deleteAttachment(att.id); }}
-                          title="Hapus lampiran" aria-label="Hapus lampiran"
-                          className="pointer-events-auto absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      <p className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs px-1.5 py-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                        {att.original_name}
-                      </p>
-                    </div>
-                  ))
-                : pendingFiles.map((p, idx) => (
-                    <div key={idx} className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-50 aspect-video cursor-pointer"
-                      onClick={() => setPreviewImage({ url: p.url, name: p.name })}>
-                      <img src={p.url} alt={p.name} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors pointer-events-none">
-                        <button type="button" onClick={(e) => { e.stopPropagation(); removePendingFile(idx); }}
-                          title="Hapus lampiran" aria-label="Hapus lampiran"
-                          className="pointer-events-auto absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      <p className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs px-1.5 py-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                        {p.name}
-                      </p>
-                    </div>
-                  ))}
-              <button type="button" onClick={() => fileInputRef.current?.click()}
-                className="aspect-video rounded-lg border-2 border-dashed border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-colors flex flex-col items-center justify-center gap-1">
-                <Upload className="w-4 h-4 text-slate-400" />
-                <span className="text-xs text-slate-400">Tambah</span>
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+      <AttachmentSection ref={attachRef} basePath="/bugs" deletePath="/bugs/attachments" entityId={bug?.id} noun="bug" />
 
       {bug?.id && (
         <div className="col-span-2">
@@ -593,17 +477,6 @@ function BugForm({ bug, products, backlogItems, users, onSave, onClose }) {
         <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Menyimpan...' : (bug?.id ? 'Perbarui' : 'Buat Bug')}</button>
       </div>
 
-      {previewImage && (
-        <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6"
-          onClick={() => setPreviewImage(null)}>
-          <button type="button" onClick={() => setPreviewImage(null)}
-            className="absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2">
-            <X className="w-5 h-5" />
-          </button>
-          <img src={previewImage.url} alt={previewImage.name}
-            className="max-w-full max-h-full rounded-lg shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
-        </div>
-      )}
     </form>
   );
 }
@@ -749,12 +622,18 @@ export default function BugsIncident() {
   const [bugs,         setBugs]        = useState([]);
   const [progress,     setProgress]    = useState([]);
   const [backlogItems, setBacklogItems] = useState([]);
+  const [features,     setFeatures]    = useState([]);
   const [users,        setUsers]       = useState([]);
   const [dashboard,    setDashboard]   = useState(null);
-  const [filters,      setFilters]     = useState({ product_id: '' });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const productParam = searchParams.get('product') || '';
+  const [filters,      setFilters]     = useState({ product_id: productParam });
+  // Sidebar product links (?product=ID) drive the product filter; the select below writes back to the URL
+  useEffect(() => { setFilters(f => f.product_id === productParam ? f : { ...f, product_id: productParam }); }, [productParam]);
+  const changeProduct = (v) => setSearchParams(p => { const n = new URLSearchParams(p); if (v) n.set('product', v); else n.delete('product'); return n; }, { replace: true });
   // Client-side only (Bugs tab list is already loaded in full per product, so these
   // don't need a round-trip to the backend like `filters.product_id` does).
-  const [bugFilters,   setBugFilters]  = useState({ search: '', stage: [], severity: [], priority: [], assigned_to: [] });
+  const [bugFilters,   setBugFilters]  = useState({ search: '', type: [], stage: [], severity: [], priority: [], assigned_to: [] });
   // Default true: Closed/Done bugs are hidden from the list until the user opts back in.
   const [hideClosed,   setHideClosed]  = useState(true);
   // Default to newest-first (Tanggal Incident, desc) so a freshly-loaded/reported
@@ -778,11 +657,12 @@ export default function BugsIncident() {
     setLoading(true);
     try {
       const params = filters.product_id ? { product_id: filters.product_id } : {};
-      const [pr, bg, pg, bl, us, db] = await Promise.all([
+      const [pr, bg, pg, bl, ft, us, db] = await Promise.all([
         products.length ? null : client.get('/products'),
         client.get('/bugs',          { params }),
         client.get('/bugs/progress', { params }),
         backlogItems.length ? null : client.get('/backlog', { params: { limit: 2000 } }),
+        features.length ? null : client.get('/features'),
         users.length ? null : client.get('/users'),
         client.get('/bugs/dashboard', { params }),
       ]);
@@ -790,6 +670,7 @@ export default function BugsIncident() {
       setBugs(bg.data);
       setProgress(pg.data);
       if (bl) setBacklogItems(bl.data.items);
+      if (ft) setFeatures(ft.data);
       if (us) setUsers(us.data);
       setDashboard(db.data);
     } finally { setLoading(false); }
@@ -797,6 +678,22 @@ export default function BugsIncident() {
   }, [filters]);
 
   useEffect(() => { if (canAccess) load(); }, [load, canAccess]);
+
+  // ?bug=<id> (notification link, Ctrl K palette) opens that bug's form; ?new=1 (palette action) opens an empty one.
+  // The list is fetched unfiltered so a bug outside the current product filter still opens.
+  useDeepLink(['bug', 'new'], ({ bug, new: isNew }) => {
+    if (!canAccess) return;
+    setTab('bugs');
+    if (bug) {
+      client.get('/bugs').then(r => {
+        const found = r.data.find(b => String(b.id) === String(bug));
+        if (found) setModal({ open: true, type: 'bug', data: found });
+        else toast.error('Bug tidak ditemukan');
+      }).catch(() => {});
+    } else if (isNew) {
+      setModal({ open: true, type: 'bug', data: null });
+    }
+  });
   useEffect(() => { setPageBugs(1); }, [bugFilters, hideClosed, sortKey, sortDir]);
 
   // Cycle: click a new column -> its default direction: click again -> the
@@ -857,10 +754,11 @@ export default function BugsIncident() {
   };
 
   const exportBugsCSV = () => {
-    const headers = ['Kode', 'Judul', 'Deskripsi', 'Langkah Reproduksi', 'Severity', 'Prioritas', 'Stage', 'Backlog Item', 'Produk', 'Assigned To', 'Reported By', 'Tanggal Incident', 'Tanggal Closed', 'Update Terakhir', 'Update Terakhir Oleh'];
+    const headers = ['Kode', 'Judul', 'Type', 'Deskripsi', 'Langkah Reproduksi', 'Severity', 'Prioritas', 'Stage', 'Backlog Item', 'Features', 'Produk', 'Assigned To', 'Reported By', 'Tanggal Incident', 'Tanggal Closed', 'Update Terakhir', 'Update Terakhir Oleh'];
     const rows = sortedBugs.map(b => [
-      b.code, b.title, b.description, b.steps_to_reproduce, b.severity, b.priority, b.stage,
+      b.code, b.title, b.type || 'bug', b.description, b.steps_to_reproduce, b.severity, b.priority, b.stage,
       b.item_code ? `[${b.item_code}] ${b.item_title || ''}` : '',
+      featureText(b),
       b.product_code || b.product_name || '',
       (b.assignees || []).map(a => a.name).join(', ') || b.assigned_to_name || '',
       b.reported_by_name || b.reporter_name || b.reporter_email || '',
@@ -910,6 +808,7 @@ export default function BugsIncident() {
       const q = bugFilters.search.toLowerCase();
       if (!(b.code?.toLowerCase().includes(q) || b.title?.toLowerCase().includes(q))) return false;
     }
+    if (bugFilters.type.length       && !bugFilters.type.includes(b.type || 'bug')) return false;
     if (bugFilters.stage.length      && !bugFilters.stage.includes(b.stage))       return false;
     if (bugFilters.severity.length   && !bugFilters.severity.includes(b.severity)) return false;
     if (bugFilters.priority.length   && !bugFilters.priority.includes(b.priority)) return false;
@@ -932,6 +831,10 @@ export default function BugsIncident() {
   const pagedBugs          = sortedBugs.slice((pageBugs - 1) * perPageBugs, pageBugs * perPageBugs);
   const totalPagesProgress = Math.max(1, Math.ceil(progress.length / perPageProgress));
   const pagedProgress      = progress.slice((pageProgress - 1) * perPageProgress, pageProgress * perPageProgress);
+
+  // Data can shrink under the current page (product filter, reload): never sit on an empty page past the end
+  useEffect(() => { if (pageBugs > totalPagesBugs) setPageBugs(totalPagesBugs); }, [pageBugs, totalPagesBugs]);
+  useEffect(() => { if (pageProgress > totalPagesProgress) setPageProgress(totalPagesProgress); }, [pageProgress, totalPagesProgress]);
 
   const handlePerPageBugs     = (v) => { setPerPageBugs(v);     setPageBugs(1); };
   const handlePerPageProgress = (v) => { setPerPageProgress(v); setPageProgress(1); };
@@ -956,7 +859,7 @@ export default function BugsIncident() {
           ))}
         </div>
         <div className="ml-auto pb-2">
-          <select className="select w-auto min-w-[160px]" value={filters.product_id} onChange={e => setFilters(f => ({ ...f, product_id: e.target.value }))}>
+          <select className="select w-auto min-w-[160px]" value={filters.product_id} onChange={e => changeProduct(e.target.value)}>
             <option value="">Semua Produk</option>
             {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
@@ -1109,7 +1012,8 @@ export default function BugsIncident() {
                   />
                 </div>
                 {[
-                  { key: 'stage',    label: 'Stage',     opts: STAGES.map(s => ({ v: s, l: STAGE_LABELS[s] || s })) },
+                  { key: 'type',     label: 'Type',      opts: TYPES.map(t => ({ v: t, l: TYPE_META[t].label })) },
+                  { key: 'stage',    label: 'Stage',    opts: STAGES.map(s => ({ v: s, l: STAGE_LABELS[s] || s })) },
                   { key: 'severity', label: 'Severity',  opts: SEVERITIES.map(s => ({ v: s, l: s })) },
                   { key: 'priority', label: 'Prioritas', opts: PRIORITIES.map(p => ({ v: p, l: p })) },
                 ].map(({ key, label, opts }) => (
@@ -1157,18 +1061,20 @@ export default function BugsIncident() {
                     Tampilkan
                     <select className="border border-slate-200 rounded px-1.5 py-0.5 bg-white text-xs"
                       value={perPageBugs} onChange={e => handlePerPageBugs(+e.target.value)}>
-                      {[10, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+                      {[10, 30, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
                     </select>
                     baris
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1320px] text-sm">
+                  <table className="w-full min-w-[1740px] text-sm">
                     <thead>
                       <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 whitespace-nowrap">
                         <th className="text-left px-4 py-3">Kode</th>
                         <th className="text-left px-4 py-3">Judul</th>
+                        <th className="text-left px-3 py-3">Type</th>
                         <th className="text-left px-3 py-3">Item</th>
+                        <th className="text-left px-3 py-3">Features</th>
                         {renderSortableTh('severity', 'Severity')}
                         {renderSortableTh('priority', 'Prioritas')}
                         {renderSortableTh('stage', 'Stage')}
@@ -1182,7 +1088,7 @@ export default function BugsIncident() {
                       </tr>
                     </thead>
                     <tbody>
-                      {pagedBugs.length === 0 && <tr><td colSpan={13} className="text-center py-10 text-slate-400">Belum ada bug</td></tr>}
+                      {pagedBugs.length === 0 && <tr><td colSpan={15} className="text-center py-10 text-slate-400">Belum ada bug</td></tr>}
                       {pagedBugs.map(b => (
                         <tr key={b.id}
                           // Whole row opens the bug (same as the pencil, so only with bugs.access); inner controls stop propagation
@@ -1193,12 +1099,21 @@ export default function BugsIncident() {
                             <p className="font-medium text-slate-700 truncate">{b.title}</p>
                             {b.description && <p className="text-xs text-slate-400 truncate">{b.description}</p>}
                           </td>
+                          <td className="px-3 py-3"><TypeBadge type={b.type} /></td>
                           <td className="px-3 py-3 text-xs text-slate-500">
                             {/* One line: code never wraps, title truncates (full text on hover) */}
                             {b.item_code ? (
                               <div className="flex items-center gap-1 min-w-[170px] max-w-[240px]" title={`[${b.item_code}] ${b.item_title || ''}`}>
                                 <span className="font-mono text-slate-400 shrink-0 whitespace-nowrap">[{b.item_code}]</span>
                                 <span className="truncate">{b.item_title}</span>
+                              </div>
+                            ) : '—'}
+                          </td>
+                          <td className="px-3 py-3 text-xs text-slate-500">
+                            {b.feature_code ? (
+                              <div className="flex items-center gap-1 min-w-[150px] max-w-[220px]" title={featureText(b)}>
+                                <span className="font-mono text-slate-400 shrink-0 whitespace-nowrap">[{b.feature_code}]</span>
+                                <span className="truncate">{b.feature_name}</span>
                               </div>
                             ) : '—'}
                           </td>
@@ -1277,7 +1192,7 @@ export default function BugsIncident() {
                   Tampilkan
                   <select className="border border-slate-200 rounded px-1.5 py-0.5 bg-white text-xs"
                     value={perPageProgress} onChange={e => handlePerPageProgress(+e.target.value)}>
-                    {[10, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+                    {[10, 30, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
                   </select>
                   baris
                 </div>
@@ -1351,7 +1266,7 @@ export default function BugsIncident() {
       {/* Modals */}
       <Modal open={modal.open && modal.type === 'bug'} onClose={() => setModal({ ...modal, open: false })}
         title={modal.data ? 'Edit Bug' : 'Buat Bug'} size="lg">
-        <BugForm bug={modal.data} products={products} backlogItems={backlogItems} users={users}
+        <BugForm bug={modal.data} products={products} backlogItems={backlogItems} features={features} users={users}
           onSave={() => { setModal({ ...modal, open: false }); load(); }}
           onClose={() => setModal({ ...modal, open: false })} />
       </Modal>

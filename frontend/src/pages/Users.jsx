@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Plus, Pencil, UserX, UserCheck, Key, Shield, Package, Trash2, AlertTriangle, Building2 } from 'lucide-react';
 import client from '../api/client';
+import { useDeepLink } from '../utils/deepLink';
 import PresenceDot from '../components/PresenceDot';
 import Modal from '../components/Modal';
 import { useAuth } from '../context/AuthContext';
@@ -512,6 +513,28 @@ export default function Users() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Ctrl K palette: ?user= / ?role= / ?department=<id> open that record's edit form (role/department only when the
+  // role may edit them, otherwise just the tab); ?new=user|role|department open an empty form on the right tab.
+  useDeepLink(['user', 'role', 'department', 'new'], (p) => {
+    const find = (url, id) => client.get(url).then(r => r.data.find(x => String(x.id) === String(id)));
+    if (p.new) {
+      if (p.new === 'user' && can('users', 'create')) { setTab('users'); setModal({ open: true, type: 'user', data: null }); }
+      else if (p.new === 'role' && can('roles', 'create')) { setTab('roles'); setModal({ open: true, type: 'role', data: null }); }
+      else if (p.new === 'department' && can('departments', 'create')) { setTab('departments'); setModal({ open: true, type: 'department', data: null }); }
+      return;
+    }
+    if (p.user) {
+      setTab('users');
+      if (can('users', 'update')) find('/users', p.user).then(x => x && setModal({ open: true, type: 'user', data: x })).catch(() => {});
+    } else if (p.role) {
+      setTab('roles');
+      if (can('roles', 'update')) find('/users/roles', p.role).then(x => x && setModal({ open: true, type: 'role', data: x })).catch(() => {});
+    } else if (p.department) {
+      setTab('departments');
+      if (can('departments', 'update')) find('/departments', p.department).then(x => x && setModal({ open: true, type: 'department', data: x })).catch(() => {});
+    }
+  });
 
   const toggleActive = async (user) => {
     await client.put(`/users/${user.id}`, { ...user, is_active: !user.is_active, role_id: user.role_id });

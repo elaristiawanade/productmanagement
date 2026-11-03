@@ -153,6 +153,10 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v19.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v20.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v21.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v22.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v23.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v24.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v25.sql"
 ```
 
 > **Penting:** `migration_v10.sql` menambahkan kolom `users.department`, yang di-query
@@ -175,6 +179,45 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 > `git pull`, `PermissionHelper.can()`/`AuthContext.can()` akan selalu mengembalikan `false`
 > untuk role selain `super_admin` (karena membaca key nested yang belum ada) — gejalanya mirip
 > catatan di atas: tombol/menu hilang tanpa error jelas.
+>
+> `migration_v21.sql` juga **belum dipasang** di mount `docker-entrypoint-initdb.d` pada
+> `docker-compose.yml` (mount berhenti di v20 lalu lompat ke v22), jadi di Docker selalu jalankan manual.
+
+> **Penting juga:** `migration_v22.sql` membuat tabel `user_presence` (titik status
+> online/away/offline di avatar, lihat PRD 3.16). Pada database yang sudah ada, jalankan manual
+> sebelum/saat backend baru naik — **backup database dulu**:
+> ```bash
+> docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v22.sql
+> ```
+> Tanpa tabel ini, `/api/presence` gagal sehingga titik status tidak muncul; bagian aplikasi lain
+> tetap berjalan. Migrasinya additive (`CREATE TABLE IF NOT EXISTS`), tidak mengubah data lama.
+
+> **Penting juga:** `migration_v23.sql` menambah kolom `feature_id` di tabel `bugs` dan `qa_test_cases`
+> (kolom/dropdown **Features** di QA Module & Bugs Incident). **Jalankan SEBELUM backend baru naik** —
+> INSERT/UPDATE bug dan test case di backend baru menyebut kolom ini, jadi tanpa migrasi create/edit
+> gagal `500`. Pada database yang sudah ada jalankan manual (**backup dulu**):
+> ```bash
+> docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v23.sql
+> ```
+> Migrasinya additive dan idempotent (`ADD COLUMN IF NOT EXISTS`); data lama tidak berubah (Features `—`).
+
+> **Penting juga:** `migration_v24.sql` menambah kolom `type` di tabel `bugs` (kolom/dropdown **Type**
+> di Bugs Incident: `bug` atau `inquiry`). **Jalankan SEBELUM backend baru naik** — INSERT/UPDATE bug
+> di backend baru menyebut kolom ini, jadi tanpa migrasi create/edit bug gagal `500`. Pada database
+> yang sudah ada jalankan manual (**backup dulu**):
+> ```bash
+> docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v24.sql
+> ```
+> Migrasinya additive dan idempotent; semua bug lama otomatis bertipe `bug`.
+
+> **Penting juga:** `migration_v25.sql` membuat tabel `qa_attachments` (lampiran test case di QA Module;
+> lampiran Bugs Incident kini juga menerima PDF/Word/Excel/dll.). **Jalankan SEBELUM backend baru naik** —
+> upload/list lampiran QA gagal `500` tanpa tabel ini, dan unduh file mencari nama aslinya di tabel ini.
+> Pada database yang sudah ada jalankan manual (**backup dulu**):
+> ```bash
+> docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v25.sql
+> ```
+> Migrasinya additive dan idempotent (`CREATE TABLE IF NOT EXISTS`); data lama tidak berubah.
 
 ---
 
@@ -235,7 +278,11 @@ product-tracker/
 │       ├── migration_v18.sql
 │       ├── migration_v19.sql
 │       ├── migration_v20.sql
-│       └── migration_v21.sql
+│       ├── migration_v21.sql
+│       ├── migration_v22.sql
+│       ├── migration_v23.sql
+│       ├── migration_v24.sql
+│       └── migration_v25.sql
 ├── backend-java/          # Spring Boot API (port 4000)
 │   ├── src/
 │   ├── pom.xml

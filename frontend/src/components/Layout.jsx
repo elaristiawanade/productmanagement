@@ -116,7 +116,7 @@ export default function Layout() {
           <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Cari (Ctrl K)"
             className="flex items-center gap-2 h-8 w-8 sm:w-full sm:max-w-[520px] justify-center sm:justify-start px-0 sm:pl-3 sm:pr-1.5 rounded-lg bg-frame-2 border border-frame-3 text-frame-ink-2 text-[13px] hover:border-[#3d3d44] hover:text-frame-ink transition-colors">
             <Search className="w-[15px] h-[15px] shrink-0" />
-            <span className="hidden sm:block flex-1 text-left truncate">Cari halaman atau backlog item…</span>
+            <span className="hidden sm:block flex-1 text-left truncate">Cari halaman, tiket, atau aksi…</span>
             <kbd className="hidden sm:block font-sans text-[11px] font-medium px-1.5 py-0.5 rounded bg-frame-3 text-frame-ink-2">Ctrl K</kbd>
           </button>
         </div>

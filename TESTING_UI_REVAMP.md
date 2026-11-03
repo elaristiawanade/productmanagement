@@ -1,6 +1,6 @@
 # Checklist Paritas Fitur — UI Original vs UI Revamp
 
-Tujuan: memastikan semua fitur & fungsi versi **original** (commit `1ee9fbf`, sebelum revamp) masih ada dan bekerja di UI **baru** (branch `feature/presence-status`, http://localhost:8500).
+Tujuan: memastikan semua fitur & fungsi versi **original** (commit `1ee9fbf`, sebelum revamp) masih ada dan bekerja di UI **baru** (branch `ui-revamp`, http://localhost:8500).
 
 Legenda: ✅ sudah diuji otomatis & lulus · 🧑 perlu dites manual · ⚠️ catatan
 
@@ -14,7 +14,7 @@ Legenda: ✅ sudah diuji otomatis & lulus · 🧑 perlu dites manual · ⚠️ c
 - Banding struktur: **tidak ada fitur/tombol/kolom/field yang hilang**. Akses route 7 role identik (0 perbedaan).
 - Tes fungsional: semua alur lulus. Kegagalan di tengah proses semuanya salah skrip tes (selector/label), bukan bug aplikasi, dan sudah diulang sampai lulus.
 - Perubahan yang **disengaja** (bukan hilang): kolom *Kode* + *Tipe* di Backlog digabung jadi satu kolom *Item*; dropdown status/stage/sprint berubah jadi pill-menu; shortcut produk di sidebar; tampilan Board; Ctrl K; slider tema; titik presence.
-- ⚠️ **Masalah lama (ada juga di original, bukan regresi revamp):**
+- ⚠️ **Masalah lama (ada juga di original, bukan regresi revamp) — ketiganya sudah diperbaiki di branch ini:**
   1. **Test run tanpa memilih Sprint → gagal 500 "Internal server error"** (`sprint_id` dikirim `''`, backend `Long.parseLong("")`). Dengan Sprint dipilih berhasil.
   2. **Menghapus komentar di modal Backlog menutup modal** (perilaku sama di original).
   3. PRD 3.5 menulis kartu Kanban Sprint punya dropdown status inline — di kedua versi **tidak ada**; PRD yang usang.
@@ -28,6 +28,7 @@ Legenda: ✅ sudah diuji otomatis & lulus · 🧑 perlu dites manual · ⚠️ c
 - ✅ Command palette (Ctrl K): buka lewat tombol, cari item (HRS-2), Enter membuka halaman, Esc menutup
 - ✅ Sidebar bisa disembunyikan/ditampilkan
 - ✅ Menu per role identik dengan original (admin, manager, commissioner, SME, PO, dev, QA); selisih hanya shortcut produk baru
+- ✅ Pencarian menyeluruh Ctrl K: halaman, aksi "… baru", dan semua record sesuai permission role (hasil uji lengkap: bagian 20)
 - 🧑 Hotkey keyboard Ctrl+K sendiri, navigasi ↑↓ di palette
 - 🧑 Tampilan terang & gelap di semua halaman, lebar layar kecil/tablet, hover/fokus
 - 🧑 Sesi kedaluwarsa (token habis) → kembali ke login
@@ -48,7 +49,8 @@ Legenda: ✅ sudah diuji otomatis & lulus · 🧑 perlu dites manual · ⚠️ c
 - ✅ Pencarian teks; chip Epic & ✅ Selesai; item done disembunyikan default; filter Assignee (cari + multi); deep link `?item=`; tombol Import Jira; tampilan Board
 - ✅ Hapus Task/Independent/Story + toast "Item dihapus"
 - ✅ Daftar item sama persis dengan original (23 dari 23, kode identik)
-- 🧑 Pindah sprint inline betul-betul dijalankan; filter Produk/Status/Prioritas/Tipe/range deadline; limit per halaman & pagination
+- ✅ Limit per halaman 10/30/50/100 langsung memuat ulang (lihat bagian 18)
+- 🧑 Pindah sprint inline betul-betul dijalankan; filter Produk/Status/Prioritas/Tipe/range deadline
 - 🧑 Lampiran PDF/Word/Excel/PowerPoint/ZIP (buka tab baru); batas 10 MB & tipe tidak didukung
 - 🧑 Group Status: tutup/buka grup, tombol "Tambah item <status>" di header grup
 - 🧑 Board: klik kartu membuka item, ikon status membuka menu
@@ -140,4 +142,111 @@ Legenda: ✅ sudah diuji otomatis & lulus · 🧑 perlu dites manual · ⚠️ c
 
 ## 17. Fitur baru (tidak ada di original)
 - 🧑 Titik presence online/away/offline (perlu 2 browser/user)
-- 🧑 Tampilan Board Backlog, shortcut produk sidebar, tema gelap
+- 🧑 Tampilan Board Backlog, tema gelap
+- 🧑 Daftar produk di sidebar untuk QA Module & Bugs Incident (hasil uji otomatis: bagian 18)
+
+## 18. Pagination & shortcut produk (ditambahkan setelah perbaikan)
+Diuji otomatis (Chrome headless) dengan data dummy berawalan `ZZDUMMY`: Backlog 240 item, Bugs 150 + Progress 150, Test Case 150 + Test Run 150.
+- ✅ **Backlog** — pilih 10/30/50/100 langsung memuat ulang tanpa menekan Group Status; 100 → 30 langsung; pager "1 / N" dan Next benar di mode 100
+- ✅ **QA (Test Cases, Test Runs) & Bugs (Bugs, Progress)** — opsi baris sama seperti Backlog (10/30/50/100); 100 → 30 berubah seketika (±0,2 detik), 30 → 50 → 10 langsung, dari halaman 3 ganti ke 100 kembali ke halaman 1, dari halaman 2 (mode 100) ke 30 kembali ke halaman 1 (32 cek lulus)
+- ✅ **Halaman melewati batas** — dari halaman jauh lalu ganti filter produk, tabel otomatis pindah ke halaman terakhir yang berisi data (sebelumnya "151–44 dari 44" kosong); 4 tabel lulus
+- ✅ **Sidebar produk** — di `/backlog`, `/qa`, `/bugs` muncul daftar produk, klik memfilter lewat `?product=ID`, dropdown halaman ikut sinkron (12 cek lulus)
+- 🧑 Cek manual di browser: 100 → 30 pada QA Module & Bugs Incident, filter produk dari sidebar, tema gelap
+- ⚠️ Pilihan baris per halaman tiap halaman berdiri sendiri dan kembali ke default saat refresh; Standup & Users (10/50/100) dan My Tasks (10/20/50) belum disamakan
+
+## 19. Kolom & dropdown Feature (QA Module, Bugs Incident)
+Fitur baru setelah revamp (PRD 3.8, 3.9; `migration_v23.sql`). Diuji lewat API pada stack Docker lokal dengan data uji berawalan `ZZFEATTEST` (sudah dihapus setelah uji; jumlah bug/test case kembali seperti semula).
+- ✅ **API list** — `GET /api/qa/test-cases` dan `GET /api/bugs` mengembalikan `feature_id`, `feature_code`, `feature_name` (`null` untuk data lama)
+- ✅ **Create** test case dan bug dengan `feature_id` → tersimpan; `feature_id: ""` atau tanpa feature → `null` (opsional)
+- ✅ **Update** — ganti feature, lalu kosongkan (`""`) → `null`
+- ✅ **Validasi** — feature milik produk lain ditolak `400` di create dan update (test case dan bug)
+- ✅ **Import CSV** (bugs dan test case) — kolom `Features` format `[KODE] Nama` dan kode saja terbaca; kode tidak dikenal atau kosong → feature kosong tanpa error
+- ✅ Build frontend lolos; backend ter-compile lewat `docker compose build`
+- ✅ Dicek manual di browser (pemilik, 2 Nov 2026): kolom **Features** muncul setelah *Item* di tabel Test Cases dan Bugs, `—` untuk data lama
+- ✅ Dicek manual di browser (pemilik, 2 Nov 2026): form Buat/Edit, dropdown **Feature (opsional)** bisa dicari lewat kode produk (mis. `HRS`), kode feature, dan nama; opsi tersaring ke produk terpilih; ganti produk mereset Feature
+- 🧑 Export CSV memuat kolom `Features`; round-trip export → import tidak error
+- 🧑 Hapus sebuah feature di Products → test case/bug terkait tetap ada dengan Feature `—`
+- ⚠️ Data lama tidak punya feature (tidak bisa diturunkan dari backlog item, relasinya ke roadmap); isi manual lewat Edit
+
+## 20. Pencarian menyeluruh Ctrl K (branch `improvement-V2`, PRD 3.16 & v3.8)
+Frontend saja (tanpa perubahan backend/database). Diuji otomatis (Chrome headless) pada dev server Vite dan ulang sebagai smoke test di container :8500, dengan data dummy lokal.
+- ✅ **Hasil membuka form/detail yang benar** (admin): Backlog item, Bug, Test case, Produk, Epic produk, Feature, Roadmap, User, Role, Departemen → modal *Edit …* terbuka; Leader task → panel detail; Sprint → sprint terpilih di produk yang benar (dari halaman lain maupun dari `/sprints`)
+- ✅ **Aksi "… baru"** (13 aksi: Backlog, Bug, Test case, Sprint, Produk, Epic, Roadmap, Leader task, User, Role, Departemen, Feature per produk, Epic produk) membuka form kosong; parameter `?new=` dihapus dari URL setelah dipakai
+- ✅ **Permission per role** — admin, PO, developer, QA, manager, commissioner, SME: aksi dan grup hasil sama persis dengan izin role (0 pelanggaran); tidak ada toast error karena grup tak diizinkan tidak pernah diminta ke server
+- ✅ **Deep link tanpa izin** — `?new=…` tidak membuka form bila role tidak punya izin buat; role yang hanya boleh melihat (mis. developer pada Test case/Produk/Roadmap) diantar ke halaman tanpa form
+- ✅ **Memperbaiki bug lama**: link notifikasi `/bugs?bug=ID` kini membuka bug; memilih item/bug yang sama dua kali berturut-turut tetap membuka modal
+- ✅ **Race Sprints** (ditemukan saat uji, sudah diperbaiki): respons `/products` yang datang belakangan tidak lagi menimpa produk dari deep link
+- 🧑 Cek manual: tampilan palette di tema gelap & layar kecil, navigasi ↑↓ + Enter pada hasil campuran, role kustom dengan kombinasi izin tidak umum
+- ⚠️ Test run, Standup (riwayat), dan Leader Notes tidak ikut dicari (tidak punya form/detail sendiri); tiap grup hasil dibatasi 5 baris (Backlog & Leader task 6)
+
+## 21. Type tiket di Bugs Incident (bug / inquiry)
+Fitur baru setelah revamp (PRD 3.9, v3.9; `migration_v24.sql`). Diuji lewat API dan Chrome headless pada stack Docker lokal dengan data uji berawalan `ZZTYPE` (sudah dihapus setelah uji; jumlah bug kembali seperti semula).
+- ✅ **Migrasi** — `migration_v24.sql` dijalankan pada DB berisi data: semua bug lama otomatis `bug`
+- ✅ **Create** tanpa `type` → `bug`; `type: "inquiry"` → `inquiry`; `type: "foo"` → `400`
+- ✅ **Update** tanpa `type` tidak menimpa nilai tersimpan (inquiry tetap inquiry); `type: "bug"` mengubahnya; `type` tidak valid → `400`
+- ✅ **Lapor Bug Publik** (`/api/public/bugs`) tanpa field type → tersimpan `bug` (form publik tidak berubah)
+- ✅ **Import CSV** — kolom `Type`: `Inquiry / Clarification` → inquiry, `bug` → bug, kosong → bug; ketiganya dibuat tanpa error
+- ✅ **UI** (Chrome headless) — kolom **Type** (badge) muncul setelah *Judul*, dropdown **Type (opsional)** di form Buat Bug (sebelah Stage Awal, default Bug), filter **Type** menyaring ke Inquiry / Clarification, form Edit memuat tipe tersimpan
+- ✅ Build frontend lolos; backend ter-compile lewat `docker compose build`
+- 🧑 Export CSV memuat kolom `Type`; round-trip export → import tidak error
+- 🧑 Cek manual di tema gelap dan layar sempit (tabel Bugs makin lebar, scroll horizontal)
+- ⚠️ Belum ada sort per kolom Type dan Type belum ada di form Lapor Bug Publik; label opsi di dropdown filter terpotong ("Inquiry / Clarificati…") karena lebar dropdown
+
+## 22. Author tiket (QA Module, Backlog)
+Fitur baru setelah revamp (PRD 3.2, 3.8, v3.10). Memakai `qa_test_cases.created_by` dan `backlog_items.created_by` yang sudah ada, tanpa migrasi; backend Backlog menambah `created_by_name` (JOIN `users`). Diuji di Chrome headless pada stack Docker lokal.
+- ✅ **QA** — kolom **Author** di tabel Test Cases (setelah *Fail*, sebelum *Produk*); modal Edit Test Case tidak berubah
+- ✅ **QA** — klik baris membuka modal detail/edit (admin dan QA); tombol Run Test tetap membuka modal Run (bukan form edit); developer (tanpa `qa.update`) klik baris tidak membuka apa pun
+- ✅ **Bugs** — kolom Incident Author di tabel tidak berubah; modal Edit Bug tidak berubah
+- ✅ **Backlog** — klik item membuka modal Edit dengan baris *Author: <nama> · <tanggal>* di paling atas; tabel Backlog tidak ditambah kolom
+- ✅ `created_by` terisi di 160/160 test case dan 274/274 backlog item; build frontend dan backend lolos
+- 🧑 Backlog: cek Author dari tampilan Board, item anak (Story → Task), dan deep link Ctrl K / notifikasi `?item=ID`
+- 🧑 Backlog: item yang dibuat lewat Import Jira/CSV menampilkan user yang meng-import; user pembuat yang sudah dihapus tampil `—`
+- 🧑 Export CSV QA memuat kolom `Author`; Import CSV QA mengabaikannya (Author = user yang meng-import)
+
+## 23. Lampiran file di Bugs Incident dan QA Module
+Fitur baru setelah revamp (PRD 3.8, 3.9, v3.11; `migration_v25.sql`). Diuji lewat API (curl) dan Chrome headless pada stack Docker lokal dengan data uji berawalan `ZZATT` (record dan file uji sudah dihapus; folder upload kembali seperti semula).
+- ✅ **Bugs, tipe diterima** — `.docx` `.xlsx` `.pptx` `.pdf` `.txt` `.csv` `.zip` → 201 (MIME kosong/`octet-stream` tetap diterima lewat ekstensi, seperti Backlog)
+- ✅ **Tipe ditolak** — `.exe` `.html` `.svg` → 400 pesan daftar format yang diizinkan (Bugs dan QA); sebelumnya Bugs menerima `image/svg+xml`
+- ✅ **QA** — upload/list/hapus lampiran test case; `.docx` `.xlsx` `.pdf` 201; test case/bug yang tidak ada → 404 (bukan 500)
+- ✅ **Izin** — developer (tanpa `bugs.access`/`qa.create`/`qa.update`) upload ke bug dan QA → 403, hapus → 403; QA engineer → 201
+- ✅ **Unduh** — header `Content-Disposition` memakai nama asli file (`laporan.docx`, `data.xlsx`) untuk lampiran bug dan QA
+- ✅ **Hapus** — `DELETE /api/bugs/attachments/:id` dan `/api/qa/attachments/:id` menghapus baris + file di disk; `DELETE /api/attachments/:id` kini khusus Backlog (id lampiran bug → 404, lampiran bug tidak ikut terhapus)
+- ✅ **UI Bugs** — Buat Bug: pilih 3 file (docx/txt/csv) → tile + keterangan "diunggah setelah bug disimpan"; setelah disimpan dan dibuka lagi 3 tile ada; klik tile TXT → preview isi, Esc hanya menutup preview (modal bug tetap terbuka); tombol X menghapus; tile gambar tampil sebagai thumbnail dan preview gambar penuh layar (Esc hanya menutup preview)
+- ✅ **UI QA** — Edit Test Case: unggah `.xlsx` → tile muncul dan toast sukses
+- ✅ Build frontend dan backend lolos
+- 🧑 Buat Test Case baru dengan file diantrekan lalu disimpan (jalur kode sama dengan Buat Bug, belum diklik langsung di UI)
+- 🧑 Buka file Word/Excel/ZIP sungguhan dari tile (diunduh/dibuka di tab baru) dan preview PDF sungguhan
+- 🧑 Form Lapor Bug Publik tetap hanya menerima gambar (tidak diubah)
+- ⚠️ File >10MB lewat API tidak dibalas server (menggantung) — sama persis di endpoint Backlog lama; UI menolaknya lebih dulu dengan pesan "Ukuran file maks 10MB"
+- ⚠️ Menghapus bug/test case ikut menghapus baris lampiran, tetapi file di disk tidak ikut terhapus (sama seperti Backlog/Bugs sebelumnya)
+
+## 24. Status Epic & Story otomatis mengikuti anak
+Fitur baru setelah revamp (PRD 3.2, v3.12). Backend saja (`BacklogController`), tanpa migrasi. Diuji lewat API (curl) pada stack Docker lokal dengan data uji berawalan `ZZ` (sudah dihapus setelah uji; item Backlog pengguna tidak berubah), lalu dikonfirmasi benar oleh pemilik lewat uji manual di halaman Backlog.
+- ✅ **Naik** — Task `in_progress` → Story dan Epic `in_progress`; Task lain `in_review` → Story dan Epic `in_review` walau Task pertama masih `in_progress`; anak `todo` → Story dan Epic `todo`
+- ✅ **Tidak mundur** — Task kembali ke `in_progress` (revisi) atau `backlog`: Story dan Epic tetap `in_review`
+- ✅ **`done` butuh semua anak** — satu Task `done` (yang lain belum): Story/Epic tidak `done`; Task terakhir `done` → Story otomatis `done`, Epic belum selama Story/Bug lain belum `done`
+- ✅ **Berantai satu aksi** — Bug terakhir `done` → Story `done` lalu Epic `done` sekaligus (Story dihitung sebelum Epic)
+- ✅ **`done` menetap** — Task baru di Story `done` dan Task dibuka lagi: Story dan Epic tetap `done`; Epic yang diubah manual ke `in_review` tidak digeser lagi oleh anak yang `todo`
+- ✅ **`blocked`** — anak `blocked` tidak menggeser induk; Epic `blocked` manual tidak ditimpa (Story di bawahnya tetap naik)
+- ✅ **Semua jalur** — `PATCH /status` (dropdown), `PUT` (form Edit), `POST` (Task dibuat langsung `in_review`), Bug langsung di bawah Epic
+- ✅ **Tanpa efek** — Epic tanpa anak tetap manual; item `independent` `in_progress` tidak error dan tidak mengubah apa pun
+- ✅ **Log aktivitas** — Story dan Epic mencatat `Status diubah otomatis dari "…" menjadi "…" karena …`; tidak ada exception di log backend
+- ✅ Build backend lolos (`docker compose build`, rebuild `--no-deps`)
+- 🧑 My Tasks: ubah status Task lalu refresh — status Epic/Story induk baru terlihat setelah refresh (halaman Backlog langsung ter-update)
+- 🧑 Board: geser kartu Task ke kolom In Progress / In Review / Done lalu cek Story dan Epic induknya
+- 🧑 Setelah deploy ke server kantor: ubah status satu anak dari Epic yang sudah ada — Epic lama baru menyesuaikan saat anaknya berubah (data lama tidak dikoreksi otomatis)
+- ⚠️ Hitung ulang hanya dipicu perubahan status atau pembuatan anak — ganti parent, hapus anak, atau Import Jira tidak memicunya
+- ⚠️ Anak yang langsung `done` dari `backlog` belum menaikkan induk selama anak lain belum `done` (sesuai aturan: hanya `todo`/`in_progress`/`in_review` yang menaikkan)
+
+## 25. Toast sukses create menampilkan kode baru
+Fitur baru setelah revamp (PRD 3.2, v3.13). Frontend saja (`utils/createdToast.jsx`), tanpa migrasi dan tanpa perubahan backend. Diuji di Chrome headless (login admin) pada stack Docker lokal dengan data uji berawalan `ZZTOAST` (sudah dihapus setelah uji).
+- ✅ **Backlog** (Tambah Item) — toast `Item HRS-103 ditambahkan`; kode sama persis dengan kode di database
+- ✅ **Bugs Incident** (Buat Bug) — toast `Bug HRS-053 dibuat`; cocok dengan database
+- ✅ **QA Module** (Buat Test Case) — toast `Test case TC-045 dibuat`; cocok dengan database
+- ✅ **Epic Board** (Tambah Epic) — toast `Epic HRS-104 dibuat` (sebelumnya tidak ada toast); cocok dengan database
+- ✅ Kode ditampilkan sebagai teks tebal monospace; toast masih terlihat setelah 4 detik (durasi 6 detik, bukan 3 detik bawaan)
+- ✅ Build frontend lolos; hanya `pt_frontend` yang di-rebuild (`--no-deps`)
+- 🧑 Kode yang diketik manual di form Backlog tampil apa adanya di toast; kode duplikat (409) tetap menampilkan toast error, bukan toast sukses
+- 🧑 Cek tampilan toast di tema gelap dan layar sempit; buat item lewat tombol "+" di header grup Backlog dan lewat Ctrl K ("… baru")
+- ⚠️ Toast edit ("Item diperbarui", dst.), toast error, dan hasil Import CSV/Jira (hanya jumlah) sengaja tidak diubah
+- ⚠️ Di form Bug dan Test Case, toast baru muncul setelah lampiran selesai diunggah; bila unggah lampiran gagal, toast sukses tidak tampil walau item sudah tersimpan (perilaku lama, tidak diubah)

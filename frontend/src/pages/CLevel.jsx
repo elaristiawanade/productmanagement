@@ -6,6 +6,7 @@ import {
   AlertCircle, Calendar, ExternalLink, ClipboardList, FileText, ChevronDown, Check
 } from 'lucide-react';
 import client from '../api/client';
+import { useDeepLink } from '../utils/deepLink';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 import StatusMenu from '../components/StatusMenu';
@@ -627,13 +628,20 @@ function MultiSelect({ label, options, selected, onChange, minWidth = 130 }) {
 
 // ─── Tab: Leader Task ──────────────────────────────────────────────────────────
 
-function TasksTab({ user, canWrite, departments, detailId, setDetailId, filterRequest, onFilterRequestHandled }) {
+function TasksTab({ user, canWrite, departments, detailId, setDetailId, filterRequest, onFilterRequestHandled, newTaskRequest, onNewTaskHandled }) {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ department: '', status: [], priority: [], search: '' });
   const [modal, setModal] = useState({ open: false, task: null });
+
+  // Ctrl K palette action "Leader Task baru": open the same form as the "Tambah Task" button
+  useEffect(() => {
+    if (!newTaskRequest) return;
+    if (canWrite) setModal({ open: true, task: null });
+    onNewTaskHandled?.();
+  }, [newTaskRequest, canWrite, onNewTaskHandled]);
 
   // Lets the Dashboard tab deep-link here with a department/status pre-applied.
   useEffect(() => {
@@ -1250,6 +1258,14 @@ export default function CLevel() {
   const goToNotes = (filter) => { setNoteFilterRequest(filter || {}); setTab('notes'); };
   const openTask  = (id) => { setDetailId(id); setTab('tasks'); };
 
+  // Ctrl K palette: ?task=<id> opens that task's detail panel, ?new=task the new-task form
+  const [newTaskRequest, setNewTaskRequest] = useState(false);
+  const clearNewTask = useCallback(() => setNewTaskRequest(false), []);
+  useDeepLink(['task', 'new'], ({ task, new: isNew }) => {
+    if (task) openTask(Number(task));
+    else if (isNew === 'task') { setDetailId(null); setTab('tasks'); setNewTaskRequest(true); }
+  });
+
   return (
     <DepartmentsContext.Provider value={departments}>
       <div className="space-y-5">
@@ -1270,7 +1286,8 @@ export default function CLevel() {
 
         {tab === 'dashboard' && <DashboardTab user={user} canWrite={canWrite} departments={departments} onGoToTasks={goToTasks} onGoToNotes={goToNotes} onOpenTask={openTask} />}
         {tab === 'notes' && <NotesTab user={user} canWrite={canWrite} departments={departments} filterRequest={noteFilterRequest} onFilterRequestHandled={() => setNoteFilterRequest(null)} />}
-        {tab === 'tasks' && <TasksTab user={user} canWrite={canWrite} departments={departments} detailId={detailId} setDetailId={setDetailId} filterRequest={taskFilterRequest} onFilterRequestHandled={() => setTaskFilterRequest(null)} />}
+        {tab === 'tasks' && <TasksTab user={user} canWrite={canWrite} departments={departments} detailId={detailId} setDetailId={setDetailId} filterRequest={taskFilterRequest} onFilterRequestHandled={() => setTaskFilterRequest(null)}
+          newTaskRequest={newTaskRequest} onNewTaskHandled={clearNewTask} />}
         {tab === 'mine'  && <MineTab  user={user} detailId={detailId} setDetailId={setDetailId} />}
       </div>
     </DepartmentsContext.Provider>

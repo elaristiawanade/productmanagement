@@ -1,10 +1,11 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { useChartTheme } from '../utils/chartTheme';
 import { Plus, Calendar, Target, Layers, ChevronDown, ChevronUp, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import client from '../api/client';
+import { useDeepLink } from '../utils/deepLink';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
@@ -114,11 +115,15 @@ export default function Sprints() {
   const [loading,   setLoading]   = useState(false);
   const ct = useChartTheme();
 
+  // Sprint asked for by a deep link (?sprint=<id>&product=<id>); consumed once that product's sprints load
+  const pendingSprint = useRef(null);
+
   useEffect(() => {
     client.get('/products').then(r => {
       setProducts(r.data);
       const active = r.data.find(p => p.active_sprints > 0) || r.data[0];
-      if (active) setSelProduct(String(active.id));
+      // keep a product already chosen by a deep link; /products can answer after /sprints has
+      if (active) setSelProduct(cur => cur || String(active.id));
     });
   }, []);
 
@@ -126,7 +131,10 @@ export default function Sprints() {
     if (!selProduct) return;
     client.get('/sprints', { params: { product_id: selProduct } }).then(r => {
       setSprints(r.data);
-      const active = r.data.find(s => s.status === 'active') || r.data[0];
+      const wanted = pendingSprint.current;
+      pendingSprint.current = null;
+      const active = (wanted && r.data.find(s => s.id === wanted.id))
+        || r.data.find(s => s.status === 'active') || r.data[0];
       if (active) setSelSprint(active);
     });
     client.get('/epics', { params: { product_id: selProduct } }).then(r => setEpics(r.data));
@@ -148,6 +156,20 @@ export default function Sprints() {
     const r = await client.get('/sprints', { params: { product_id: selProduct } });
     setSprints(r.data);
   };
+
+  // ?sprint=<id>&product=<id> (Ctrl K palette) selects that sprint; ?new=1 opens the new-sprint form
+  useDeepLink(['sprint', 'product', 'new'], ({ sprint, product, new: isNew }) => {
+    if (isNew) {
+      if (can('sprints', 'create')) setModal({ open: true, sprint: null });
+      return;
+    }
+    if (!sprint) return;
+    pendingSprint.current = { id: Number(sprint), product: product ? String(product) : null };
+    if (product && String(product) !== selProduct) { setSelProduct(String(product)); return; }
+    const found = sprints.find(s => s.id === Number(sprint));
+    if (found) setSelSprint(found);
+    pendingSprint.current = null;
+  });
 
   const deleteSprint = async (sprint) => {
     try {

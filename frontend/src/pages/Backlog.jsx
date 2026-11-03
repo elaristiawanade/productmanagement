@@ -13,7 +13,10 @@ import LinkInsertButton from '../components/LinkInsertButton';
 import SearchableSelect from '../components/SearchableSelect';
 import SearchableMultiSelect from '../components/SearchableMultiSelect';
 import AssigneeStack from '../components/AssigneeStack';
+import AuthorLine from '../components/AuthorLine';
 import { renderWithLinks } from '../utils/linkify';
+import { useDeepLink } from '../utils/deepLink';
+import { toastCreated } from '../utils/createdToast';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { format, parseISO, formatDistanceToNow } from 'date-fns';
@@ -578,8 +581,8 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
         await client.put(`/backlog/${item.id}`, payload);
         toast.success('Item diperbarui');
       } else {
-        await client.post('/backlog', payload);
-        toast.success('Item ditambahkan');
+        const res = await client.post('/backlog', payload);
+        toastCreated('Item', res.data?.code, 'ditambahkan');
       }
       onSave();
     } catch (err) {
@@ -590,6 +593,7 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
 
   return (
     <form onSubmit={save} className="grid grid-cols-2 gap-4">
+      {item?.id && <AuthorLine name={item.created_by_name} date={item.created_at} />}
       <F label="Produk" required>
         <select className="select" value={form.product_id}
           onChange={e => setForm(f => ({ ...f, product_id: e.target.value, sprint_id: '', feature_id: '', parent_id: '' }))}
@@ -1027,7 +1031,7 @@ export default function Backlog() {
       if (ep) setEpics(ep.data);
     } finally { setLoading(false); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters, page]);
+  }, [filters, page, perPage]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -1039,14 +1043,16 @@ export default function Backlog() {
     setPage(1);
   }, [productParam]);
 
-  // Auto-open item from URL ?item=123 (from notification click)
-  useEffect(() => {
-    const itemId = searchParams.get('item');
-    if (!itemId) return;
-    client.get(`/backlog/${itemId}`).then(res => {
-      setModal({ open: true, item: res.data, defaults: null });
-    }).catch(() => {});
-  }, [searchParams]);
+  // ?item=123 (notification click, Ctrl K palette) opens that item; ?new=1 (palette action) opens an empty form
+  useDeepLink(['item', 'new'], ({ item, new: isNew }) => {
+    if (item) {
+      client.get(`/backlog/${item}`).then(res => {
+        setModal({ open: true, item: res.data, defaults: null });
+      }).catch(() => {});
+    } else if (isNew && canCreate) {
+      setModal({ open: true, item: null, defaults: null });
+    }
+  });
 
   const deleteItem = async (id) => {
     if (!confirm('Hapus item ini?')) return;
