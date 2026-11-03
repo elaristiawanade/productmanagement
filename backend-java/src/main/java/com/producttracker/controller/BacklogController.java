@@ -63,7 +63,7 @@ public class BacklogController {
     @GetMapping
     public ResponseEntity<?> list(
             @AuthenticationPrincipal Object principal,
-            @RequestParam(required = false) Long product_id,
+            @RequestParam(required = false) String product_id,
             @RequestParam(required = false) Long sprint_id,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String priority,
@@ -99,7 +99,19 @@ public class BacklogController {
         }
 
         if (hide_done && status == null) { filters.add("bi.status != 'done'"); }
-        if (product_id != null)  { filters.add("bi.product_id = ?");  params.add(product_id); }
+        // product_id may be a comma-joined list (multi-select Produk filter in the Backlog page)
+        if (product_id != null && !product_id.isBlank()) {
+            List<Long> productIds = new ArrayList<>();
+            for (String v : product_id.split(",")) {
+                Long l = toLong(v.trim());
+                if (l != null) productIds.add(l);
+            }
+            if (!productIds.isEmpty()) {
+                String ph = productIds.stream().map(x -> "?").collect(Collectors.joining(","));
+                filters.add("bi.product_id IN (" + ph + ")");
+                params.addAll(productIds);
+            }
+        }
         if (sprint_id != null)   { filters.add("bi.sprint_id = ?");   params.add(sprint_id); }
         if (status != null)      { filters.add(buildInFilter("bi.status", status, params)); }
         if (priority != null)    { filters.add(buildInFilter("bi.priority", priority, params)); }
