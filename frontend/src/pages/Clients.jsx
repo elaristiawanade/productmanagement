@@ -526,7 +526,8 @@ export default function Clients() {
       </div>
 
       <Modal open={modal.open} onClose={closeModal} size="lg"
-        title={modal.item ? modal.item.bank_name : 'Tambah Client'}>
+        title={modal.item ? modal.item.bank_name : 'Tambah Client'}
+        shareLink={modal.item ? `/clients?client=${modal.item.id}` : undefined}>
         {modal.open && (
           <ClientForm
             key={modal.item?.id || 'new'}

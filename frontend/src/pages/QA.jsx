@@ -698,7 +698,8 @@ export default function QA() {
 
       {/* Modals */}
       <Modal open={modal.open && modal.type === 'tc'} onClose={() => setModal({ ...modal, open: false })}
-        title={modal.data ? 'Edit Test Case' : 'Buat Test Case'} size="lg">
+        title={modal.data ? 'Edit Test Case' : 'Buat Test Case'} size="lg"
+        shareLink={modal.data ? `/qa?case=${modal.data.id}` : undefined}>
         <TestCaseForm tc={modal.data} products={products} backlogItems={backlogItems} features={features}
           onSave={() => { setModal({ ...modal, open: false }); load(); }}
           onClose={() => setModal({ ...modal, open: false })} />

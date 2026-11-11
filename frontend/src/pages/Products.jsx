@@ -596,26 +596,30 @@ export default function Products() {
 
       {/* ── Modals ── */}
       <Modal open={modal.open && modal.type === 'product'} onClose={closeModal}
-        title={modal.data ? 'Edit Produk' : 'Tambah Produk'} size="md">
+        title={modal.data ? 'Edit Produk' : 'Tambah Produk'} size="md"
+        shareLink={modal.data ? `/products?product=${modal.data.id}` : undefined}>
         <ProductForm product={modal.data} users={users}
           onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
 
       <Modal open={modal.open && modal.type === 'epic'} onClose={closeModal}
-        title={modal.data ? 'Edit Epic' : 'Tambah Epic'} size="sm">
+        title={modal.data ? 'Edit Epic' : 'Tambah Epic'} size="sm"
+        shareLink={modal.data ? `/products?epic=${modal.data.id}` : undefined}>
         <EpicForm epic={modal.data} productId={modal.productId}
           onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
 
       <Modal open={modal.open && modal.type === 'feature'} onClose={closeModal}
-        title={modal.data ? 'Edit Feature' : 'Tambah Feature'} size="md">
+        title={modal.data ? 'Edit Feature' : 'Tambah Feature'} size="md"
+        shareLink={modal.data ? `/products?feature=${modal.data.id}` : undefined}>
         <FeatureForm feature={modal.data} productId={modal.productId} users={users}
           epics={epics.filter(e => e.product_id === modal.productId)}
           onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
 
       <Modal open={modal.open && modal.type === 'roadmap'} onClose={closeModal}
-        title={modal.data ? 'Edit Item Roadmap' : 'Tambah Item ke Roadmap'} size="md">
+        title={modal.data ? 'Edit Item Roadmap' : 'Tambah Item ke Roadmap'} size="md"
+        shareLink={modal.data ? `/products?roadmap=${modal.data.id}` : undefined}>
         <RoadmapForm item={modal.data} products={products}
           defaultProductId={modal.productId}
           onSave={() => { closeModal(); load(); }} onClose={closeModal} />

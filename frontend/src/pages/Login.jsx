@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { takeReturnTo } from '../utils/returnTo';
 import { Zap, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -11,6 +12,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const { login }             = useAuth();
   const navigate              = useNavigate();
+  const location              = useLocation();
 
   const submit = async (e) => {
     e.preventDefault();
@@ -18,7 +20,7 @@ export default function Login() {
     try {
       await login(form.email, form.password);
       toast.success('Login berhasil!');
-      navigate('/', { replace: true });
+      navigate(takeReturnTo(location.state?.from), { replace: true });
     } catch {
       // toast already shown by axios interceptor
     } finally {

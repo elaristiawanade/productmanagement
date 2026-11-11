@@ -1265,7 +1265,8 @@ export default function BugsIncident() {
 
       {/* Modals */}
       <Modal open={modal.open && modal.type === 'bug'} onClose={() => setModal({ ...modal, open: false })}
-        title={modal.data ? 'Edit Bug' : 'Buat Bug'} size="lg">
+        title={modal.data ? 'Edit Bug' : 'Buat Bug'} size="lg"
+        shareLink={modal.data ? `/bugs?bug=${modal.data.id}` : undefined}>
         <BugForm bug={modal.data} products={products} backlogItems={backlogItems} features={features} users={users}
           onSave={() => { setModal({ ...modal, open: false }); load(); }}
           onClose={() => setModal({ ...modal, open: false })} />

@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout     from './components/Layout';
 import Login      from './pages/Login';
@@ -22,6 +22,7 @@ import ClientSettings from './pages/ClientSettings';
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
+  const location = useLocation();
   if (loading) return (
     <div className="h-screen flex items-center justify-center bg-slate-50">
       <div className="flex flex-col items-center gap-3">
@@ -30,7 +31,8 @@ function PrivateRoute({ children }) {
       </div>
     </div>
   );
-  return user ? children : <Navigate to="/login" replace />;
+  // Remember where the visitor was heading (e.g. a shared /backlog?item=12 link) so Login can send them back
+  return user ? children : <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
 }
 
 // Route-level gate for fully-private modules (Users, Bugs, C-Level, Settings, Import Jira).

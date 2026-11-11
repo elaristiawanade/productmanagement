@@ -6,6 +6,7 @@ import { useChartTheme } from '../utils/chartTheme';
 import { Plus, Calendar, Target, Layers, ChevronDown, ChevronUp, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import client from '../api/client';
 import { useDeepLink } from '../utils/deepLink';
+import CopyLinkButton from '../components/CopyLinkButton';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
@@ -226,6 +227,7 @@ export default function Sprints() {
                 <div className="flex items-center gap-3">
                   <h2 className="text-lg font-bold text-slate-800">{selSprint.name}</h2>
                   <StatusBadge status={selSprint.status} />
+                  <CopyLinkButton path={`/sprints?sprint=${selSprint.id}&product=${selSprint.product_id}`} label="Salin link sprint" />
                   {can('sprints', 'update') && (
                     <>
                       <button className="btn-ghost btn-sm p-1 rounded" title="Edit Sprint"
@@ -285,10 +287,13 @@ export default function Sprints() {
                       </div>
                       <div className="p-2 space-y-2 min-h-[120px]">
                         {colItems.map(item => (
-                          <div key={item.id} className="bg-white border border-slate-100 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow">
+                          <div key={item.id} className="group bg-white border border-slate-100 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow">
                             <div className="flex items-start justify-between gap-1 mb-2">
                               <span className="text-xs text-slate-400 font-mono">{item.code}</span>
-                              <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${TYPE_COLORS[item.type] || ''}`}>{item.type}</span>
+                              <span className="flex items-center gap-1">
+                                <CopyLinkButton path={`/backlog?item=${item.id}`} label={`Salin link ${item.code}`} className="!w-5 !h-5 -my-1 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity" />
+                                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${TYPE_COLORS[item.type] || ''}`}>{item.type}</span>
+                              </span>
                             </div>
                             <p className="text-xs font-medium text-slate-700 leading-snug mb-2 line-clamp-2">{item.title}</p>
                             <div className="flex items-center justify-between">
@@ -380,7 +385,8 @@ export default function Sprints() {
       )}
 
       <Modal open={modal.open} onClose={() => setModal({ open: false, sprint: null })}
-        title={modal.sprint ? 'Edit Sprint' : 'Buat Sprint Baru'} size="md">
+        title={modal.sprint ? 'Edit Sprint' : 'Buat Sprint Baru'} size="md"
+        shareLink={modal.sprint ? `/sprints?sprint=${modal.sprint.id}&product=${modal.sprint.product_id}` : undefined}>
         <SprintForm sprint={modal.sprint} productId={selProduct}
           onSave={() => { setModal({ open: false, sprint: null }); reloadSprints(); }}
           onClose={() => setModal({ open: false, sprint: null })} />

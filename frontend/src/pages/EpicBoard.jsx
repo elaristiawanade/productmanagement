@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import client from '../api/client';
 import { useDeepLink } from '../utils/deepLink';
+import CopyLinkButton from '../components/CopyLinkButton';
 import { toastCreated } from '../utils/createdToast';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
@@ -217,6 +218,7 @@ function EpicRow({ epic }) {
           </span>
         )}
         {epic.is_delayed && <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />}
+        <CopyLinkButton path={`/backlog?item=${epic.id}`} label={`Salin link ${epic.code}`} className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity" />
         <Link
           to={`/backlog?item=${epic.id}`}
           onClick={e => e.stopPropagation()}

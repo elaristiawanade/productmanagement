@@ -1,5 +1,6 @@
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { saveReturnTo } from '../utils/returnTo';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 const PUBLIC_PATHS = ['/login', '/report-bug'];
@@ -18,6 +19,7 @@ client.interceptors.response.use(
     if (err.response?.status === 401 && !PUBLIC_PATHS.includes(window.location.pathname)) {
       localStorage.removeItem('pt_token');
       localStorage.removeItem('pt_user');
+      saveReturnTo(window.location.pathname + window.location.search);   // come back here after logging in again
       window.location.href = '/login';
     }
     // `silent: true` in the request config (background lookups such as the Ctrl K palette) skips the toast
