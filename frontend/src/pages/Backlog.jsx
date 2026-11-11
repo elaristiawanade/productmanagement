@@ -17,6 +17,7 @@ import AssigneeStack from '../components/AssigneeStack';
 import AuthorLine from '../components/AuthorLine';
 import { renderWithLinks } from '../utils/linkify';
 import { useDeepLink } from '../utils/deepLink';
+import CopyLinkButton from '../components/CopyLinkButton';
 import { toastCreated } from '../utils/createdToast';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -380,13 +381,16 @@ function ChildrenSection({ item, onOpenItem }) {
   );
 }
 
-function ItemForm({ item, defaults, products, users, sprints, features, epics, onSave, onClose, onOpenItem }) {
+// readOnly: a user without backlog edit permission who opened an item through a shared link — fields are
+// disabled and the save button is hidden; comments, children and attachments' viewing still work.
+function ItemForm({ item, defaults, products, users, sprints, features, epics, onSave, onClose, onOpenItem, readOnly = false }) {
   const [form, setForm] = useState({
     product_id: item?.product_id || '',
     code: item?.code || '',
     title: item?.title || '',
     type: item?.type || 'story',
-    feature_id: item?.feature_id || '',
+    // Impacted Features (roadmap rows); legacy single feature_id is the fallback for an item without the new list
+    feature_ids: item?.features?.length ? item.features.map(f => f.id) : (item?.feature_id ? [item.feature_id] : []),
     parent_id: item?.parent_id || '',
     priority: item?.priority || 'medium',
     story_points: item?.story_points || 0,
@@ -467,6 +471,8 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
       payload.assignee_id = payload.assignee_ids[0] || '';
       payload.additional_assignee_ids = payload.assignee_ids.slice(1);
       delete payload.assignee_ids;
+      // feature_ids is the source of truth; the backend stores the first one in the legacy feature_id column
+      payload.feature_ids = (payload.feature_ids || []).map(Number);
       if (payload.type === 'epic') payload.parent_id = null;
       if (payload.type === 'independent') { payload.sprint_id = null; payload.parent_id = null; }
       if (item?.id) {
@@ -486,10 +492,12 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
 
   return (
     <form onSubmit={save} className="grid grid-cols-2 gap-4">
+      {/* readOnly disables every field natively; attachments/children/activity stay outside so they remain usable */}
+      <fieldset disabled={readOnly} className="col-span-2 grid grid-cols-2 gap-4 border-0 p-0 m-0 min-w-0">
       {item?.id && <AuthorLine name={item.created_by_name} date={item.created_at} />}
       <F label="Produk" required>
         <select className="select" value={form.product_id}
-          onChange={e => setForm(f => ({ ...f, product_id: e.target.value, sprint_id: '', feature_id: '', parent_id: '' }))}
+          onChange={e => setForm(f => ({ ...f, product_id: e.target.value, sprint_id: '', feature_ids: [], parent_id: '' }))}
           required>
           <option value="">Pilih produk</option>
           {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -631,11 +639,24 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
           </div>
         </F>
       )}
-      <F label="Feature">
-        <select className="select" value={form.feature_id} onChange={e => setForm(f => ({ ...f, feature_id: e.target.value }))}>
-          <option value="">—</option>
-          {filteredFeatures.map(f => <option key={f.id} value={f.id}>{f.feature_name}</option>)}
-        </select>
+      <F label="Impacted Features">
+        <SearchableMultiSelect label="feature"
+          options={filteredFeatures.map(f => ({ v: f.id, l: f.feature_name }))}
+          selected={form.feature_ids}
+          searchPlaceholder="Cari feature..."
+          emptyLabel="Pilih feature"
+          emptyMessage={form.product_id ? 'Belum ada feature' : 'Pilih produk dulu'}
+          disabled={!form.product_id}
+          onChange={vals => setForm(f => ({ ...f, feature_ids: vals }))} />
+        {form.feature_ids.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {form.feature_ids.map(id => (
+              <span key={id} className="text-[11px] px-1.5 leading-[18px] rounded bg-indigo-50 text-indigo-700 border border-indigo-100">
+                {features.find(f => f.id === id)?.feature_name ?? `#${id}`}
+              </span>
+            ))}
+          </div>
+        )}
         {form.product_id && filteredFeatures.length === 0 && (
           <p className="text-xs text-slate-400 mt-1">Belum ada feature. Tambahkan di <strong>Products → Roadmap</strong>.</p>
         )}
@@ -670,6 +691,8 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
         </F>
       </div>
 
+      </fieldset>
+
       {/* Attachments — optional; for a new item files are queued and uploaded right after it is created */}
       <AttachmentSection ref={attachRef} basePath="/backlog" deletePath="/attachments" entityId={item?.id} noun="item" />
 
@@ -688,10 +711,12 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
       )}
 
       <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-slate-100">
-        <button type="button" className="btn-secondary" onClick={onClose}>Batal</button>
-        <button type="submit" className="btn-primary" disabled={saving}>
-          {saving ? 'Menyimpan...' : (item?.id ? 'Perbarui' : 'Tambah Item')}
-        </button>
+        <button type="button" className="btn-secondary" onClick={onClose}>{readOnly ? 'Tutup' : 'Batal'}</button>
+        {!readOnly && (
+          <button type="submit" className="btn-primary" disabled={saving}>
+            {saving ? 'Menyimpan...' : (item?.id ? 'Perbarui' : 'Tambah Item')}
+          </button>
+        )}
       </div>
     </form>
   );
@@ -864,6 +889,7 @@ export default function Backlog() {
 
   const rowActions = (item) => (
     <div className="flex items-center gap-0.5 justify-end md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+      <CopyLinkButton path={`/backlog?item=${item.id}`} label={`Salin link ${item.code}`} />
       {canEdit && (
         <button className="w-7 h-7 grid place-items-center rounded-md text-slate-500 hover:bg-slate-200/70 hover:text-slate-800"
           title={`Edit ${item.code}`} onClick={e => { stop(e); setModal({ open: true, item, defaults: null }); }}>
@@ -894,8 +920,15 @@ export default function Backlog() {
               <Link2 className="w-2.5 h-2.5" />{item.parent_code}
             </span>
           )}
-          {(item.feature_name || item.epic_name) && (
-            <span className="text-xs text-slate-400 truncate min-w-0">{item.feature_name || item.epic_name}</span>
+          {item.features?.length > 0 ? (
+            <span className="flex items-center gap-1 min-w-0 overflow-hidden" title={`Impacted Features: ${item.features.map(f => f.name).join(', ')}`}>
+              <span className="min-w-0 max-w-[160px] truncate text-[11px] px-1.5 leading-[18px] rounded bg-slate-100 text-slate-600">{item.features[0].name}</span>
+              {item.features.length > 1 && (
+                <span className="shrink-0 text-[11px] px-1.5 leading-[18px] rounded bg-slate-100 text-slate-500 font-medium">+{item.features.length - 1}</span>
+              )}
+            </span>
+          ) : item.epic_name && (
+            <span className="text-xs text-slate-400 truncate min-w-0">{item.epic_name}</span>
           )}
         </div>
       </td>
@@ -1057,7 +1090,7 @@ export default function Backlog() {
                 <th className="text-right font-normal px-3 py-2 w-12">Pts</th>
                 <th className="text-left font-normal px-3 py-2 w-[84px]">Produk</th>
                 <th className="text-left font-normal px-3 py-2 w-40">Sprint</th>
-                <th className="w-[72px]"><span className="sr-only">Aksi</span></th>
+                <th className="w-[104px]"><span className="sr-only">Aksi</span></th>
               </tr>
             </thead>
             <tbody>
@@ -1108,12 +1141,13 @@ export default function Backlog() {
                 </div>
                 {list.map(item => (
                   <div key={item.id} onClick={() => openItem(item)}
-                    className={`bg-white border border-slate-200 rounded-[10px] px-3 py-2.5 flex flex-col gap-2 text-left hover:border-slate-300 hover:shadow-sm transition ${canEdit ? 'cursor-pointer' : ''}`}>
+                    className={`group bg-white border border-slate-200 rounded-[10px] px-3 py-2.5 flex flex-col gap-2 text-left hover:border-slate-300 hover:shadow-sm transition ${canEdit ? 'cursor-pointer' : ''}`}>
                     <div className="flex items-center gap-1.5 min-w-0">
                       <StatusMenuButton variant="icon" status={item.status} canChange={canEdit} onChange={st => quickStatus(item.id, st)} />
                       <span className="font-mono text-[11.5px] text-slate-400">{item.code}</span>
                       <TypeTag type={item.type} />
                       <span className="ml-auto"><ProductTag item={item} /></span>
+                      <CopyLinkButton path={`/backlog?item=${item.id}`} label={`Salin link ${item.code}`} className="-my-1 -mr-1.5 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity" />
                     </div>
                     <p className={`text-[13.5px] font-medium leading-snug ${item.type === 'epic' ? 'text-purple-700' : 'text-slate-800'}`}>{item.title}</p>
                     {item.parent_code && (
@@ -1144,8 +1178,10 @@ export default function Backlog() {
       )}
 
       <Modal open={modal.open} onClose={closeModal}
-        title={modal.item ? `Edit Item — ${modal.item.code}` : 'Tambah Backlog Item'} size="lg">
+        title={modal.item ? `${canEdit ? 'Edit' : 'Detail'} Item — ${modal.item.code}` : 'Tambah Backlog Item'} size="lg"
+        shareLink={modal.item ? `/backlog?item=${modal.item.id}` : undefined}>
         <ItemForm
+          readOnly={!!modal.item && !canEdit}
           item={modal.item} defaults={modal.defaults} products={products} users={users}
           sprints={sprints} features={features} epics={epics}
           onSave={() => { closeModal(); load(); }}
