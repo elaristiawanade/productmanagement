@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Pencil, Trash2, AlertCircle, Link2, Paperclip, Upload, X, ImageIcon, MessageSquare, Send, FileDown, ChevronDown, Check, FileText, FileSpreadsheet, Presentation, Archive, File as FileIcon, ExternalLink, List, Columns3, Layers, Zap } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, AlertCircle, Link2, X, MessageSquare, Send, FileDown, ChevronDown, Check, List, Columns3, Layers, Zap } from 'lucide-react';
 import client from '../api/client';
 import PresenceDot from '../components/PresenceDot';
 import Modal from '../components/Modal';
@@ -10,6 +10,7 @@ import StatusMenu from '../components/StatusMenu';
 
 const StatusMenuButton = (props) => <StatusMenu statuses={STATUSES} {...props} />;
 import LinkInsertButton from '../components/LinkInsertButton';
+import AttachmentSection from '../components/AttachmentSection';
 import SearchableSelect from '../components/SearchableSelect';
 import SearchableMultiSelect from '../components/SearchableMultiSelect';
 import AssigneeStack from '../components/AssigneeStack';
@@ -40,49 +41,6 @@ function TypeTag({ type }) {
   return <span className={`shrink-0 text-[11px] font-medium leading-5 px-1.5 rounded ${TYPE_TAG[type] || TYPE_TAG.task}`}>{type}</span>;
 }
 
-
-// ─── Backlog attachments ───────────────────────────────────────────────────
-const ATTACHMENT_ACCEPT = 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.csv,.txt';
-const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-const ALLOWED_ATTACHMENT_EXTENSIONS = [
-  ...IMAGE_EXTENSIONS, '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.zip', '.csv', '.txt',
-];
-
-function fileExt(name = '') {
-  const i = name.lastIndexOf('.');
-  return i >= 0 ? name.slice(i).toLowerCase() : '';
-}
-
-function isImageAttachment(att) {
-  if (att.mime_type?.startsWith('image/')) return true;
-  return IMAGE_EXTENSIONS.includes(fileExt(att.original_name || att.filename));
-}
-
-// Formats we can render inline without a document-viewer library: PDF has a native
-// browser renderer, TXT/CSV are just fetched as text. Everything else (docx/xlsx/zip/…)
-// falls back to opening/downloading in a new tab.
-function previewKindOf(att) {
-  const ext = fileExt(att.original_name || att.filename);
-  if (ext === '.pdf') return 'pdf';
-  if (ext === '.txt') return 'txt';
-  if (ext === '.csv') return 'csv';
-  return null;
-}
-
-function parseCsvSimple(text) {
-  return text.replace(/\r\n/g, '\n').replace(/﻿/, '').split('\n')
-    .filter(line => line.length > 0)
-    .map(line => line.split(','));
-}
-
-function AttachmentIcon({ att, className }) {
-  const ext = fileExt(att.original_name || att.filename);
-  if (['.xls', '.xlsx', '.csv'].includes(ext)) return <FileSpreadsheet className={className} />;
-  if (['.ppt', '.pptx'].includes(ext)) return <Presentation className={className} />;
-  if (ext === '.zip') return <Archive className={className} />;
-  if (['.pdf', '.doc', '.docx', '.txt'].includes(ext)) return <FileText className={className} />;
-  return <FileIcon className={className} />;
-}
 
 function F({ label, children, required }) {
   return (
@@ -444,32 +402,8 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
   const [stories,      setStories]      = useState([]);
   const [epicsBacklog, setEpicsBacklog] = useState([]);
   const [saving,      setSaving]      = useState(false);
-  const [attachments, setAttachments] = useState([]);
-  const [uploading,   setUploading]   = useState(false);
-  const [previewImage, setPreviewImage] = useState(null);
-  const [previewDoc,   setPreviewDoc]   = useState(null); // { att, kind: 'pdf'|'txt'|'csv' }
-  const [docContent,   setDocContent]   = useState('');
-  const [docLoading,   setDocLoading]   = useState(false);
-  const fileInputRef = useRef(null);
-  const notesRef     = useRef(null);
-
-  useEffect(() => {
-    if (!previewDoc || previewDoc.kind === 'pdf') { setDocContent(''); return; }
-    setDocLoading(true);
-    fetch(`/api/attachments/file/${previewDoc.att.filename}`)
-      .then(r => r.text())
-      .then(setDocContent)
-      .catch(() => setDocContent('Gagal memuat isi file.'))
-      .finally(() => setDocLoading(false));
-  }, [previewDoc]);
-
-  useEffect(() => {
-    if (!previewImage && !previewDoc) return;
-    // Capture + stopPropagation: Esc closes only the preview, not the item modal underneath
-    const handler = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setPreviewImage(null); setPreviewDoc(null); } };
-    document.addEventListener('keydown', handler, true);
-    return () => document.removeEventListener('keydown', handler, true);
-  }, [previewImage, previewDoc]);
+  const attachRef = useRef(null); // shared AttachmentSection: queues files for a new item, uploads them after create
+  const notesRef  = useRef(null);
 
   const insertNotesLink = (snippet) => {
     const el  = notesRef.current;
@@ -506,48 +440,6 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
     }
   }, [form.type, form.product_id]);
 
-  const loadAttachments = useCallback(async () => {
-    if (!item?.id) return;
-    try {
-      const res = await client.get(`/backlog/${item.id}/attachments`);
-      setAttachments(res.data || []);
-    } catch { setAttachments([]); }
-  }, [item?.id]);
-
-  useEffect(() => { loadAttachments(); }, [loadAttachments]);
-
-  const handleUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(fileExt(file.name))) {
-      toast.error('Tipe file tidak didukung. Gunakan gambar, PDF, Word, Excel, PowerPoint, ZIP, CSV, atau TXT');
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) { toast.error('Ukuran file maks 10MB'); return; }
-    setUploading(true);
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      await client.post(`/backlog/${item.id}/attachments`, fd);
-      toast.success('File berhasil diunggah');
-      loadAttachments();
-    } catch (err) {
-      toast.error(err?.response?.data?.error || 'Gagal mengunggah file');
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  const deleteAttachment = async (id) => {
-    if (!confirm('Hapus lampiran ini?')) return;
-    try {
-      await client.delete(`/attachments/${id}`);
-      toast.success('Lampiran dihapus');
-      loadAttachments();
-    } catch { toast.error('Gagal menghapus'); }
-  };
-
   const handleTypeChange = (e) => {
     const t = e.target.value;
     setForm(f => ({
@@ -582,6 +474,7 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
         toast.success('Item diperbarui');
       } else {
         const res = await client.post('/backlog', payload);
+        await attachRef.current?.uploadPending(res.data.id);
         toastCreated('Item', res.data?.code, 'ditambahkan');
       }
       onSave();
@@ -777,83 +670,8 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
         </F>
       </div>
 
-      {/* Attachments — only when editing existing item */}
-      {item?.id && (
-        <div className="col-span-2">
-          <div className="border-t border-slate-100 pt-4">
-            <div className="flex items-center justify-between mb-3">
-              <label className="label mb-0 flex items-center gap-1.5">
-                <Paperclip className="w-3.5 h-3.5 text-slate-400" />
-                Lampiran
-                {attachments.length > 0 && (
-                  <span className="text-xs font-normal text-slate-400 ml-1">({attachments.length})</span>
-                )}
-              </label>
-              <button type="button"
-                className="btn-secondary text-xs py-1 px-2 flex items-center gap-1.5"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}>
-                {uploading
-                  ? <span className="w-3.5 h-3.5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-                  : <Upload className="w-3.5 h-3.5" />}
-                {uploading ? 'Mengunggah...' : 'Unggah File'}
-              </button>
-              <input ref={fileInputRef} type="file" accept={ATTACHMENT_ACCEPT} className="hidden" onChange={handleUpload} />
-            </div>
-            {attachments.length === 0 ? (
-              <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center cursor-pointer hover:border-slate-400 hover:bg-slate-50 transition-colors"
-                onClick={() => fileInputRef.current?.click()}>
-                <ImageIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-xs text-slate-400">Klik untuk unggah file</p>
-                <p className="text-xs text-slate-300 mt-0.5">Gambar, PDF, Word, Excel, PowerPoint, ZIP, CSV, TXT • Maks 10MB</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-3 gap-2">
-                {attachments.map(att => {
-                  const isImage = isImageAttachment(att);
-                  const docKind = !isImage ? previewKindOf(att) : null;
-                  const openAttachment = () => {
-                    if (isImage) { setPreviewImage(att); return; }
-                    if (docKind) { setPreviewDoc({ att, kind: docKind }); return; }
-                    window.open(`/api/attachments/file/${att.filename}`, '_blank');
-                  };
-                  return (
-                    <div key={att.id} className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-50 aspect-video cursor-pointer"
-                      onClick={openAttachment}>
-                      {isImage ? (
-                        <img src={`/api/attachments/file/${att.filename}`} alt={att.original_name}
-                          className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 px-2">
-                          <AttachmentIcon att={att} className="w-7 h-7 text-slate-400" />
-                          <p className="text-[11px] text-slate-500 text-center truncate w-full">{att.original_name}</p>
-                        </div>
-                      )}
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors pointer-events-none">
-                        <button type="button" onClick={(e) => { e.stopPropagation(); deleteAttachment(att.id); }}
-                          title="Hapus lampiran" aria-label="Hapus lampiran"
-                          className="pointer-events-auto absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      {isImage && (
-                        <p className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs px-1.5 py-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                          {att.original_name}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-                <button type="button" onClick={() => fileInputRef.current?.click()}
-                  className="aspect-video rounded-lg border-2 border-dashed border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-colors flex flex-col items-center justify-center gap-1">
-                  <Upload className="w-4 h-4 text-slate-400" />
-                  <span className="text-xs text-slate-400">Tambah</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Attachments — optional; for a new item files are queued and uploaded right after it is created */}
+      <AttachmentSection ref={attachRef} basePath="/backlog" deletePath="/attachments" entityId={item?.id} noun="item" />
 
       {/* Children (Stories for Epic, Tasks+Bugs for Story) — only when editing */}
       {item?.id && (item.type === 'epic' || item.type === 'story') && (
@@ -875,67 +693,6 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
           {saving ? 'Menyimpan...' : (item?.id ? 'Perbarui' : 'Tambah Item')}
         </button>
       </div>
-
-      {previewImage && (
-        <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6"
-          onClick={() => setPreviewImage(null)}>
-          <button type="button" onClick={() => setPreviewImage(null)}
-            className="absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2">
-            <X className="w-5 h-5" />
-          </button>
-          <img src={`/api/attachments/file/${previewImage.filename}`} alt={previewImage.original_name}
-            className="max-w-full max-h-full rounded-lg shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
-        </div>
-      )}
-
-      {previewDoc && (
-        <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6"
-          onClick={() => setPreviewDoc(null)}>
-          <div className="w-full h-full max-w-4xl bg-white rounded-lg shadow-2xl flex flex-col overflow-hidden"
-            onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 shrink-0">
-              <p className="text-sm font-medium text-slate-700 truncate pr-2">{previewDoc.att.original_name}</p>
-              <div className="flex items-center gap-1 shrink-0">
-                <a href={`/api/attachments/file/${previewDoc.att.filename}`} target="_blank" rel="noreferrer"
-                  className="btn-ghost btn-sm rounded-lg p-1.5" title="Buka di tab baru">
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-                <button type="button" onClick={() => setPreviewDoc(null)} className="btn-ghost btn-sm rounded-lg p-1.5">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 overflow-auto bg-slate-50">
-              {previewDoc.kind === 'pdf' && (
-                <iframe src={`/api/attachments/file/${previewDoc.att.filename}`} title={previewDoc.att.original_name}
-                  className="w-full h-full border-0" />
-              )}
-              {previewDoc.kind === 'txt' && (
-                docLoading
-                  ? <p className="p-4 text-sm text-slate-400">Memuat...</p>
-                  : <pre className="p-4 text-xs text-slate-700 whitespace-pre-wrap break-words">{docContent}</pre>
-              )}
-              {previewDoc.kind === 'csv' && (
-                docLoading
-                  ? <p className="p-4 text-sm text-slate-400">Memuat...</p>
-                  : (
-                    <table className="text-xs border-collapse">
-                      <tbody>
-                        {parseCsvSimple(docContent).map((row, i) => (
-                          <tr key={i} className={i === 0 ? 'bg-slate-100 font-semibold' : 'even:bg-white odd:bg-slate-50'}>
-                            {row.map((cell, j) => (
-                              <td key={j} className="border border-slate-200 px-2 py-1 whitespace-nowrap">{cell}</td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </form>
   );
 }

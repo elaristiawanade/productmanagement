@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import client from '../api/client';
 import toast from 'react-hot-toast';
+import { usePasteFiles } from '../utils/pasteFiles';
 
 // Attachment block for the Bugs Incident and QA test case forms. Same file types, size limit and
 // previews as the Backlog item form (images, PDF, Word, Excel, PowerPoint, ZIP, CSV, TXT, max 10MB;
@@ -14,6 +15,9 @@ import toast from 'react-hot-toast';
 // While the record does not exist yet (`entityId` empty) files are queued locally and uploaded by the
 // parent calling `ref.current.uploadPending(newId)` right after the record is created; once it exists
 // files upload immediately.
+//
+// Ctrl+V: while the form is open, an image/file on the clipboard (e.g. a screenshot) is attached exactly like a
+// picked file — same type/size checks, same queue-or-upload behaviour (see utils/pasteFiles.js).
 
 const ACCEPT = 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.csv,.txt';
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
@@ -114,10 +118,9 @@ const AttachmentSection = forwardRef(function AttachmentSection({ basePath, dele
     },
   }), [basePath]);
 
-  const handleUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    if (!file) return;
+  // Validates one file, then queues it (record not saved yet) or uploads it right away.
+  // `fromPaste` only changes the feedback: a pasted file has no file-picker dialog to confirm it was taken.
+  const addFile = async (file, fromPaste = false) => {
     if (!ALLOWED_EXTENSIONS.includes(fileExt(file.name))) {
       toast.error('Tipe file tidak didukung. Gunakan gambar, PDF, Word, Excel, PowerPoint, ZIP, CSV, atau TXT');
       return;
@@ -127,6 +130,7 @@ const AttachmentSection = forwardRef(function AttachmentSection({ basePath, dele
     // Record not created yet: queue the file, upload it once the record is saved.
     if (!entityId) {
       setPending(pf => [...pf, { file, url: URL.createObjectURL(file), name: file.name }]);
+      if (fromPaste) toast.success(`${file.name} dilampirkan, diunggah setelah ${noun} disimpan`);
       return;
     }
 
@@ -135,7 +139,7 @@ const AttachmentSection = forwardRef(function AttachmentSection({ basePath, dele
       const fd = new FormData();
       fd.append('file', file);
       await client.post(`${basePath}/${entityId}/attachments`, fd);
-      toast.success('File berhasil diunggah');
+      toast.success(fromPaste ? `${file.name} dilampirkan` : 'File berhasil diunggah');
       loadAttachments();
     } catch (err) {
       toast.error(err?.response?.data?.error || 'Gagal mengunggah file');
@@ -143,6 +147,15 @@ const AttachmentSection = forwardRef(function AttachmentSection({ basePath, dele
       setUploading(false);
     }
   };
+
+  const handleUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (file) await addFile(file);
+  };
+
+  // Ctrl+V anywhere in the open form. Paused while a preview is open so a paste can't attach behind it.
+  usePasteFiles(async (files) => { for (const f of files) await addFile(f, true); }, !preview);
 
   const removePending = (idx) => {
     setPending(pf => {
@@ -202,7 +215,7 @@ const AttachmentSection = forwardRef(function AttachmentSection({ basePath, dele
           <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center cursor-pointer hover:border-slate-400 hover:bg-slate-50 transition-colors"
             onClick={() => fileInputRef.current?.click()}>
             <ImageIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-            <p className="text-xs text-slate-400">Klik untuk unggah file</p>
+            <p className="text-xs text-slate-400">Klik untuk unggah file, atau tempel gambar dengan Ctrl+V</p>
             <p className="text-xs text-slate-300 mt-0.5">Gambar, PDF, Word, Excel, PowerPoint, ZIP, CSV, TXT • Maks 10MB</p>
           </div>
         ) : (

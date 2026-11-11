@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Bug as BugIcon, Upload, Image as ImageIcon, X, CheckCircle2 } from 'lucide-react';
 import client from '../api/client';
 import toast from 'react-hot-toast';
+import { usePasteFiles } from '../utils/pasteFiles';
 
 export default function ReportBug() {
   const [products, setProducts] = useState([]);
@@ -28,14 +29,22 @@ export default function ReportBug() {
     return () => document.removeEventListener('keydown', handler);
   }, [previewImage]);
 
-  const handleUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Public form: images only (the public endpoint rejects anything else). Shared by the picker and Ctrl+V.
+  const addImage = (file, fromPaste = false) => {
     if (!file.type.startsWith('image/')) { toast.error('Hanya file gambar yang diizinkan'); return; }
     if (file.size > 10 * 1024 * 1024) { toast.error('Ukuran file maks 10MB'); return; }
-    if (fileInputRef.current) fileInputRef.current.value = '';
     setPendingFiles(pf => [...pf, { file, url: URL.createObjectURL(file), name: file.name }]);
+    if (fromPaste) toast.success(`${file.name} dilampirkan`);
   };
+
+  const handleUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (file) addImage(file);
+  };
+
+  // Ctrl+V a screenshot anywhere on the form (not while the success screen or the image preview is showing)
+  usePasteFiles((files) => files.forEach(f => addImage(f, true)), !submittedCode && !previewImage);
 
   const removePendingFile = (idx) => {
     setPendingFiles(pf => {
@@ -195,7 +204,7 @@ export default function ReportBug() {
                 <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center cursor-pointer hover:border-slate-400 hover:bg-slate-50 transition-colors"
                   onClick={() => fileInputRef.current?.click()}>
                   <ImageIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-xs text-slate-400">Klik untuk unggah gambar</p>
+                  <p className="text-xs text-slate-400">Klik untuk unggah gambar, atau tempel dengan Ctrl+V</p>
                   <p className="text-xs text-slate-300 mt-0.5">JPG, PNG, GIF, WEBP • Maks 10MB</p>
                 </div>
               ) : (
