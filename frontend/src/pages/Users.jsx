@@ -206,6 +206,10 @@ const MODULE_CATALOG = [
   { module: 'c_level', label: 'C-Level Dashboard', actions: [
     { key: 'access', label: 'Akses' },
   ]},
+  { module: 'clients', label: 'Client Management', actions: [
+    { key: 'access', label: 'Akses' }, { key: 'create', label: 'Buat' },
+    { key: 'update', label: 'Ubah & Catatan' }, { key: 'delete', label: 'Hapus' },
+  ]},
   { module: 'standup', label: 'Standup', actions: [
     { key: 'edit_any', label: 'Edit Milik Orang Lain' }, { key: 'import', label: 'Import Data' },
   ]},

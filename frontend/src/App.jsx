@@ -17,6 +17,8 @@ import MyTask     from './pages/MyTask';
 import Profile    from './pages/Profile';
 import CLevel     from './pages/CLevel';
 import NotificationSettings from './pages/NotificationSettings';
+import Clients    from './pages/Clients';
+import ClientSettings from './pages/ClientSettings';
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -62,10 +64,12 @@ function AppRoutes() {
         <Route path="standup"       element={<Standup />} />
         <Route path="epic-board"    element={<EpicBoard />} />
         <Route path="my-tasks"      element={<MyTask />} />
+        <Route path="clients"      element={<RequirePermission module="clients" action="access"><Clients /></RequirePermission>} />
         <Route path="c-level"      element={<RequirePermission module="c_level" action="access"><CLevel /></RequirePermission>} />
         <Route path="import/jira"  element={<RequirePermission module="import" action="run"><JiraImport /></RequirePermission>} />
         <Route path="profile"      element={<Profile />} />
         <Route path="settings/notifications" element={<RequirePermission module="settings" action="update"><NotificationSettings /></RequirePermission>} />
+        <Route path="settings/clients" element={<RequirePermission module="settings" action="update"><ClientSettings /></RequirePermission>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
