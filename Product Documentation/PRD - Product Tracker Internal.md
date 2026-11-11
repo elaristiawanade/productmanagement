@@ -3,7 +3,7 @@
 
 | | |
 |---|---|
-| **Versi** | 3.13 |
+| **Versi** | 3.14 |
 | **Tanggal** | 3 November 2026 |
 | **Status** | Live — Production |
 | **Pemilik** | Tim Internal |
@@ -170,7 +170,7 @@ Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus 
 - Kelola epics per produk
 - Kelola features per produk
 - Assign member ke produk (menentukan scope akses Developer/QA)
-- Roadmap produk (timeline feature)
+- Roadmap produk (timeline feature) — status item: `planned`, `research`, `on_progress`, `testing` (sedang tahap testing), `active`, `offline`
 
 ---
 
@@ -872,3 +872,4 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | 2 Nov 2026 | 3.11 | Lampiran: (1) Bugs Incident (3.9) — lampiran tidak lagi hanya gambar; kini sama seperti Backlog (gambar, PDF, Word, Excel, PowerPoint, ZIP, CSV, TXT, max 10MB) dengan preview PDF/TXT/CSV. (2) QA Module (3.8) — test case kini punya lampiran (sebelumnya tidak ada), tabel `qa_attachments`. Keduanya memakai komponen UI bersama `AttachmentSection`. (3) Perbaikan: `DELETE /api/attachments/:id` kini khusus Backlog dan bug/QA punya rute hapus sendiri (`/api/bugs/attachments/:id`, `/api/qa/attachments/:id`) — sebelumnya endpoint mencari id di tabel backlog dulu lalu tabel bug, sehingga menghapus lampiran bug bisa salah menghapus lampiran backlog yang kebetulan berid sama. Form Lapor Bug Publik (3.15) tetap hanya menerima gambar. `migration_v25.sql` |
 | 3 Nov 2026 | 3.12 | Backlog (3.2): **status Epic dan Story otomatis mengikuti anaknya, maju saja.** Cukup 1 anak yang pindah ke `todo`/`in_progress`/`in_review` dan induknya ikut ke status itu (walau anak lain berbeda); `done` hanya bila semua anak `done` (Epic menghitung semua Story/Task/Bug di bawahnya, Story menghitung Task/Bug langsungnya, dari bawah ke atas sehingga satu aksi `done` bisa menyelesaikan Story lalu Epic). Tidak pernah mundur otomatis, induk `done` tetap `done`, `blocked` tidak memengaruhi dan tidak ditimpa, perubahan manual tetap boleh. Berlaku di `POST`/`PUT`/`PATCH /api/backlog/:id/status`; dicatat di log aktivitas induk, tanpa email. Batasan yang diketahui: hitung ulang hanya dipicu perubahan status atau pembuatan anak (bukan ganti parent, hapus anak, atau Import Jira); anak yang langsung `done` dari `backlog` belum menaikkan induk selama anak lain belum `done`; halaman My Tasks baru menampilkan status induk yang berubah setelah refresh. Backend saja, tanpa migrasi database, dan data lama tidak diperbaiki otomatis |
 | 3 Nov 2026 | 3.13 | Backlog (3.2), Epic Board, QA (3.8), Bugs Incident (3.9): **toast sukses saat membuat item menampilkan kode barunya** (`Item HRS-098 ditambahkan`, `Bug HRS-053 dibuat`, `Test case TC-045 dibuat`, `Epic HRS-104 dibuat`), kode ditebalkan dan toast tampil 6 detik supaya mudah dibaca/disalin dan dicari di tabel. Epic Board yang sebelumnya tidak punya toast sukses kini ikut. Toast edit/error/import tidak berubah. Frontend saja (komponen bersama `utils/createdToast.jsx`), tanpa perubahan backend atau database |
+| 11 Nov 2026 | 3.14 | Products (3.6) → tab Roadmap: tambah status **Testing** (badge amber) untuk menandai fitur yang sedang tahap testing, di antara On Progress dan Active. Muncul di badge tabel, filter status, kartu ringkasan (kini 6 kartu), dan form Tambah/Edit Item Roadmap; urutan status kini mengikuti alur hidup fitur: Planned → Research → On Progress → Testing → Active → Offline. Frontend saja (`Products.jsx`); kolom `product_roadmap.status` berupa `VARCHAR` tanpa constraint sehingga tidak ada migrasi dan tidak ada perubahan backend. Data lama tidak berubah |

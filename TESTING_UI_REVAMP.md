@@ -250,3 +250,12 @@ Fitur baru setelah revamp (PRD 3.2, v3.13). Frontend saja (`utils/createdToast.j
 - 🧑 Cek tampilan toast di tema gelap dan layar sempit; buat item lewat tombol "+" di header grup Backlog dan lewat Ctrl K ("… baru")
 - ⚠️ Toast edit ("Item diperbarui", dst.), toast error, dan hasil Import CSV/Jira (hanya jumlah) sengaja tidak diubah
 - ⚠️ Di form Bug dan Test Case, toast baru muncul setelah lampiran selesai diunggah; bila unggah lampiran gagal, toast sukses tidak tampil walau item sudah tersimpan (perilaku lama, tidak diubah)
+
+## 26. Status Roadmap "Testing"
+Fitur baru (PRD 3.6, v3.14). Frontend saja (`Products.jsx`), tanpa migrasi dan tanpa perubahan backend.
+- 🧑 Products → Roadmap: dropdown filter status memuat Planned, Research, On Progress, Testing, Active, Offline (urutan ini); ada 6 kartu ringkasan dalam satu baris di layar lebar
+- 🧑 Edit satu item → ubah status ke Testing → simpan; badge amber "Testing" tampil di tabel dan kartu Testing bertambah 1
+- 🧑 Klik kartu Testing → tabel terfilter ke item Testing; klik lagi → filter dilepas
+- 🧑 Ctrl K: cari item roadmap berstatus Testing → hasil tampil dengan ikon status Testing dan membuka form edit
+- 🧑 Layar sempit: 6 kartu tersusun 2 kolom tanpa terpotong
+- ⚠️ Item roadmap yang dibuat otomatis dari Feature ("Tampilkan di Roadmap") tetap berstatus `planned`; status Testing diubah manual lewat tab Roadmap
