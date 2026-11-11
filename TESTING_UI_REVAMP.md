@@ -293,3 +293,15 @@ Fitur baru (PRD 3.17, v3.16). Butuh `migration_v26.sql`. Diuji otomatis di stack
 - ⚠️ Revenue dihitung per kontrak dan **tidak dijumlahkan** di halaman (menjumlah client Approaching/Declined menyesatkan)
 - ⚠️ Belum ada peringatan "kontrak hampir habis" dan belum ada Import Excel client (tidak diminta; bisa jadi tahap berikutnya)
 - ⚠️ `docker-compose.yml` kini memasang v26 di initdb, jadi `docker compose up` berikutnya membuat ulang `pt_postgres` (data volume aman, hanya restart singkat)
+
+## 29. Impacted Features (multi-feature) & Share link
+
+- ✅ API: `PUT /api/backlog/{id}` `{feature_ids:[..]}` menyimpan banyak feature, `feature_id` lama = feature pertama; feature produk lain `400`; `feature_ids:[]` mengosongkan; `feature_id` tunggal (klien lama) tetap jalan; tanpa kedua field → tidak berubah; `POST` dengan `feature_ids` juga bisa; perubahan tercatat di log aktivitas (`Impacted Features: "A" → "A, B"`)
+- ✅ DB: `migration_v27.sql` — 30 item lama ter-backfill ke `backlog_item_features`
+- ✅ UI: field **Impacted Features** (dropdown checklist + pencarian + chip di bawahnya); tabel Backlog menampilkan feature pertama + badge `+N` (tooltip = daftar lengkap)
+- ✅ Share link (otomatis, Chrome headless, 12 skenario): pengunjung belum login → `/login` → setelah login kembali ke `/backlog?item=ID` dan modal item terbuka; token kedaluwarsa → login ulang → kembali ke tujuan; tombol **Salin link** menyalin `http://host/backlog?item=ID` dan memunculkan toast, juga saat `navigator.clipboard` tidak ada (server http biasa); role tanpa izin edit membuka modal **Detail Item** baca-saja (field nonaktif, tanpa tombol Perbarui); path balik berbahaya (`//evil.example.com`) diabaikan
+- 🧑 Jalankan `migration_v27.sql` di database yang sudah ada (backup dulu) **sebelum** backend baru naik, kalau tidak list/create/edit Backlog `500`
+- 🧑 Cek tombol Salin link di: header modal (Backlog, Bugs, QA, Sprint, Produk/Epic/Feature/Roadmap, Client, Leader Task), baris tabel & kartu Board Backlog, kartu Kanban Sprint, header Sprint, baris Epic Board, My Task (baris & panel), panel Leader Task. Tempel link di tab baru → harus membuka record yang sama
+- 🧑 Coba di server kantor lewat `http://IP-server`: tombol Salin link harus tetap menyalin (pakai fallback, bukan Clipboard API)
+- ⚠️ Link ke record yang tidak boleh diakses role penerima: halaman terbuka tapi modal tidak (mengikuti izin modul); Backlog membuka detail baca-saja. `GET /api/backlog/{id}` tidak membatasi per produk (perilaku lama)
+- ⚠️ Modul Users (user/role/departemen) sengaja tidak diberi tombol Salin link

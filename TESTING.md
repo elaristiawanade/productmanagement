@@ -96,6 +96,10 @@ docker compose up -d --build backend frontend
 | Create item | POST | `/api/backlog` | 201 | ✅ 201 | Auto-generates code |
 | Update item (full) | PUT | `/api/backlog/{id}` | 200 | ✅ 200 | |
 | Update status (partial) | PATCH | `/api/backlog/{id}/status` | 200 | ✅ 200 | |
+| Impacted Features: set banyak | PUT | `/api/backlog/{id}` `{feature_ids:[a,b,c]}` | 200, `features` berisi 3, `feature_id` = pertama | ✅ 200 | `migration_v27.sql` wajib |
+| Impacted Features: lintas produk | PUT | `/api/backlog/{id}` `{feature_ids:[produkA, produkB]}` | 400 | ✅ 400 | "harus milik produk item ini" |
+| Impacted Features: kosong / `feature_id` lama / tanpa field | PUT | `/api/backlog/{id}` | 200: dikosongkan / satu feature / tidak berubah | ✅ 200 | kompatibel dengan klien lama |
+| Impacted Features: create | POST | `/api/backlog` `{feature_ids:[..]}` | 201, `features` terisi | ✅ 201 | |
 | Get activities | GET | `/api/backlog/{id}/activities` | 200 | ✅ 200 | |
 | Add comment | POST | `/api/backlog/{id}/comments` | 201 | ✅ 201 | |
 | Delete item | DELETE | `/api/backlog/{id}` | 200 | ✅ 200 | |
