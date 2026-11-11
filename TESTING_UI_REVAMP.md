@@ -259,3 +259,19 @@ Fitur baru (PRD 3.6, v3.14). Frontend saja (`Products.jsx`), tanpa migrasi dan t
 - 🧑 Ctrl K: cari item roadmap berstatus Testing → hasil tampil dengan ikon status Testing dan membuka form edit
 - 🧑 Layar sempit: 6 kartu tersusun 2 kolom tanpa terpotong
 - ⚠️ Item roadmap yang dibuat otomatis dari Feature ("Tampilkan di Roadmap") tetap berstatus `planned`; status Testing diubah manual lewat tab Roadmap
+
+## 27. Tempel lampiran dengan Ctrl+V
+Fitur baru (PRD 3.2, v3.15). Frontend saja. Diuji di Chrome sungguhan (headless, login admin) pada stack Docker lokal lewat event paste berisi file PNG; data uji `ZZPASTE` sudah dihapus.
+- ✅ **Lapor Bug Publik**: paste gambar → tile `screenshot-YYYYMMDD-HHMMSS.png`; nama file asli dipertahankan; paste file non-gambar ditolak dengan toast
+- ✅ **Backlog (edit item)**: paste gambar → langsung tersimpan di server (`image/png`), tile tampil, file bisa dibuka kembali
+- ✅ **Backlog (item baru)**: blok Lampiran kini ada; paste → tile antrean + petunjuk "diunggah setelah item disimpan"
+- ✅ **Bugs Incident dan QA (record baru)**: paste → tile antrean
+- ✅ Paste teks biasa, dan paste teks+gambar (mirip salinan sel Excel), **tidak** diambil alih — tetap tertempel sebagai teks
+- ✅ Respons `POST /api/backlog` memuat `id` (dipakai untuk unggah antrean); build lolos; hanya `pt_frontend` di-rebuild (`--no-deps`)
+- ✅ Diuji manual oleh pengguna: tempel screenshot sungguhan (Ctrl+V) berfungsi
+- 🧑 Screenshot sungguhan (Win+Shift+S lalu Ctrl+V) di tiap form: Backlog edit, Backlog baru, Bug, Test Case, Lapor Bug Publik
+- 🧑 Backlog baru: tempel gambar, isi form, **Tambah Item** → buka item tsb, lampiran harus ada; coba juga tanpa lampiran (tetap bisa disimpan)
+- 🧑 Copy file (Ctrl+C di Explorer, mis. PDF/XLSX) lalu Ctrl+V di form → jadi lampiran; copy sel Excel lalu Ctrl+V di kolom Catatan → tetap teks
+- 🧑 Item Backlog lama: lampiran lama tetap tampil, preview gambar/PDF/TXT/CSV dan hapus lampiran berfungsi seperti sebelumnya
+- ⚠️ Paste hanya aktif saat form berlampiran terbuka dan tidak ada preview gambar/dokumen yang sedang tampil
+- ⚠️ Tidak ada paste di kolom komentar (komentar hanya teks) dan di fitur Import CSV/Jira (bukan lampiran)
