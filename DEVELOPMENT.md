@@ -157,6 +157,7 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v23.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v24.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v25.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v26.sql"
 ```
 
 > **Penting:** `migration_v10.sql` menambahkan kolom `users.department`, yang di-query
@@ -218,6 +219,16 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 > docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v25.sql
 > ```
 > Migrasinya additive dan idempotent (`CREATE TABLE IF NOT EXISTS`); data lama tidak berubah.
+
+> **Penting juga:** `migration_v26.sql` membuat modul Client Management: tabel `client_statuses` (+5 status awal),
+> `clients`, `client_products`, `client_comments`, dan **menggabungkan** permission `clients` ke `roles.permissions`
+> (Super Admin & Manager penuh, PO `access`+`update`; role lain tidak berubah — tidak menimpa seperti v21).
+> **Jalankan SEBELUM backend baru naik** — `/api/clients` membaca tabel-tabel ini dan gagal `500` tanpa migrasinya.
+> Pada database yang sudah ada jalankan manual (**backup dulu**):
+> ```bash
+> docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v26.sql
+> ```
+> Additive dan idempotent. User harus login ulang / refresh agar menu Clients muncul (permission dibaca dari `/api/auth/me`).
 
 ---
 
@@ -282,7 +293,8 @@ product-tracker/
 │       ├── migration_v22.sql
 │       ├── migration_v23.sql
 │       ├── migration_v24.sql
-│       └── migration_v25.sql
+│       ├── migration_v25.sql
+│       └── migration_v26.sql
 ├── backend-java/          # Spring Boot API (port 4000)
 │   ├── src/
 │   ├── pom.xml

@@ -3,8 +3,8 @@
 
 | | |
 |---|---|
-| **Versi** | 3.15 |
-| **Tanggal** | 3 November 2026 |
+| **Versi** | 3.16 |
+| **Tanggal** | 11 November 2026 |
 | **Status** | Live — Production |
 | **Pemilik** | Tim Internal |
 
@@ -32,7 +32,7 @@ Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus 
 |---|---|---|
 | **Super Admin** | Akses penuh tanpa batasan | Semua modul + manajemen user + konfigurasi sistem (bypass hardcode, bukan dari matrix) |
 | **Manager** | Kepala tim / manajemen | Hampir semua modul (create/update/delete), manajemen user, import standup, kecuali Bugs Incident & C-Level |
-| **Product Owner (PO)** | Pemilik produk | Kelola backlog, sprint, feature, epics, QA (create/update), roadmap untuk produk yang di-assign |
+| **Product Owner (PO)** | Pemilik produk | Kelola backlog, sprint, feature, epics, QA (create/update), roadmap untuk produk yang di-assign; Client Management (lihat & ubah, tanpa tambah/hapus client) |
 | **Developer** | Anggota tim dev | Buat/update backlog & epic; untuk item di luar itu hanya bisa update item yang di-assign ke diri sendiri |
 | **QA Engineer** | Penguji | Kelola test case, test run, eksekusi pengujian, dan modul Bugs Incident (3.9) |
 | **SME** | Subject Matter Expert lintas fungsi | C-Level Dashboard — Leader Notes & Leader Task (3.10 C-Level) |
@@ -293,7 +293,7 @@ Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus 
 
 **Tab Roles & Permissions — Fitur:**
 - **Role dibuat bebas** — bukan daftar tetap di kode. Tombol "Tambah Role" membuka form: nama (slug, tidak bisa diubah setelah dibuat), display name, dan tabel hak akses
-- **Matrix Modul × Aksi** — satu baris per modul (Backlog, Epic, Features, Products, Roadmap, Sprint, QA, Bugs Incident, C-Level Dashboard, Standup, Import Jira, Users, Roles, Departemen, Pengaturan), tiap baris cuma menampilkan checkbox untuk aksi yang benar-benar relevan untuk modul itu (bukan grid 5 kolom seragam untuk semua modul — mis. modul Bugs Incident cuma punya 1 aksi "Akses", modul Users punya 5: Buat/Ubah/Reset Password/Nonaktifkan/Hapus)
+- **Matrix Modul × Aksi** — satu baris per modul (Backlog, Epic, Features, Products, Roadmap, Sprint, QA, Bugs Incident, C-Level Dashboard, Client Management, Standup, Import Jira, Users, Roles, Departemen, Pengaturan), tiap baris cuma menampilkan checkbox untuk aksi yang benar-benar relevan untuk modul itu (bukan grid 5 kolom seragam untuk semua modul — mis. modul Bugs Incident cuma punya 1 aksi "Akses", modul Users punya 5: Buat/Ubah/Reset Password/Nonaktifkan/Hapus)
 - Role **`super_admin`** checkbox-nya di-disable (selalu akses penuh lewat bypass hardcode, bukan dari matrix — supaya tidak ada skenario Super Admin terkunci sendiri dari sistem akibat salah klik)
 - Perubahan tersimpan langsung berefek nyata di frontend (tombol/menu muncul-hilang) **dan** backend (`403` kalau dipanggil API langsung tanpa aksi yang sesuai) — satu sumber kebenaran untuk keduanya
 - List role menampilkan badge per modul yang dapat aksi (mis. "Backlog: Buat, Ubah, Hapus")
@@ -415,6 +415,24 @@ Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus 
 
 ---
 
+### 3.17 Client Management
+
+**Tujuan:** Satu tempat untuk mencatat bank/klien yang memakai produk internal beserta kondisi hubungan dan kontraknya (permintaan mentor: riset client management). Menu **Clients → Client List** (`/clients`).
+
+**Fitur:**
+- **Tabel client** — kolom Bank, Kota, Status, No Contract, Produk, PIC, Revenue, Start–End kontrak, dan Update Terakhir (catatan terbaru). Baris bisa diklik untuk membuka detail/edit. Pencarian teks (bank, kota, no contract, PIC, isi catatan), filter Produk dan PIC, serta **kartu ringkasan per status** (klik untuk memfilter, angka mengikuti filter lain)
+- **Satu baris = satu kontrak.** Satu bank bisa memakai **beberapa produk** (chip produk), tetapi hanya punya satu kontrak per baris; kalau satu bank punya lebih dari satu kontrak, tambahkan baris baru secara manual (nama bank sengaja **tidak unik**). Revenue adalah nilai **per kontrak** dalam Rupiah (boleh kosong untuk client Approaching/Declined yang belum berkontrak). Tanggal akhir tidak boleh sebelum tanggal mulai
+- **Status bisa diatur** — Admin → **Client Statuses** (`/settings/clients`, Super Admin): tambah/ubah nama, warna, urutan. Data awal: Approaching, Declined, Active, Sunset, Deactivated. Status yang masih dipakai client **tidak bisa dihapus** (`409` dengan jumlah client yang memakainya). Kode status dibuat otomatis dari nama dan tidak berubah saat nama diganti
+- **PIC (tim inhouse)** — satu user. Dropdown berisi user ber-role Product Owner dan owner produk mana pun; **otomatis terisi Product Owner dari produk pertama yang dipilih** selama PIC belum diubah manual (setelah diganti manual, memilih produk tidak menimpanya lagi). Bukan kunci keras: user lain yang sudah menjadi PIC tetap tampil
+- **Catatan update** — riwayat catatan per client (siapa, kapan, isi; URL otomatis menjadi link) di bagian bawah modal. Catatan terbaru tampil di kolom Update Terakhir. Menulis catatan butuh aksi `clients.update`; menghapus hanya oleh **penulisnya atau Super Admin**
+- **Ctrl K** — halaman Client List, aksi "Client baru", dan pencarian client (nama bank, kota, no contract, PIC) yang membuka modal lewat `/clients?client=ID` atau `/clients?new=1`
+
+**Akses:** modul `clients` di matrix Modul × Aksi (3.10) dengan aksi `access` (melihat modul & catatan), `create`, `update` (ubah client + tulis catatan), `delete`. Default: **Super Admin & Manager** penuh, **Product Owner** `access` + `update`, role lain tidak punya akses (menu tersembunyi, API `403`). Role dengan `access` saja melihat modal dalam mode baca-saja. Pengaturan status memakai `settings.update` (Super Admin), sama seperti Notification Settings.
+
+**Catatan implementasi:** `GET /api/clients/options` mengembalikan **semua** produk (bukan `GET /api/products` yang difilter per user) — editor yang tidak di-assign ke suatu produk tetap melihat daftar lengkap, sehingga menyimpan client tidak diam-diam melepas produk yang tidak terlihat olehnya. `PUT /api/clients/:id` hanya mengganti set produk bila `product_ids` dikirim. `migration_v26.sql` **menggabungkan** modul `clients` ke `roles.permissions` dengan operator `||` (tidak menimpa seperti v21), sehingga edit permission yang sudah dibuat admin tidak hilang. Hapus user permanen tidak gagal karena `clients.pic_id`, `clients.created_by`, dan `client_comments.user_id` berstatus `ON DELETE SET NULL`.
+
+---
+
 ## 4. Alur Kerja Utama
 
 ### Alur Sprint Planning
@@ -510,6 +528,10 @@ Karyawan tanpa akun buka /report-bug (tanpa login)
 | `bug_activities` | Komentar & log perubahan per bug (`type`: `comment`/`change_log`), mirror `item_activities` milik Backlog |
 | `notifications` | Notifikasi per user |
 | `user_presence` | Status online/away/offline per user: `last_seen_at` (heartbeat apa pun), `last_active_at` (heartbeat dari tab terlihat & aktif); satu baris per user, dihapus saat logout (`migration_v22.sql`, lihat 3.16) |
+| `clients` | Daftar client/bank (`migration_v26.sql`, 3.17): satu baris = satu kontrak; `bank_name` tidak unik; `status_id` (FK `client_statuses`, `ON DELETE RESTRICT`), `contract_no`, `revenue` (`NUMERIC(18,2)`, per kontrak), `contract_start`/`contract_end` (CHECK akhir ≥ mulai), `pic_id` (FK `users`, `ON DELETE SET NULL`), `created_by` |
+| `client_statuses` | Status client yang bisa diatur (`code` slug unik, `name`, `color`, `sort_order`); 5 status awal di-seed oleh `migration_v26.sql` |
+| `client_products` | Produk yang dipakai client, many-to-many (PK `client_id`+`product_id`, keduanya `ON DELETE CASCADE`), mirror `user_products` |
+| `client_comments` | Riwayat catatan update per client (`client_id` `ON DELETE CASCADE`, `user_id` `ON DELETE SET NULL`, `content`) |
 | `app_settings` | Key-value store untuk setting yang bisa diubah lewat UI tanpa restart — saat ini dipakai untuk config SMTP (`mail.*`), lihat 3.14 |
 
 ### Port
@@ -711,6 +733,26 @@ DELETE             /api/roles/:id    Hapus role (ditolak 409 kalau masih dipakai
 Daftar lengkap modul & aksi yang valid: lihat `MODULE_CATALOG` di `frontend/src/pages/Users.jsx`
 (sumber kebenaran untuk UI matrix, dibaca juga sebagai referensi oleh backend per endpoint).
 
+### Client Management
+```
+GET                /api/clients                    List client + produk + PIC + catatan terbaru. Aksi: clients.access
+GET                /api/clients/options            Semua produk (dengan owner), kandidat PIC, dan status untuk form. Aksi: clients.access
+GET                /api/clients/:id                Detail satu client. Aksi: clients.access
+POST               /api/clients                    Buat client. Body: {bank_name*, status_id*, city, contract_no, revenue,
+                                                     contract_start, contract_end, pic_id, product_ids[]}. Aksi: clients.create
+PUT                /api/clients/:id                Ubah client (field yang tidak dikirim dikosongkan; product_ids hanya
+                                                     mengganti produk bila dikirim). Aksi: clients.update
+DELETE             /api/clients/:id                Hapus client beserta catatannya. Aksi: clients.delete
+GET                /api/clients/:id/comments       Riwayat catatan (terbaru dulu). Aksi: clients.access
+POST               /api/clients/:id/comments       Tambah catatan. Body: {content} (maks 5000 karakter). Aksi: clients.update
+DELETE             /api/clients/comments/:id       Hapus catatan — hanya penulis atau Super Admin
+GET                /api/client-statuses            List status + client_count. Aksi: clients.access atau settings.update
+POST/PUT/DELETE    /api/client-statuses[/:id]      Kelola status. Aksi: settings.update (Super Admin); hapus status yang
+                                                     dipakai client → 409
+```
+Validasi gagal membalas `400` dengan pesan jelas (nama bank/status wajib, tanggal akhir sebelum mulai, revenue negatif,
+status/PIC/produk tidak valid).
+
 ### Settings (Super Admin only)
 ```
 GET  /api/settings/mail        Ambil config SMTP saat ini (password tidak pernah dikembalikan — hanya password_set: true/false)
@@ -807,6 +849,7 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | `migration_v23.sql` | Kolom `feature_id` (FK `features`, nullable, `ON DELETE SET NULL`) + index di `bugs` dan `qa_test_cases` untuk kolom/dropdown **Features** (3.8, 3.9). Additive. Dipasang di initdb `docker-compose.yml`, tetapi initdb hanya jalan saat volume pertama dibuat — **database yang sudah ada wajib menjalankannya manual SEBELUM backend baru naik** (INSERT/UPDATE bug & test case di backend baru menyebut kolom ini, jadi tanpa migrasi create/edit gagal `500`) |
 | `migration_v24.sql` | Kolom `bugs.type` (`VARCHAR(20) NOT NULL DEFAULT 'bug'`, CHECK `bug`/`inquiry`) + index untuk kolom/dropdown **Type** di Bugs Incident (3.9). Additive; baris lama dan INSERT yang tidak menyebut kolom (mis. Lapor Bug Publik) otomatis `bug`. Dipasang di initdb `docker-compose.yml`, tetapi initdb hanya jalan saat volume pertama dibuat — **database yang sudah ada wajib menjalankannya manual SEBELUM backend baru naik** (INSERT/UPDATE bug di backend baru menyebut kolom ini, jadi tanpa migrasi create/edit gagal `500`) |
 | `migration_v25.sql` | Tabel `qa_attachments` + index untuk lampiran test case (3.8). Additive dan idempotent. Dipasang di initdb `docker-compose.yml`, tetapi initdb hanya jalan saat volume pertama dibuat — **database yang sudah ada wajib menjalankannya manual SEBELUM backend baru naik** (endpoint unduh file mencari nama asli di tabel ini, dan upload/list lampiran QA gagal `500` tanpa tabelnya) |
+| `migration_v26.sql` | Modul Client Management (3.17): tabel `client_statuses` (+5 status awal), `clients`, `client_products`, `client_comments` dan permission modul `clients` yang **digabung** (`||`, bukan ditimpa) ke `roles.permissions` Super Admin/Manager (penuh) dan PO (`access`+`update`). Additive dan idempotent. Dipasang di initdb `docker-compose.yml`, tetapi initdb hanya jalan saat volume pertama dibuat — **database yang sudah ada wajib menjalankannya manual SEBELUM backend baru naik** (endpoint `/api/clients` membaca tabel-tabelnya, jadi tanpa migrasi gagal `500`) |
 
 ---
 
@@ -874,3 +917,4 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | 3 Nov 2026 | 3.13 | Backlog (3.2), Epic Board, QA (3.8), Bugs Incident (3.9): **toast sukses saat membuat item menampilkan kode barunya** (`Item HRS-098 ditambahkan`, `Bug HRS-053 dibuat`, `Test case TC-045 dibuat`, `Epic HRS-104 dibuat`), kode ditebalkan dan toast tampil 6 detik supaya mudah dibaca/disalin dan dicari di tabel. Epic Board yang sebelumnya tidak punya toast sukses kini ikut. Toast edit/error/import tidak berubah. Frontend saja (komponen bersama `utils/createdToast.jsx`), tanpa perubahan backend atau database |
 | 11 Nov 2026 | 3.14 | Products (3.6) → tab Roadmap: tambah status **Testing** (badge amber) untuk menandai fitur yang sedang tahap testing, di antara On Progress dan Active. Muncul di badge tabel, filter status, kartu ringkasan (kini 6 kartu), dan form Tambah/Edit Item Roadmap; urutan status kini mengikuti alur hidup fitur: Planned → Research → On Progress → Testing → Active → Offline. Frontend saja (`Products.jsx`); kolom `product_roadmap.status` berupa `VARCHAR` tanpa constraint sehingga tidak ada migrasi dan tidak ada perubahan backend. Data lama tidak berubah |
 | 11 Nov 2026 | 3.15 | **Tempel lampiran dengan Ctrl+V** di semua form berlampiran: Backlog (3.2), Bugs Incident (3.9), QA Test Case (3.8), dan Lapor Bug Publik (3.15). Gambar/file di clipboard langsung menjadi lampiran (screenshot dinamai `screenshot-YYYYMMDD-HHMMSS.png`); paste teks atau salinan sel Excel/Word tidak diganggu. Form Backlog kini memakai komponen lampiran bersama (`AttachmentSection`, sama seperti Bugs/QA) sehingga **lampiran juga bisa ditambahkan saat membuat item baru** (diantrekan, diunggah setelah item tersimpan; tetap opsional). Frontend saja (`utils/pasteFiles.js`, `AttachmentSection.jsx`, `Backlog.jsx`, `ReportBug.jsx`); endpoint, batas 10MB, dan tipe file yang diizinkan tidak berubah |
+| 11 Nov 2026 | 3.16 | **Modul baru Client Management** (3.17) — daftar bank/klien pemakai produk internal: kota, status (bisa diatur di Admin → Client Statuses), no kontrak, produk (beberapa), PIC inhouse (otomatis Product Owner produk, bisa diganti), revenue per kontrak, start/end kontrak, dan riwayat catatan update. Satu baris = satu kontrak. Permission modul baru `clients` (Super Admin & Manager penuh, PO lihat+ubah). Butuh `migration_v26.sql` (jalankan manual SEBELUM backend baru naik). Menu Clients, halaman Client Statuses, dan Ctrl K (aksi "Client baru" + pencarian client) |

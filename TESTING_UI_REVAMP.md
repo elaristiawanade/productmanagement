@@ -275,3 +275,21 @@ Fitur baru (PRD 3.2, v3.15). Frontend saja. Diuji di Chrome sungguhan (headless,
 - 🧑 Item Backlog lama: lampiran lama tetap tampil, preview gambar/PDF/TXT/CSV dan hapus lampiran berfungsi seperti sebelumnya
 - ⚠️ Paste hanya aktif saat form berlampiran terbuka dan tidak ada preview gambar/dokumen yang sedang tampil
 - ⚠️ Tidak ada paste di kolom komentar (komentar hanya teks) dan di fitur Import CSV/Jira (bukan lampiran)
+
+## 28. Client Management
+Fitur baru (PRD 3.17, v3.16). Butuh `migration_v26.sql`. Diuji otomatis di stack Docker lokal (API dengan akun uji + Chrome sungguhan lewat Vite dev server); data uji berawalan `ZZTEST` sudah dihapus.
+- ✅ API: validasi (nama bank/status wajib, akhir kontrak < mulai, tanggal tak valid 31 Feb, revenue negatif, status/produk tidak valid) → `400` dengan pesan jelas
+- ✅ Permission: Developer `403`; PO bisa lihat+ubah+catat tapi `403` saat tambah; Manager/Super Admin penuh; PO `403` di pengaturan status
+- ✅ Satu bank boleh punya dua baris (nama tidak unik); `PUT` tanpa `product_ids` tidak melepas produk; produk duplikat di body hanya tersimpan sekali
+- ✅ Status: tambah/ubah/hapus; nama kembar `409`; hapus status yang dipakai client `409` dengan jumlah client; kode status dibuat dari nama
+- ✅ Catatan: tambah (kosong ditolak), hapus catatan milik orang lain `403` bagi non-Super Admin, hapus milik sendiri berhasil
+- ✅ FK: hapus user permanen tidak gagal (`pic_id` dan `client_comments.user_id` jadi NULL); migrasi dijalankan dua kali tanpa error; permission lain tidak tertimpa
+- ✅ UI: pilih produk Sales CRM → PIC otomatis Citra (Product Owner-nya) beserta petunjuknya; tambah produk lain tidak mengubah PIC; revenue tampil `Rp 2.500.000.000`; baris, kartu status, filter, dan pencarian bekerja; catatan tampil di modal dan di kolom Update Terakhir
+- ✅ UI: Ctrl K menemukan client dan membuka modal; deep link `?client=ID` dan `?new=1`; tema gelap; layar 390px; role view-only → modal baca-saja (semua input nonaktif, tanpa tombol simpan/kotak catatan); Developer tidak melihat menu Clients dan `/clients` menolak
+- 🧑 Jalankan `migration_v26.sql` di database yang sudah ada (backup dulu), lalu login ulang. Menu **Clients** muncul untuk Super Admin, Manager, dan PO
+- 🧑 Admin → Client Statuses: ubah warna/urutan status, tambah status baru, lalu cek kartu ringkasan dan dropdown di Client List
+- 🧑 Tambah client sungguhan: pilih beberapa produk, ganti PIC manual lalu pilih produk lain (PIC tidak boleh berubah lagi), isi kontrak, simpan, edit lagi
+- 🧑 Beri role lain (mis. QA) permission **Client Management → Akses** di Users & Roles: menu muncul dan modal baca-saja
+- ⚠️ Revenue dihitung per kontrak dan **tidak dijumlahkan** di halaman (menjumlah client Approaching/Declined menyesatkan)
+- ⚠️ Belum ada peringatan "kontrak hampir habis" dan belum ada Import Excel client (tidak diminta; bisa jadi tahap berikutnya)
+- ⚠️ `docker-compose.yml` kini memasang v26 di initdb, jadi `docker compose up` berikutnya membuat ulang `pt_postgres` (data volume aman, hanya restart singkat)
