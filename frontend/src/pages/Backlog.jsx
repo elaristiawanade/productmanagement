@@ -134,7 +134,7 @@ function ActivitySection({ itemId, users = [] }) {
   const [mentionQuery, setMentionQuery]= useState('');
   const [mentionStart, setMentionStart]= useState(-1);
   const [mentionIdx,   setMentionIdx]  = useState(0);
-  const endRef   = useRef(null);
+  const listRef  = useRef(null);
   const inputRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -146,7 +146,8 @@ function ActivitySection({ itemId, users = [] }) {
   }, [itemId]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [activities.length]);
+  // Scroll only the comment list to the newest entry. (scrollIntoView would also scroll the modal itself to the bottom.)
+  useEffect(() => { const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }, [activities.length]);
 
   const submit = async () => {
     if (!comment.trim() || sending) return;
@@ -245,7 +246,7 @@ function ActivitySection({ itemId, users = [] }) {
         <MessageSquare className="w-3.5 h-3.5" />
         Aktivitas & Komentar
       </p>
-      <div className="max-h-56 overflow-y-auto space-y-2 mb-3 pr-1">
+      <div ref={listRef} className="max-h-56 overflow-y-auto space-y-2 mb-3 pr-1">
         {activities.length === 0 && (
           <p className="text-xs text-slate-400 text-center py-4">Belum ada aktivitas.</p>
         )}
@@ -281,7 +282,6 @@ function ActivitySection({ itemId, users = [] }) {
             </div>
           </div>
         ))}
-        <div ref={endRef} />
       </div>
 
       {/* Input area */}
