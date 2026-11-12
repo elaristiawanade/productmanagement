@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS product_roadmap (
   updated_at      TIMESTAMP    NOT NULL DEFAULT NOW()
 );
 
-COMMENT ON COLUMN product_roadmap.status IS 'active, on_progress, offline, research, planned';
+COMMENT ON COLUMN product_roadmap.status IS 'planned, research, on_progress, testing, active, offline';
 
 CREATE INDEX IF NOT EXISTS idx_roadmap_product ON product_roadmap(product_id);
 CREATE INDEX IF NOT EXISTS idx_roadmap_status  ON product_roadmap(status);

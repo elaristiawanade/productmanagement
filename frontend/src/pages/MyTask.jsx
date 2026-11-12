@@ -13,6 +13,7 @@ import StatusMenu from '../components/StatusMenu';
 import { useAuth } from '../context/AuthContext';
 import { renderWithLinks } from '../utils/linkify';
 import toast from 'react-hot-toast';
+import CopyLinkButton from '../components/CopyLinkButton';
 
 const STATUSES   = ['backlog','todo','in_progress','in_review','done','blocked'];
 const PRIORITIES = ['critical','high','medium','low'];
@@ -58,6 +59,7 @@ function TaskPanel({ item, onClose, onStatusChange, onMarkDone }) {
             <h3 className="font-semibold text-slate-800 text-base leading-snug">{item.title}</h3>
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            <CopyLinkButton path={`/backlog?item=${item.id}`} label={`Salin link ${item.code}`} />
             <Link to={`/backlog?item=${item.id}`} onClick={onClose}
               className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-800 transition-colors"
               title="Edit lengkap di Backlog">
@@ -129,12 +131,24 @@ function TaskPanel({ item, onClose, onStatusChange, onMarkDone }) {
           )}
 
           {/* Epic / Feature */}
-          {(item.epic_name || item.feature_name) && (
+          {item.epic_name && (
             <div className="p-3 bg-purple-50/40 rounded-xl border border-purple-100">
               <p className="text-xs text-slate-400 mb-1 flex items-center gap-1">
-                <Layers className="w-3 h-3" /> {item.epic_name ? 'Epic' : 'Feature'}
+                <Layers className="w-3 h-3" /> Epic
               </p>
-              <p className="text-sm text-purple-700">{item.epic_name || item.feature_name}</p>
+              <p className="text-sm text-purple-700">{item.epic_name}</p>
+            </div>
+          )}
+          {item.features?.length > 0 && (
+            <div className="p-3 bg-purple-50/40 rounded-xl border border-purple-100">
+              <p className="text-xs text-slate-400 mb-1.5 flex items-center gap-1">
+                <Layers className="w-3 h-3" /> Impacted Features
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {item.features.map(f => (
+                  <span key={f.id} className="text-xs px-2 py-0.5 rounded bg-white text-purple-700 border border-purple-100">{f.name}</span>
+                ))}
+              </div>
             </div>
           )}
 
@@ -448,10 +462,11 @@ export default function MyTask() {
                             title={item.title}>
                             {item.title}
                           </p>
-                          {(item.epic_name || item.feature_name || item.product_name) && (
+                          {(item.epic_name || item.features?.length > 0 || item.product_name) && (
                             <p className="text-[11px] text-slate-400 truncate mt-0.5">
                               {item.product_name}
-                              {(item.epic_name || item.feature_name) && ` · ${item.epic_name || item.feature_name}`}
+                              {item.epic_name && ` · ${item.epic_name}`}
+                              {item.features?.length > 0 && ` · ${item.features.map(f => f.name).join(', ')}`}
                             </p>
                           )}
                         </button>
@@ -484,6 +499,7 @@ export default function MyTask() {
                               <CheckCheck className="w-3.5 h-3.5" />
                             </button>
                           )}
+                          <CopyLinkButton path={`/backlog?item=${item.id}`} label={`Salin link ${item.code}`} className="!w-6 !h-6" />
                           <Link to={`/backlog?item=${item.id}`}
                             className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-800 transition-colors"
                             title="Buka di Backlog">

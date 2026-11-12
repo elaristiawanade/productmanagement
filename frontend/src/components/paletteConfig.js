@@ -1,5 +1,5 @@
 import {
-  ListTodo, Bug, TestTube2, Zap, Package, Layers, Puzzle, Map, Crown, User, Shield, Building2, ClipboardList,
+  ListTodo, Bug, TestTube2, Zap, Package, Layers, Puzzle, Map, Crown, User, Shield, Building2, ClipboardList, Landmark,
 } from 'lucide-react';
 import client from '../api/client';
 
@@ -22,6 +22,7 @@ export const ACTIONS = [
   { id: 'product',    label: 'Produk baru',       icon: Package,       to: '/products?new=product',     gates: [['products', 'create']], words: 'product' },
   { id: 'epic',       label: 'Epic baru',         icon: Layers,        to: '/epic-board?new=1',         gates: [['epics', 'create']], words: 'epic board' },
   { id: 'roadmap',    label: 'Item roadmap baru', icon: Map,           to: '/products?new=roadmap',     gates: [['roadmap', 'create']] },
+  { id: 'client',     label: 'Client baru',       icon: Landmark,      to: '/clients?new=1',            gates: [['clients', 'access'], ['clients', 'create']], words: 'bank klien' },
   { id: 'leadertask', label: 'Leader task baru',  icon: Crown,         to: '/c-level?new=task',         gates: [['c_level', 'access']], words: 'c-level' },
   { id: 'standup',    label: 'Isi standup hari ini', icon: ClipboardList, to: '/standup',               words: 'daily' },
   { id: 'user',       label: 'User baru',         icon: User,          to: '/users?new=user',           gates: [USERS_PAGE, ['users', 'create']] },
@@ -89,6 +90,11 @@ export const LIST_SOURCES = [
     key: 'roadmap', label: 'Roadmap', icon: Map, url: '/roadmap', gates: [],
     text: (r) => [r.feature_name, r.product_version, r.description],
     row: (r) => ({ title: r.feature_name, sub: r.product_name, status: r.status, to: `/products?roadmap=${r.id}` }),
+  },
+  {
+    key: 'clients', label: 'Client', icon: Landmark, url: '/clients', gates: [['clients', 'access']],
+    text: (c) => [c.bank_name, c.city, c.contract_no, c.pic_name],
+    row: (c) => ({ title: c.bank_name, sub: [c.city, c.status_name].filter(Boolean).join(' · '), to: `/clients?client=${c.id}` }),
   },
   {
     key: 'users', label: 'User', icon: User, url: '/users', gates: [USERS_PAGE],

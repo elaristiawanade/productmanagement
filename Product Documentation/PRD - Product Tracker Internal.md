@@ -3,8 +3,8 @@
 
 | | |
 |---|---|
-| **Versi** | 3.13 |
-| **Tanggal** | 3 November 2026 |
+| **Versi** | 3.18 |
+| **Tanggal** | 11 November 2026 |
 | **Status** | Live — Production |
 | **Pemilik** | Tim Internal |
 
@@ -32,7 +32,7 @@ Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus 
 |---|---|---|
 | **Super Admin** | Akses penuh tanpa batasan | Semua modul + manajemen user + konfigurasi sistem (bypass hardcode, bukan dari matrix) |
 | **Manager** | Kepala tim / manajemen | Hampir semua modul (create/update/delete), manajemen user, import standup, kecuali Bugs Incident & C-Level |
-| **Product Owner (PO)** | Pemilik produk | Kelola backlog, sprint, feature, epics, QA (create/update), roadmap untuk produk yang di-assign |
+| **Product Owner (PO)** | Pemilik produk | Kelola backlog, sprint, feature, epics, QA (create/update), roadmap untuk produk yang di-assign; Client Management (lihat & ubah, tanpa tambah/hapus client) |
 | **Developer** | Anggota tim dev | Buat/update backlog & epic; untuk item di luar itu hanya bisa update item yang di-assign ke diri sendiri |
 | **QA Engineer** | Penguji | Kelola test case, test run, eksekusi pengujian, dan modul Bugs Incident (3.9) |
 | **SME** | Subject Matter Expert lintas fungsi | C-Level Dashboard — Leader Notes & Leader Task (3.10 C-Level) |
@@ -86,6 +86,8 @@ Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus 
 - **Dropdown pencarian untuk field Parent:** field **Parent User Story** (Task/Bug) dan **Parent Epic** (Story) berupa dropdown dengan kotak pencarian di dalamnya — ketik untuk filter berdasarkan kode/judul, bukan sekadar daftar panjang untuk di-scroll. Pola yang sama juga dipakai untuk field Backlog Item di form Bug (3.9) dan Test Case (3.8). Dropdown ini mengecualikan item yang sedang diedit dari daftar pilihannya sendiri — penting saat **mengubah Tipe item** (mis. Epic → Story), karena sebelum disimpan item tersebut masih berstatus tipe lama di database dan secara teknis bisa saja muncul sebagai kandidat parent untuk dirinya sendiri
 - **Validasi parent anti-siklus:** backend menolak (400 Bad Request, "Parent item membentuk siklus") `parent_id` yang mengarah ke diri sendiri atau membentuk rantai melingkar (mis. A→B→A) lewat chain beberapa parent. Ini juga melindungi kalkulasi **Story Points auto-cascade** di bawah — tanpa validasi ini, parent_id yang melingkar dapat membuat proses cascade SP rekursi tanpa henti (`StackOverflowError`) saat item mana pun di rantai itu di-update
 - **Dropdown pencarian multi-select untuk Assignee:** filter **Assignee** di toolbar Backlog, dan field **Assignee** di form Tambah/Edit item, berupa dropdown checklist dengan kotak pencarian — ketik nama untuk menyaring, tetap bisa pilih lebih dari satu orang (komponen `SearchableMultiSelect`, varian multi-select dari pola `SearchableSelect` di atas). Pola yang sama juga dipakai untuk filter Assignee dan field Assigned To di Bugs Incident (3.9)
+- **Impacted Features (multi-select):** field **Feature** di form Tambah/Edit item diganti **Impacted Features** — dropdown checklist dengan kotak pencarian (komponen `SearchableMultiSelect`, sama seperti Assignee) sehingga **satu item bisa menandai lebih dari satu feature roadmap** (Products → Roadmap) yang terdampak. Opsi disaring ke produk yang dipilih; mengganti produk mereset pilihan; field nonaktif sampai produk dipilih. Pilihan tampil sebagai chip di bawah dropdown. Di tabel Backlog tampil feature pertama plus badge **+N** untuk sisanya di samping judul (tooltip berisi daftar lengkap); di My Tasks tampil di detail dan baris daftar. Perubahan feature tercatat di log aktivitas item (`Impacted Features: "A" → "A, B"`). Penamaan ini **hanya di Backlog** — Bugs Incident dan QA tetap memakai satu "Feature" dari tabel `features` (bukan roadmap). Backend: tabel `backlog_item_features` (`migration_v27.sql`); POST/PUT `/api/backlog` menerima `feature_ids` (array, urutan pertama juga disimpan di kolom lama `feature_id` agar query lama tetap jalan), `400` kalau ada feature milik produk lain, `feature_id` tunggal dari klien lama tetap diterima, dan PUT tanpa kedua field membiarkan feature apa adanya. Response item menambah array `features` (`[{id, name}]`)
+- **Share link (salin link kartu):** setiap record punya tombol **Salin link** yang menyalin URL absolut deep link-nya, mis. `http://host/backlog?item=123` — membuka link itu langsung membuka kartu/modal record tersebut. Tombol ada di header modal sebagai tombol merah bertuliskan "Salin link" (Backlog, Bugs Incident, QA Test Case, Sprint, Produk/Epic/Feature/Roadmap, Client, Leader Task) serta sebagai ikon kecil di baris tabel dan kartu Board Backlog, kartu Kanban dan header Sprint, baris Epic Board, My Tasks (baris dan panel), dan panel Leader Task; modul Users tidak diberi tombol. Link selalu dibuat dari ID record (bukan address bar, karena halaman menghapus `?item=` setelah modal terbuka). Salin tetap jalan di server http biasa (tanpa HTTPS) lewat fallback `execCommand`, dan bila browser menolak keduanya link ditampilkan di kotak dialog untuk disalin manual. **Redirect setelah login:** pengunjung yang belum login atau tokennya kedaluwarsa dikirim ke Login lalu **kembali ke link tujuan** (bukan dashboard) — berlaku juga untuk link notifikasi/email; hanya path internal yang diterima (`//host` dan `/login` diabaikan). **Tanpa izin edit:** Backlog membuka modal **Detail Item** baca-saja (field nonaktif, tanpa tombol Perbarui; komentar dan lampiran tetap bisa dilihat); modul lain mengikuti aturan lama (halaman terbuka, modal hanya untuk role berizin). Hak lihat tidak berubah: `GET /api/backlog/{id}` memang tidak membatasi per produk. Frontend saja, tanpa migrasi
 - **Story Points auto-cascade:** SP pada Task otomatis dijumlahkan ke Story parent → lalu ke Epic grandparent. Berlaku untuk create, update, dan delete
 - **Epic SP read-only:** Form Epic menampilkan SP sebagai kalkulasi otomatis (tidak bisa diinput manual)
 - **Story Points hints:** Panduan skala SP (1–13) ditampilkan langsung di form untuk membantu estimasi
@@ -106,7 +108,7 @@ Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus 
 - **Pindah sprint langsung dari tabel:** kolom **Sprint** di tabel Backlog berupa dropdown — pilih sprint lain (atau kembali ke "Backlog (no sprint)") tanpa buka form edit, pola quick-update yang sama seperti kolom Status. Item tipe `independent` tidak punya dropdown ini karena tidak terikat sprint. Perubahan tercatat di log aktivitas item; tidak mengirim notifikasi email (beda dari perubahan status)
 - **Pagination server-side** dengan pilihan baris per halaman **10 / 30 / 50 / 100** (default 30). Mengganti jumlah baris langsung memuat ulang data dan kembali ke halaman 1 — tidak perlu menekan filter/tombol lain dulu. Pilihan ini hanya berlaku di halaman Backlog (tidak dibagi ke QA/Bugs dan kembali ke default saat halaman di-refresh)
 - Import dari Jira (CSV)
-- **Lampiran** — unggah file ke backlog item: gambar (JPEG/PNG/GIF/WebP), PDF, Word, Excel, PowerPoint, ZIP, CSV, TXT (max 10MB per file, multi-file). Preview inline untuk gambar, PDF, TXT, dan CSV (dirender sebagai tabel) — tipe lain dibuka/diunduh di tab baru
+- **Lampiran** — unggah file ke backlog item: gambar (JPEG/PNG/GIF/WebP), PDF, Word, Excel, PowerPoint, ZIP, CSV, TXT (max 10MB per file, multi-file). Preview inline untuk gambar, PDF, TXT, dan CSV (dirender sebagai tabel) — tipe lain dibuka/diunduh di tab baru. Lampiran **opsional** dan bisa ditambahkan juga saat **membuat** item baru (file diantrekan lalu diunggah otomatis begitu item tersimpan, sama seperti Bugs/QA). **Tempel dengan Ctrl+V**: gambar di clipboard (mis. screenshot Win+Shift+S) atau file hasil copy dari Explorer langsung jadi lampiran tanpa dialog unggah — berlaku di semua form berlampiran (Backlog, Bugs Incident, QA Test Case, dan Lapor Bug Publik). Aturan paste: hanya diambil bila clipboard berisi file **tanpa teks** (menyalin sel Excel/Word atau teks biasa tetap tertempel sebagai teks); tipe/ukuran divalidasi sama seperti unggah biasa (Lapor Bug Publik: gambar saja); screenshot otomatis dinamai `screenshot-YYYYMMDD-HHMMSS.png`
 - **Author** — saat item diklik (dari tampilan List, Board, maupun item anak), modal Edit menampilkan baris read-only **Author: <nama> · <tanggal dibuat>** di paling atas, supaya terlihat siapa yang membuat item tanpa menambah kolom di tabel. Datanya dari `backlog_items.created_by` yang sudah terisi otomatis sejak awal (user yang login saat create; user yang meng-import saat Import Jira), dikirim backend sebagai `created_by_name` (JOIN `users`) di semua endpoint backlog. `—` bila user pembuatnya sudah dihapus. Tidak ada migrasi dan Author tidak bisa diubah dari form
 - **Toast sukses menampilkan kode baru:** setelah item dibuat, toast menyebut kode yang baru terbentuk (mis. `Item HRS-098 ditambahkan`) supaya mudah dicari di tabel — kodenya ditebalkan (monospace) dan toast tampil 6 detik (default 3 detik). Berlaku untuk Backlog (form Tambah Item, juga lewat tombol "+" grup dan Ctrl K), **Epic Board** (`Epic HRS-104 dibuat`; sebelumnya tanpa toast), **Bugs Incident** (`Bug HRS-053 dibuat`, 3.9), dan **QA Module** (`Test case TC-045 dibuat`, 3.8). Kode yang ditampilkan adalah kode yang benar-benar tersimpan (otomatis maupun yang diketik manual), diambil dari respons create. Toast edit, toast error, dan hasil Import CSV/Jira (hanya menyebut jumlah) tidak berubah. Frontend saja, tanpa migrasi
 
@@ -170,7 +172,7 @@ Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus 
 - Kelola epics per produk
 - Kelola features per produk
 - Assign member ke produk (menentukan scope akses Developer/QA)
-- Roadmap produk (timeline feature)
+- Roadmap produk (timeline feature) — status item: `planned`, `research`, `on_progress`, `testing` (sedang tahap testing), `active`, `offline`
 
 ---
 
@@ -293,7 +295,7 @@ Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus 
 
 **Tab Roles & Permissions — Fitur:**
 - **Role dibuat bebas** — bukan daftar tetap di kode. Tombol "Tambah Role" membuka form: nama (slug, tidak bisa diubah setelah dibuat), display name, dan tabel hak akses
-- **Matrix Modul × Aksi** — satu baris per modul (Backlog, Epic, Features, Products, Roadmap, Sprint, QA, Bugs Incident, C-Level Dashboard, Standup, Import Jira, Users, Roles, Departemen, Pengaturan), tiap baris cuma menampilkan checkbox untuk aksi yang benar-benar relevan untuk modul itu (bukan grid 5 kolom seragam untuk semua modul — mis. modul Bugs Incident cuma punya 1 aksi "Akses", modul Users punya 5: Buat/Ubah/Reset Password/Nonaktifkan/Hapus)
+- **Matrix Modul × Aksi** — satu baris per modul (Backlog, Epic, Features, Products, Roadmap, Sprint, QA, Bugs Incident, C-Level Dashboard, Client Management, Standup, Import Jira, Users, Roles, Departemen, Pengaturan), tiap baris cuma menampilkan checkbox untuk aksi yang benar-benar relevan untuk modul itu (bukan grid 5 kolom seragam untuk semua modul — mis. modul Bugs Incident cuma punya 1 aksi "Akses", modul Users punya 5: Buat/Ubah/Reset Password/Nonaktifkan/Hapus)
 - Role **`super_admin`** checkbox-nya di-disable (selalu akses penuh lewat bypass hardcode, bukan dari matrix — supaya tidak ada skenario Super Admin terkunci sendiri dari sistem akibat salah klik)
 - Perubahan tersimpan langsung berefek nyata di frontend (tombol/menu muncul-hilang) **dan** backend (`403` kalau dipanggil API langsung tanpa aksi yang sesuai) — satu sumber kebenaran untuk keduanya
 - List role menampilkan badge per modul yang dapat aksi (mis. "Backlog: Buat, Ubah, Hapus")
@@ -415,6 +417,24 @@ Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus 
 
 ---
 
+### 3.17 Client Management
+
+**Tujuan:** Satu tempat untuk mencatat bank/klien yang memakai produk internal beserta kondisi hubungan dan kontraknya (permintaan mentor: riset client management). Menu **Clients → Client List** (`/clients`).
+
+**Fitur:**
+- **Tabel client** — kolom Bank, Kota, Status, No Contract, Produk, PIC, Revenue, Start–End kontrak, dan Update Terakhir (catatan terbaru). Baris bisa diklik untuk membuka detail/edit. Pencarian teks (bank, kota, no contract, PIC, isi catatan), filter Produk dan PIC, serta **kartu ringkasan per status** (klik untuk memfilter, angka mengikuti filter lain)
+- **Satu baris = satu kontrak.** Satu bank bisa memakai **beberapa produk** (chip produk), tetapi hanya punya satu kontrak per baris; kalau satu bank punya lebih dari satu kontrak, tambahkan baris baru secara manual (nama bank sengaja **tidak unik**). Revenue adalah nilai **per kontrak** dalam Rupiah (boleh kosong untuk client Approaching/Declined yang belum berkontrak). Tanggal akhir tidak boleh sebelum tanggal mulai
+- **Status bisa diatur** — Admin → **Client Statuses** (`/settings/clients`, Super Admin): tambah/ubah nama, warna, urutan. Data awal: Approaching, Declined, Active, Sunset, Deactivated. Status yang masih dipakai client **tidak bisa dihapus** (`409` dengan jumlah client yang memakainya). Kode status dibuat otomatis dari nama dan tidak berubah saat nama diganti
+- **PIC (tim inhouse)** — satu user. Dropdown berisi user ber-role Product Owner dan owner produk mana pun; **otomatis terisi Product Owner dari produk pertama yang dipilih** selama PIC belum diubah manual (setelah diganti manual, memilih produk tidak menimpanya lagi). Bukan kunci keras: user lain yang sudah menjadi PIC tetap tampil
+- **Catatan update** — riwayat catatan per client (siapa, kapan, isi; URL otomatis menjadi link) di bagian bawah modal. Catatan terbaru tampil di kolom Update Terakhir. Menulis catatan butuh aksi `clients.update`; menghapus hanya oleh **penulisnya atau Super Admin**
+- **Ctrl K** — halaman Client List, aksi "Client baru", dan pencarian client (nama bank, kota, no contract, PIC) yang membuka modal lewat `/clients?client=ID` atau `/clients?new=1`
+
+**Akses:** modul `clients` di matrix Modul × Aksi (3.10) dengan aksi `access` (melihat modul & catatan), `create`, `update` (ubah client + tulis catatan), `delete`. Default: **Super Admin & Manager** penuh, **Product Owner** `access` + `update`, role lain tidak punya akses (menu tersembunyi, API `403`). Role dengan `access` saja melihat modal dalam mode baca-saja. Pengaturan status memakai `settings.update` (Super Admin), sama seperti Notification Settings.
+
+**Catatan implementasi:** `GET /api/clients/options` mengembalikan **semua** produk (bukan `GET /api/products` yang difilter per user) — editor yang tidak di-assign ke suatu produk tetap melihat daftar lengkap, sehingga menyimpan client tidak diam-diam melepas produk yang tidak terlihat olehnya. `PUT /api/clients/:id` hanya mengganti set produk bila `product_ids` dikirim. `migration_v26.sql` **menggabungkan** modul `clients` ke `roles.permissions` dengan operator `||` (tidak menimpa seperti v21), sehingga edit permission yang sudah dibuat admin tidak hilang. Hapus user permanen tidak gagal karena `clients.pic_id`, `clients.created_by`, dan `client_comments.user_id` berstatus `ON DELETE SET NULL`.
+
+---
+
 ## 4. Alur Kerja Utama
 
 ### Alur Sprint Planning
@@ -510,6 +530,11 @@ Karyawan tanpa akun buka /report-bug (tanpa login)
 | `bug_activities` | Komentar & log perubahan per bug (`type`: `comment`/`change_log`), mirror `item_activities` milik Backlog |
 | `notifications` | Notifikasi per user |
 | `user_presence` | Status online/away/offline per user: `last_seen_at` (heartbeat apa pun), `last_active_at` (heartbeat dari tab terlihat & aktif); satu baris per user, dihapus saat logout (`migration_v22.sql`, lihat 3.16) |
+| `backlog_item_features` | Impacted Features backlog item (`migration_v27.sql`, 3.2): `backlog_item_id` + `roadmap_id` (FK `product_roadmap`), PK gabungan, `ON DELETE CASCADE` di kedua sisi. `backlog_items.feature_id` tetap ada sebagai feature pertama (pola sama seperti `assignee_id` vs `backlog_item_assignees`) |
+| `clients` | Daftar client/bank (`migration_v26.sql`, 3.17): satu baris = satu kontrak; `bank_name` tidak unik; `status_id` (FK `client_statuses`, `ON DELETE RESTRICT`), `contract_no`, `revenue` (`NUMERIC(18,2)`, per kontrak), `contract_start`/`contract_end` (CHECK akhir ≥ mulai), `pic_id` (FK `users`, `ON DELETE SET NULL`), `created_by` |
+| `client_statuses` | Status client yang bisa diatur (`code` slug unik, `name`, `color`, `sort_order`); 5 status awal di-seed oleh `migration_v26.sql` |
+| `client_products` | Produk yang dipakai client, many-to-many (PK `client_id`+`product_id`, keduanya `ON DELETE CASCADE`), mirror `user_products` |
+| `client_comments` | Riwayat catatan update per client (`client_id` `ON DELETE CASCADE`, `user_id` `ON DELETE SET NULL`, `content`) |
 | `app_settings` | Key-value store untuk setting yang bisa diubah lewat UI tanpa restart — saat ini dipakai untuk config SMTP (`mail.*`), lihat 3.14 |
 
 ### Port
@@ -711,6 +736,26 @@ DELETE             /api/roles/:id    Hapus role (ditolak 409 kalau masih dipakai
 Daftar lengkap modul & aksi yang valid: lihat `MODULE_CATALOG` di `frontend/src/pages/Users.jsx`
 (sumber kebenaran untuk UI matrix, dibaca juga sebagai referensi oleh backend per endpoint).
 
+### Client Management
+```
+GET                /api/clients                    List client + produk + PIC + catatan terbaru. Aksi: clients.access
+GET                /api/clients/options            Semua produk (dengan owner), kandidat PIC, dan status untuk form. Aksi: clients.access
+GET                /api/clients/:id                Detail satu client. Aksi: clients.access
+POST               /api/clients                    Buat client. Body: {bank_name*, status_id*, city, contract_no, revenue,
+                                                     contract_start, contract_end, pic_id, product_ids[]}. Aksi: clients.create
+PUT                /api/clients/:id                Ubah client (field yang tidak dikirim dikosongkan; product_ids hanya
+                                                     mengganti produk bila dikirim). Aksi: clients.update
+DELETE             /api/clients/:id                Hapus client beserta catatannya. Aksi: clients.delete
+GET                /api/clients/:id/comments       Riwayat catatan (terbaru dulu). Aksi: clients.access
+POST               /api/clients/:id/comments       Tambah catatan. Body: {content} (maks 5000 karakter). Aksi: clients.update
+DELETE             /api/clients/comments/:id       Hapus catatan — hanya penulis atau Super Admin
+GET                /api/client-statuses            List status + client_count. Aksi: clients.access atau settings.update
+POST/PUT/DELETE    /api/client-statuses[/:id]      Kelola status. Aksi: settings.update (Super Admin); hapus status yang
+                                                     dipakai client → 409
+```
+Validasi gagal membalas `400` dengan pesan jelas (nama bank/status wajib, tanggal akhir sebelum mulai, revenue negatif,
+status/PIC/produk tidak valid).
+
 ### Settings (Super Admin only)
 ```
 GET  /api/settings/mail        Ambil config SMTP saat ini (password tidak pernah dikembalikan — hanya password_set: true/false)
@@ -807,6 +852,8 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | `migration_v23.sql` | Kolom `feature_id` (FK `features`, nullable, `ON DELETE SET NULL`) + index di `bugs` dan `qa_test_cases` untuk kolom/dropdown **Features** (3.8, 3.9). Additive. Dipasang di initdb `docker-compose.yml`, tetapi initdb hanya jalan saat volume pertama dibuat — **database yang sudah ada wajib menjalankannya manual SEBELUM backend baru naik** (INSERT/UPDATE bug & test case di backend baru menyebut kolom ini, jadi tanpa migrasi create/edit gagal `500`) |
 | `migration_v24.sql` | Kolom `bugs.type` (`VARCHAR(20) NOT NULL DEFAULT 'bug'`, CHECK `bug`/`inquiry`) + index untuk kolom/dropdown **Type** di Bugs Incident (3.9). Additive; baris lama dan INSERT yang tidak menyebut kolom (mis. Lapor Bug Publik) otomatis `bug`. Dipasang di initdb `docker-compose.yml`, tetapi initdb hanya jalan saat volume pertama dibuat — **database yang sudah ada wajib menjalankannya manual SEBELUM backend baru naik** (INSERT/UPDATE bug di backend baru menyebut kolom ini, jadi tanpa migrasi create/edit gagal `500`) |
 | `migration_v25.sql` | Tabel `qa_attachments` + index untuk lampiran test case (3.8). Additive dan idempotent. Dipasang di initdb `docker-compose.yml`, tetapi initdb hanya jalan saat volume pertama dibuat — **database yang sudah ada wajib menjalankannya manual SEBELUM backend baru naik** (endpoint unduh file mencari nama asli di tabel ini, dan upload/list lampiran QA gagal `500` tanpa tabelnya) |
+| `migration_v26.sql` | Modul Client Management (3.17): tabel `client_statuses` (+5 status awal), `clients`, `client_products`, `client_comments` dan permission modul `clients` yang **digabung** (`||`, bukan ditimpa) ke `roles.permissions` Super Admin/Manager (penuh) dan PO (`access`+`update`). Additive dan idempotent. Dipasang di initdb `docker-compose.yml`, tetapi initdb hanya jalan saat volume pertama dibuat — **database yang sudah ada wajib menjalankannya manual SEBELUM backend baru naik** (endpoint `/api/clients` membaca tabel-tabelnya, jadi tanpa migrasi gagal `500`) |
+| `migration_v27.sql` | Impacted Features (3.2): tabel `backlog_item_features` + backfill dari `backlog_items.feature_id` yang sudah ada. Additive & idempotent. Dipasang di initdb `docker-compose.yml`, tetapi initdb hanya jalan saat volume pertama dibuat — **database yang sudah ada wajib menjalankannya manual SEBELUM backend baru naik** (list/create/edit Backlog membaca tabel ini, jadi tanpa migrasi gagal `500`) |
 
 ---
 
@@ -872,3 +919,8 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | 2 Nov 2026 | 3.11 | Lampiran: (1) Bugs Incident (3.9) — lampiran tidak lagi hanya gambar; kini sama seperti Backlog (gambar, PDF, Word, Excel, PowerPoint, ZIP, CSV, TXT, max 10MB) dengan preview PDF/TXT/CSV. (2) QA Module (3.8) — test case kini punya lampiran (sebelumnya tidak ada), tabel `qa_attachments`. Keduanya memakai komponen UI bersama `AttachmentSection`. (3) Perbaikan: `DELETE /api/attachments/:id` kini khusus Backlog dan bug/QA punya rute hapus sendiri (`/api/bugs/attachments/:id`, `/api/qa/attachments/:id`) — sebelumnya endpoint mencari id di tabel backlog dulu lalu tabel bug, sehingga menghapus lampiran bug bisa salah menghapus lampiran backlog yang kebetulan berid sama. Form Lapor Bug Publik (3.15) tetap hanya menerima gambar. `migration_v25.sql` |
 | 3 Nov 2026 | 3.12 | Backlog (3.2): **status Epic dan Story otomatis mengikuti anaknya, maju saja.** Cukup 1 anak yang pindah ke `todo`/`in_progress`/`in_review` dan induknya ikut ke status itu (walau anak lain berbeda); `done` hanya bila semua anak `done` (Epic menghitung semua Story/Task/Bug di bawahnya, Story menghitung Task/Bug langsungnya, dari bawah ke atas sehingga satu aksi `done` bisa menyelesaikan Story lalu Epic). Tidak pernah mundur otomatis, induk `done` tetap `done`, `blocked` tidak memengaruhi dan tidak ditimpa, perubahan manual tetap boleh. Berlaku di `POST`/`PUT`/`PATCH /api/backlog/:id/status`; dicatat di log aktivitas induk, tanpa email. Batasan yang diketahui: hitung ulang hanya dipicu perubahan status atau pembuatan anak (bukan ganti parent, hapus anak, atau Import Jira); anak yang langsung `done` dari `backlog` belum menaikkan induk selama anak lain belum `done`; halaman My Tasks baru menampilkan status induk yang berubah setelah refresh. Backend saja, tanpa migrasi database, dan data lama tidak diperbaiki otomatis |
 | 3 Nov 2026 | 3.13 | Backlog (3.2), Epic Board, QA (3.8), Bugs Incident (3.9): **toast sukses saat membuat item menampilkan kode barunya** (`Item HRS-098 ditambahkan`, `Bug HRS-053 dibuat`, `Test case TC-045 dibuat`, `Epic HRS-104 dibuat`), kode ditebalkan dan toast tampil 6 detik supaya mudah dibaca/disalin dan dicari di tabel. Epic Board yang sebelumnya tidak punya toast sukses kini ikut. Toast edit/error/import tidak berubah. Frontend saja (komponen bersama `utils/createdToast.jsx`), tanpa perubahan backend atau database |
+| 11 Nov 2026 | 3.14 | Products (3.6) → tab Roadmap: tambah status **Testing** (badge amber) untuk menandai fitur yang sedang tahap testing, di antara On Progress dan Active. Muncul di badge tabel, filter status, kartu ringkasan (kini 6 kartu), dan form Tambah/Edit Item Roadmap; urutan status kini mengikuti alur hidup fitur: Planned → Research → On Progress → Testing → Active → Offline. Frontend saja (`Products.jsx`); kolom `product_roadmap.status` berupa `VARCHAR` tanpa constraint sehingga tidak ada migrasi dan tidak ada perubahan backend. Data lama tidak berubah |
+| 11 Nov 2026 | 3.15 | **Tempel lampiran dengan Ctrl+V** di semua form berlampiran: Backlog (3.2), Bugs Incident (3.9), QA Test Case (3.8), dan Lapor Bug Publik (3.15). Gambar/file di clipboard langsung menjadi lampiran (screenshot dinamai `screenshot-YYYYMMDD-HHMMSS.png`); paste teks atau salinan sel Excel/Word tidak diganggu. Form Backlog kini memakai komponen lampiran bersama (`AttachmentSection`, sama seperti Bugs/QA) sehingga **lampiran juga bisa ditambahkan saat membuat item baru** (diantrekan, diunggah setelah item tersimpan; tetap opsional). Frontend saja (`utils/pasteFiles.js`, `AttachmentSection.jsx`, `Backlog.jsx`, `ReportBug.jsx`); endpoint, batas 10MB, dan tipe file yang diizinkan tidak berubah |
+| 11 Nov 2026 | 3.16 | **Modul baru Client Management** (3.17) — daftar bank/klien pemakai produk internal: kota, status (bisa diatur di Admin → Client Statuses), no kontrak, produk (beberapa), PIC inhouse (otomatis Product Owner produk, bisa diganti), revenue per kontrak, start/end kontrak, dan riwayat catatan update. Satu baris = satu kontrak. Permission modul baru `clients` (Super Admin & Manager penuh, PO lihat+ubah). Butuh `migration_v26.sql` (jalankan manual SEBELUM backend baru naik). Menu Clients, halaman Client Statuses, dan Ctrl K (aksi "Client baru" + pencarian client) |
+| 11 Nov 2026 | 3.17 | **Impacted Features** (3.2): field Feature di form Tambah/Edit Backlog item kini multi-select ber-label "Impacted Features" — satu item bisa menandai banyak feature roadmap; tabel Backlog dan My Tasks menampilkan semuanya sebagai chip. Hanya di Backlog (Bugs/QA tidak berubah). `migration_v27.sql`: tabel `backlog_item_features` + backfill; `feature_id` lama dipertahankan sebagai feature pertama |
+| 11 Nov 2026 | 3.18 | **Share link kartu** (3.2): tombol **Salin link** di semua modal/kartu/baris yang punya deep link (Backlog, Bugs, QA, Sprint, Produk, Client, Leader Task, My Tasks, Epic Board), fallback salin untuk server http, **redirect kembali ke link setelah login** (juga untuk link notifikasi), dan Backlog **baca-saja** untuk role tanpa izin edit. Tampilan Impacted Features di tabel Backlog diubah jadi feature pertama + badge **+N**. Frontend saja |

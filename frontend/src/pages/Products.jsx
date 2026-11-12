@@ -13,10 +13,11 @@ const COLORS = ['#4F46E5','#0EA5E9','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC
 
 // ─── Roadmap status config ────────────────────────────────────────────────────
 const ROADMAP_STATUSES = [
-  { key: 'active',      label: 'Active',       cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-  { key: 'on_progress', label: 'On Progress',  cls: 'bg-blue-100 text-blue-700 border-blue-200' },
   { key: 'planned',     label: 'Planned',      cls: 'bg-slate-100 text-slate-600 border-slate-200' },
   { key: 'research',    label: 'Research',     cls: 'bg-purple-100 text-purple-700 border-purple-200' },
+  { key: 'on_progress', label: 'On Progress',  cls: 'bg-blue-100 text-blue-700 border-blue-200' },
+  { key: 'testing',     label: 'Testing',      cls: 'bg-amber-100 text-amber-700 border-amber-200' },
+  { key: 'active',      label: 'Active',       cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
   { key: 'offline',     label: 'Offline',      cls: 'bg-red-100 text-red-700 border-red-200' },
 ];
 
@@ -493,7 +494,7 @@ export default function Products() {
           </div>
 
           {/* Status summary cards */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
             {ROADMAP_STATUSES.map(s => {
               const count = roadmap.filter(r =>
                 r.status === s.key &&
@@ -595,26 +596,30 @@ export default function Products() {
 
       {/* ── Modals ── */}
       <Modal open={modal.open && modal.type === 'product'} onClose={closeModal}
-        title={modal.data ? 'Edit Produk' : 'Tambah Produk'} size="md">
+        title={modal.data ? 'Edit Produk' : 'Tambah Produk'} size="md"
+        shareLink={modal.data ? `/products?product=${modal.data.id}` : undefined}>
         <ProductForm product={modal.data} users={users}
           onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
 
       <Modal open={modal.open && modal.type === 'epic'} onClose={closeModal}
-        title={modal.data ? 'Edit Epic' : 'Tambah Epic'} size="sm">
+        title={modal.data ? 'Edit Epic' : 'Tambah Epic'} size="sm"
+        shareLink={modal.data ? `/products?epic=${modal.data.id}` : undefined}>
         <EpicForm epic={modal.data} productId={modal.productId}
           onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
 
       <Modal open={modal.open && modal.type === 'feature'} onClose={closeModal}
-        title={modal.data ? 'Edit Feature' : 'Tambah Feature'} size="md">
+        title={modal.data ? 'Edit Feature' : 'Tambah Feature'} size="md"
+        shareLink={modal.data ? `/products?feature=${modal.data.id}` : undefined}>
         <FeatureForm feature={modal.data} productId={modal.productId} users={users}
           epics={epics.filter(e => e.product_id === modal.productId)}
           onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
 
       <Modal open={modal.open && modal.type === 'roadmap'} onClose={closeModal}
-        title={modal.data ? 'Edit Item Roadmap' : 'Tambah Item ke Roadmap'} size="md">
+        title={modal.data ? 'Edit Item Roadmap' : 'Tambah Item ke Roadmap'} size="md"
+        shareLink={modal.data ? `/products?roadmap=${modal.data.id}` : undefined}>
         <RoadmapForm item={modal.data} products={products}
           defaultProductId={modal.productId}
           onSave={() => { closeModal(); load(); }} onClose={closeModal} />

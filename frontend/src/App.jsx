@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout     from './components/Layout';
 import Login      from './pages/Login';
@@ -17,9 +17,12 @@ import MyTask     from './pages/MyTask';
 import Profile    from './pages/Profile';
 import CLevel     from './pages/CLevel';
 import NotificationSettings from './pages/NotificationSettings';
+import Clients    from './pages/Clients';
+import ClientSettings from './pages/ClientSettings';
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
+  const location = useLocation();
   if (loading) return (
     <div className="h-screen flex items-center justify-center bg-slate-50">
       <div className="flex flex-col items-center gap-3">
@@ -28,7 +31,8 @@ function PrivateRoute({ children }) {
       </div>
     </div>
   );
-  return user ? children : <Navigate to="/login" replace />;
+  // Remember where the visitor was heading (e.g. a shared /backlog?item=12 link) so Login can send them back
+  return user ? children : <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
 }
 
 // Route-level gate for fully-private modules (Users, Bugs, C-Level, Settings, Import Jira).
@@ -62,10 +66,12 @@ function AppRoutes() {
         <Route path="standup"       element={<Standup />} />
         <Route path="epic-board"    element={<EpicBoard />} />
         <Route path="my-tasks"      element={<MyTask />} />
+        <Route path="clients"      element={<RequirePermission module="clients" action="access"><Clients /></RequirePermission>} />
         <Route path="c-level"      element={<RequirePermission module="c_level" action="access"><CLevel /></RequirePermission>} />
         <Route path="import/jira"  element={<RequirePermission module="import" action="run"><JiraImport /></RequirePermission>} />
         <Route path="profile"      element={<Profile />} />
         <Route path="settings/notifications" element={<RequirePermission module="settings" action="update"><NotificationSettings /></RequirePermission>} />
+        <Route path="settings/clients" element={<RequirePermission module="settings" action="update"><ClientSettings /></RequirePermission>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -250,3 +250,59 @@ Fitur baru setelah revamp (PRD 3.2, v3.13). Frontend saja (`utils/createdToast.j
 - 🧑 Cek tampilan toast di tema gelap dan layar sempit; buat item lewat tombol "+" di header grup Backlog dan lewat Ctrl K ("… baru")
 - ⚠️ Toast edit ("Item diperbarui", dst.), toast error, dan hasil Import CSV/Jira (hanya jumlah) sengaja tidak diubah
 - ⚠️ Di form Bug dan Test Case, toast baru muncul setelah lampiran selesai diunggah; bila unggah lampiran gagal, toast sukses tidak tampil walau item sudah tersimpan (perilaku lama, tidak diubah)
+
+## 26. Status Roadmap "Testing"
+Fitur baru (PRD 3.6, v3.14). Frontend saja (`Products.jsx`), tanpa migrasi dan tanpa perubahan backend.
+- 🧑 Products → Roadmap: dropdown filter status memuat Planned, Research, On Progress, Testing, Active, Offline (urutan ini); ada 6 kartu ringkasan dalam satu baris di layar lebar
+- 🧑 Edit satu item → ubah status ke Testing → simpan; badge amber "Testing" tampil di tabel dan kartu Testing bertambah 1
+- 🧑 Klik kartu Testing → tabel terfilter ke item Testing; klik lagi → filter dilepas
+- 🧑 Ctrl K: cari item roadmap berstatus Testing → hasil tampil dengan ikon status Testing dan membuka form edit
+- 🧑 Layar sempit: 6 kartu tersusun 2 kolom tanpa terpotong
+- ⚠️ Item roadmap yang dibuat otomatis dari Feature ("Tampilkan di Roadmap") tetap berstatus `planned`; status Testing diubah manual lewat tab Roadmap
+
+## 27. Tempel lampiran dengan Ctrl+V
+Fitur baru (PRD 3.2, v3.15). Frontend saja. Diuji di Chrome sungguhan (headless, login admin) pada stack Docker lokal lewat event paste berisi file PNG; data uji `ZZPASTE` sudah dihapus.
+- ✅ **Lapor Bug Publik**: paste gambar → tile `screenshot-YYYYMMDD-HHMMSS.png`; nama file asli dipertahankan; paste file non-gambar ditolak dengan toast
+- ✅ **Backlog (edit item)**: paste gambar → langsung tersimpan di server (`image/png`), tile tampil, file bisa dibuka kembali
+- ✅ **Backlog (item baru)**: blok Lampiran kini ada; paste → tile antrean + petunjuk "diunggah setelah item disimpan"
+- ✅ **Bugs Incident dan QA (record baru)**: paste → tile antrean
+- ✅ Paste teks biasa, dan paste teks+gambar (mirip salinan sel Excel), **tidak** diambil alih — tetap tertempel sebagai teks
+- ✅ Respons `POST /api/backlog` memuat `id` (dipakai untuk unggah antrean); build lolos; hanya `pt_frontend` di-rebuild (`--no-deps`)
+- ✅ Diuji manual oleh pengguna: tempel screenshot sungguhan (Ctrl+V) berfungsi
+- 🧑 Screenshot sungguhan (Win+Shift+S lalu Ctrl+V) di tiap form: Backlog edit, Backlog baru, Bug, Test Case, Lapor Bug Publik
+- 🧑 Backlog baru: tempel gambar, isi form, **Tambah Item** → buka item tsb, lampiran harus ada; coba juga tanpa lampiran (tetap bisa disimpan)
+- 🧑 Copy file (Ctrl+C di Explorer, mis. PDF/XLSX) lalu Ctrl+V di form → jadi lampiran; copy sel Excel lalu Ctrl+V di kolom Catatan → tetap teks
+- 🧑 Item Backlog lama: lampiran lama tetap tampil, preview gambar/PDF/TXT/CSV dan hapus lampiran berfungsi seperti sebelumnya
+- ⚠️ Paste hanya aktif saat form berlampiran terbuka dan tidak ada preview gambar/dokumen yang sedang tampil
+- ⚠️ Tidak ada paste di kolom komentar (komentar hanya teks) dan di fitur Import CSV/Jira (bukan lampiran)
+
+## 28. Client Management
+Fitur baru (PRD 3.17, v3.16). Butuh `migration_v26.sql`. Diuji otomatis di stack Docker lokal (API dengan akun uji + Chrome sungguhan lewat Vite dev server); data uji berawalan `ZZTEST` sudah dihapus.
+- ✅ API: validasi (nama bank/status wajib, akhir kontrak < mulai, tanggal tak valid 31 Feb, revenue negatif, status/produk tidak valid) → `400` dengan pesan jelas
+- ✅ Permission: Developer `403`; PO bisa lihat+ubah+catat tapi `403` saat tambah; Manager/Super Admin penuh; PO `403` di pengaturan status
+- ✅ Satu bank boleh punya dua baris (nama tidak unik); `PUT` tanpa `product_ids` tidak melepas produk; produk duplikat di body hanya tersimpan sekali
+- ✅ Status: tambah/ubah/hapus; nama kembar `409`; hapus status yang dipakai client `409` dengan jumlah client; kode status dibuat dari nama
+- ✅ Catatan: tambah (kosong ditolak), hapus catatan milik orang lain `403` bagi non-Super Admin, hapus milik sendiri berhasil
+- ✅ FK: hapus user permanen tidak gagal (`pic_id` dan `client_comments.user_id` jadi NULL); migrasi dijalankan dua kali tanpa error; permission lain tidak tertimpa
+- ✅ UI: pilih produk Sales CRM → PIC otomatis Citra (Product Owner-nya) beserta petunjuknya; tambah produk lain tidak mengubah PIC; revenue tampil `Rp 2.500.000.000`; baris, kartu status, filter, dan pencarian bekerja; catatan tampil di modal dan di kolom Update Terakhir
+- ✅ UI: Ctrl K menemukan client dan membuka modal; deep link `?client=ID` dan `?new=1`; tema gelap; layar 390px; role view-only → modal baca-saja (semua input nonaktif, tanpa tombol simpan/kotak catatan); Developer tidak melihat menu Clients dan `/clients` menolak
+- 🧑 Jalankan `migration_v26.sql` di database yang sudah ada (backup dulu), lalu login ulang. Menu **Clients** muncul untuk Super Admin, Manager, dan PO
+- 🧑 Admin → Client Statuses: ubah warna/urutan status, tambah status baru, lalu cek kartu ringkasan dan dropdown di Client List
+- 🧑 Tambah client sungguhan: pilih beberapa produk, ganti PIC manual lalu pilih produk lain (PIC tidak boleh berubah lagi), isi kontrak, simpan, edit lagi
+- 🧑 Beri role lain (mis. QA) permission **Client Management → Akses** di Users & Roles: menu muncul dan modal baca-saja
+- ⚠️ Revenue dihitung per kontrak dan **tidak dijumlahkan** di halaman (menjumlah client Approaching/Declined menyesatkan)
+- ⚠️ Belum ada peringatan "kontrak hampir habis" dan belum ada Import Excel client (tidak diminta; bisa jadi tahap berikutnya)
+- ⚠️ `docker-compose.yml` kini memasang v26 di initdb, jadi `docker compose up` berikutnya membuat ulang `pt_postgres` (data volume aman, hanya restart singkat)
+
+## 29. Impacted Features (multi-feature) & Share link
+
+- ✅ API: `PUT /api/backlog/{id}` `{feature_ids:[..]}` menyimpan banyak feature, `feature_id` lama = feature pertama; feature produk lain `400`; `feature_ids:[]` mengosongkan; `feature_id` tunggal (klien lama) tetap jalan; tanpa kedua field → tidak berubah; `POST` dengan `feature_ids` juga bisa; perubahan tercatat di log aktivitas (`Impacted Features: "A" → "A, B"`)
+- ✅ DB: `migration_v27.sql` — 30 item lama ter-backfill ke `backlog_item_features`
+- ✅ UI: field **Impacted Features** (dropdown checklist + pencarian + chip di bawahnya); tabel Backlog menampilkan feature pertama + badge `+N` (tooltip = daftar lengkap)
+- ✅ Share link (otomatis, Chrome headless, 12 skenario): pengunjung belum login → `/login` → setelah login kembali ke `/backlog?item=ID` dan modal item terbuka; token kedaluwarsa → login ulang → kembali ke tujuan; tombol **Salin link** menyalin `http://host/backlog?item=ID` dan memunculkan toast, juga saat `navigator.clipboard` tidak ada (server http biasa); role tanpa izin edit membuka modal **Detail Item** baca-saja (field nonaktif, tanpa tombol Perbarui); path balik berbahaya (`//evil.example.com`) diabaikan
+- 🧑 Jalankan `migration_v27.sql` di database yang sudah ada (backup dulu) **sebelum** backend baru naik, kalau tidak list/create/edit Backlog `500`
+- 🧑 Cek tombol Salin link di: header modal — tombol merah bertuliskan "Salin link" (Backlog, Bugs, QA, Sprint, Produk/Epic/Feature/Roadmap, Client, Leader Task); lalu ikon kecil di baris tabel & kartu Board Backlog, kartu Kanban Sprint, header Sprint, baris Epic Board, My Task (baris & panel), panel Leader Task. Tempel link di tab baru → harus membuka record yang sama
+- 🧑 Coba di server kantor lewat `http://IP-server`: tombol Salin link harus tetap menyalin (pakai fallback, bukan Clipboard API)
+- 🧑 Buka link kartu Backlog (`/backlog?item=ID`) dan Bug (`/bugs?bug=ID`) yang punya banyak komentar: modal harus mulai dari **paling atas** (judul dan field terlihat), bukan di bagian Aktivitas. Daftar komentar tetap menampilkan komentar terbaru, dan setelah mengirim komentar daftar menggulung ke komentar baru tanpa menggeser modal
+- ⚠️ Link ke record yang tidak boleh diakses role penerima: halaman terbuka tapi modal tidak (mengikuti izin modul); Backlog membuka detail baca-saja. `GET /api/backlog/{id}` tidak membatasi per produk (perilaku lama)
+- ⚠️ Modul Users (user/role/departemen) sengaja tidak diberi tombol Salin link

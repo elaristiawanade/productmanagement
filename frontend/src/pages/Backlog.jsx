@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Pencil, Trash2, AlertCircle, Link2, Paperclip, Upload, X, ImageIcon, MessageSquare, Send, FileDown, ChevronDown, Check, FileText, FileSpreadsheet, Presentation, Archive, File as FileIcon, ExternalLink, List, Columns3, Layers, Zap } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, AlertCircle, Link2, X, MessageSquare, Send, FileDown, ChevronDown, Check, List, Columns3, Layers, Zap } from 'lucide-react';
 import client from '../api/client';
 import PresenceDot from '../components/PresenceDot';
 import Modal from '../components/Modal';
@@ -10,12 +10,14 @@ import StatusMenu from '../components/StatusMenu';
 
 const StatusMenuButton = (props) => <StatusMenu statuses={STATUSES} {...props} />;
 import LinkInsertButton from '../components/LinkInsertButton';
+import AttachmentSection from '../components/AttachmentSection';
 import SearchableSelect from '../components/SearchableSelect';
 import SearchableMultiSelect from '../components/SearchableMultiSelect';
 import AssigneeStack from '../components/AssigneeStack';
 import AuthorLine from '../components/AuthorLine';
 import { renderWithLinks } from '../utils/linkify';
 import { useDeepLink } from '../utils/deepLink';
+import CopyLinkButton from '../components/CopyLinkButton';
 import { toastCreated } from '../utils/createdToast';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -40,49 +42,6 @@ function TypeTag({ type }) {
   return <span className={`shrink-0 text-[11px] font-medium leading-5 px-1.5 rounded ${TYPE_TAG[type] || TYPE_TAG.task}`}>{type}</span>;
 }
 
-
-// ─── Backlog attachments ───────────────────────────────────────────────────
-const ATTACHMENT_ACCEPT = 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.csv,.txt';
-const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-const ALLOWED_ATTACHMENT_EXTENSIONS = [
-  ...IMAGE_EXTENSIONS, '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.zip', '.csv', '.txt',
-];
-
-function fileExt(name = '') {
-  const i = name.lastIndexOf('.');
-  return i >= 0 ? name.slice(i).toLowerCase() : '';
-}
-
-function isImageAttachment(att) {
-  if (att.mime_type?.startsWith('image/')) return true;
-  return IMAGE_EXTENSIONS.includes(fileExt(att.original_name || att.filename));
-}
-
-// Formats we can render inline without a document-viewer library: PDF has a native
-// browser renderer, TXT/CSV are just fetched as text. Everything else (docx/xlsx/zip/…)
-// falls back to opening/downloading in a new tab.
-function previewKindOf(att) {
-  const ext = fileExt(att.original_name || att.filename);
-  if (ext === '.pdf') return 'pdf';
-  if (ext === '.txt') return 'txt';
-  if (ext === '.csv') return 'csv';
-  return null;
-}
-
-function parseCsvSimple(text) {
-  return text.replace(/\r\n/g, '\n').replace(/﻿/, '').split('\n')
-    .filter(line => line.length > 0)
-    .map(line => line.split(','));
-}
-
-function AttachmentIcon({ att, className }) {
-  const ext = fileExt(att.original_name || att.filename);
-  if (['.xls', '.xlsx', '.csv'].includes(ext)) return <FileSpreadsheet className={className} />;
-  if (['.ppt', '.pptx'].includes(ext)) return <Presentation className={className} />;
-  if (ext === '.zip') return <Archive className={className} />;
-  if (['.pdf', '.doc', '.docx', '.txt'].includes(ext)) return <FileText className={className} />;
-  return <FileIcon className={className} />;
-}
 
 function F({ label, children, required }) {
   return (
@@ -175,7 +134,7 @@ function ActivitySection({ itemId, users = [] }) {
   const [mentionQuery, setMentionQuery]= useState('');
   const [mentionStart, setMentionStart]= useState(-1);
   const [mentionIdx,   setMentionIdx]  = useState(0);
-  const endRef   = useRef(null);
+  const listRef  = useRef(null);
   const inputRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -187,7 +146,8 @@ function ActivitySection({ itemId, users = [] }) {
   }, [itemId]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [activities.length]);
+  // Scroll only the comment list to the newest entry. (scrollIntoView would also scroll the modal itself to the bottom.)
+  useEffect(() => { const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }, [activities.length]);
 
   const submit = async () => {
     if (!comment.trim() || sending) return;
@@ -286,7 +246,7 @@ function ActivitySection({ itemId, users = [] }) {
         <MessageSquare className="w-3.5 h-3.5" />
         Aktivitas & Komentar
       </p>
-      <div className="max-h-56 overflow-y-auto space-y-2 mb-3 pr-1">
+      <div ref={listRef} className="max-h-56 overflow-y-auto space-y-2 mb-3 pr-1">
         {activities.length === 0 && (
           <p className="text-xs text-slate-400 text-center py-4">Belum ada aktivitas.</p>
         )}
@@ -322,7 +282,6 @@ function ActivitySection({ itemId, users = [] }) {
             </div>
           </div>
         ))}
-        <div ref={endRef} />
       </div>
 
       {/* Input area */}
@@ -422,13 +381,16 @@ function ChildrenSection({ item, onOpenItem }) {
   );
 }
 
-function ItemForm({ item, defaults, products, users, sprints, features, epics, onSave, onClose, onOpenItem }) {
+// readOnly: a user without backlog edit permission who opened an item through a shared link — fields are
+// disabled and the save button is hidden; comments, children and attachments' viewing still work.
+function ItemForm({ item, defaults, products, users, sprints, features, epics, onSave, onClose, onOpenItem, readOnly = false }) {
   const [form, setForm] = useState({
     product_id: item?.product_id || '',
     code: item?.code || '',
     title: item?.title || '',
     type: item?.type || 'story',
-    feature_id: item?.feature_id || '',
+    // Impacted Features (roadmap rows); legacy single feature_id is the fallback for an item without the new list
+    feature_ids: item?.features?.length ? item.features.map(f => f.id) : (item?.feature_id ? [item.feature_id] : []),
     parent_id: item?.parent_id || '',
     priority: item?.priority || 'medium',
     story_points: item?.story_points || 0,
@@ -444,32 +406,8 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
   const [stories,      setStories]      = useState([]);
   const [epicsBacklog, setEpicsBacklog] = useState([]);
   const [saving,      setSaving]      = useState(false);
-  const [attachments, setAttachments] = useState([]);
-  const [uploading,   setUploading]   = useState(false);
-  const [previewImage, setPreviewImage] = useState(null);
-  const [previewDoc,   setPreviewDoc]   = useState(null); // { att, kind: 'pdf'|'txt'|'csv' }
-  const [docContent,   setDocContent]   = useState('');
-  const [docLoading,   setDocLoading]   = useState(false);
-  const fileInputRef = useRef(null);
-  const notesRef     = useRef(null);
-
-  useEffect(() => {
-    if (!previewDoc || previewDoc.kind === 'pdf') { setDocContent(''); return; }
-    setDocLoading(true);
-    fetch(`/api/attachments/file/${previewDoc.att.filename}`)
-      .then(r => r.text())
-      .then(setDocContent)
-      .catch(() => setDocContent('Gagal memuat isi file.'))
-      .finally(() => setDocLoading(false));
-  }, [previewDoc]);
-
-  useEffect(() => {
-    if (!previewImage && !previewDoc) return;
-    // Capture + stopPropagation: Esc closes only the preview, not the item modal underneath
-    const handler = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setPreviewImage(null); setPreviewDoc(null); } };
-    document.addEventListener('keydown', handler, true);
-    return () => document.removeEventListener('keydown', handler, true);
-  }, [previewImage, previewDoc]);
+  const attachRef = useRef(null); // shared AttachmentSection: queues files for a new item, uploads them after create
+  const notesRef  = useRef(null);
 
   const insertNotesLink = (snippet) => {
     const el  = notesRef.current;
@@ -506,48 +444,6 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
     }
   }, [form.type, form.product_id]);
 
-  const loadAttachments = useCallback(async () => {
-    if (!item?.id) return;
-    try {
-      const res = await client.get(`/backlog/${item.id}/attachments`);
-      setAttachments(res.data || []);
-    } catch { setAttachments([]); }
-  }, [item?.id]);
-
-  useEffect(() => { loadAttachments(); }, [loadAttachments]);
-
-  const handleUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(fileExt(file.name))) {
-      toast.error('Tipe file tidak didukung. Gunakan gambar, PDF, Word, Excel, PowerPoint, ZIP, CSV, atau TXT');
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) { toast.error('Ukuran file maks 10MB'); return; }
-    setUploading(true);
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      await client.post(`/backlog/${item.id}/attachments`, fd);
-      toast.success('File berhasil diunggah');
-      loadAttachments();
-    } catch (err) {
-      toast.error(err?.response?.data?.error || 'Gagal mengunggah file');
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  const deleteAttachment = async (id) => {
-    if (!confirm('Hapus lampiran ini?')) return;
-    try {
-      await client.delete(`/attachments/${id}`);
-      toast.success('Lampiran dihapus');
-      loadAttachments();
-    } catch { toast.error('Gagal menghapus'); }
-  };
-
   const handleTypeChange = (e) => {
     const t = e.target.value;
     setForm(f => ({
@@ -575,6 +471,8 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
       payload.assignee_id = payload.assignee_ids[0] || '';
       payload.additional_assignee_ids = payload.assignee_ids.slice(1);
       delete payload.assignee_ids;
+      // feature_ids is the source of truth; the backend stores the first one in the legacy feature_id column
+      payload.feature_ids = (payload.feature_ids || []).map(Number);
       if (payload.type === 'epic') payload.parent_id = null;
       if (payload.type === 'independent') { payload.sprint_id = null; payload.parent_id = null; }
       if (item?.id) {
@@ -582,6 +480,7 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
         toast.success('Item diperbarui');
       } else {
         const res = await client.post('/backlog', payload);
+        await attachRef.current?.uploadPending(res.data.id);
         toastCreated('Item', res.data?.code, 'ditambahkan');
       }
       onSave();
@@ -593,10 +492,12 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
 
   return (
     <form onSubmit={save} className="grid grid-cols-2 gap-4">
+      {/* readOnly disables every field natively; attachments/children/activity stay outside so they remain usable */}
+      <fieldset disabled={readOnly} className="col-span-2 grid grid-cols-2 gap-4 border-0 p-0 m-0 min-w-0">
       {item?.id && <AuthorLine name={item.created_by_name} date={item.created_at} />}
       <F label="Produk" required>
         <select className="select" value={form.product_id}
-          onChange={e => setForm(f => ({ ...f, product_id: e.target.value, sprint_id: '', feature_id: '', parent_id: '' }))}
+          onChange={e => setForm(f => ({ ...f, product_id: e.target.value, sprint_id: '', feature_ids: [], parent_id: '' }))}
           required>
           <option value="">Pilih produk</option>
           {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -738,11 +639,24 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
           </div>
         </F>
       )}
-      <F label="Feature">
-        <select className="select" value={form.feature_id} onChange={e => setForm(f => ({ ...f, feature_id: e.target.value }))}>
-          <option value="">—</option>
-          {filteredFeatures.map(f => <option key={f.id} value={f.id}>{f.feature_name}</option>)}
-        </select>
+      <F label="Impacted Features">
+        <SearchableMultiSelect label="feature"
+          options={filteredFeatures.map(f => ({ v: f.id, l: f.feature_name }))}
+          selected={form.feature_ids}
+          searchPlaceholder="Cari feature..."
+          emptyLabel="Pilih feature"
+          emptyMessage={form.product_id ? 'Belum ada feature' : 'Pilih produk dulu'}
+          disabled={!form.product_id}
+          onChange={vals => setForm(f => ({ ...f, feature_ids: vals }))} />
+        {form.feature_ids.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {form.feature_ids.map(id => (
+              <span key={id} className="text-[11px] px-1.5 leading-[18px] rounded bg-indigo-50 text-indigo-700 border border-indigo-100">
+                {features.find(f => f.id === id)?.feature_name ?? `#${id}`}
+              </span>
+            ))}
+          </div>
+        )}
         {form.product_id && filteredFeatures.length === 0 && (
           <p className="text-xs text-slate-400 mt-1">Belum ada feature. Tambahkan di <strong>Products → Roadmap</strong>.</p>
         )}
@@ -777,83 +691,10 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
         </F>
       </div>
 
-      {/* Attachments — only when editing existing item */}
-      {item?.id && (
-        <div className="col-span-2">
-          <div className="border-t border-slate-100 pt-4">
-            <div className="flex items-center justify-between mb-3">
-              <label className="label mb-0 flex items-center gap-1.5">
-                <Paperclip className="w-3.5 h-3.5 text-slate-400" />
-                Lampiran
-                {attachments.length > 0 && (
-                  <span className="text-xs font-normal text-slate-400 ml-1">({attachments.length})</span>
-                )}
-              </label>
-              <button type="button"
-                className="btn-secondary text-xs py-1 px-2 flex items-center gap-1.5"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}>
-                {uploading
-                  ? <span className="w-3.5 h-3.5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-                  : <Upload className="w-3.5 h-3.5" />}
-                {uploading ? 'Mengunggah...' : 'Unggah File'}
-              </button>
-              <input ref={fileInputRef} type="file" accept={ATTACHMENT_ACCEPT} className="hidden" onChange={handleUpload} />
-            </div>
-            {attachments.length === 0 ? (
-              <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center cursor-pointer hover:border-slate-400 hover:bg-slate-50 transition-colors"
-                onClick={() => fileInputRef.current?.click()}>
-                <ImageIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-xs text-slate-400">Klik untuk unggah file</p>
-                <p className="text-xs text-slate-300 mt-0.5">Gambar, PDF, Word, Excel, PowerPoint, ZIP, CSV, TXT • Maks 10MB</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-3 gap-2">
-                {attachments.map(att => {
-                  const isImage = isImageAttachment(att);
-                  const docKind = !isImage ? previewKindOf(att) : null;
-                  const openAttachment = () => {
-                    if (isImage) { setPreviewImage(att); return; }
-                    if (docKind) { setPreviewDoc({ att, kind: docKind }); return; }
-                    window.open(`/api/attachments/file/${att.filename}`, '_blank');
-                  };
-                  return (
-                    <div key={att.id} className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-50 aspect-video cursor-pointer"
-                      onClick={openAttachment}>
-                      {isImage ? (
-                        <img src={`/api/attachments/file/${att.filename}`} alt={att.original_name}
-                          className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 px-2">
-                          <AttachmentIcon att={att} className="w-7 h-7 text-slate-400" />
-                          <p className="text-[11px] text-slate-500 text-center truncate w-full">{att.original_name}</p>
-                        </div>
-                      )}
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors pointer-events-none">
-                        <button type="button" onClick={(e) => { e.stopPropagation(); deleteAttachment(att.id); }}
-                          title="Hapus lampiran" aria-label="Hapus lampiran"
-                          className="pointer-events-auto absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600">
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      {isImage && (
-                        <p className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs px-1.5 py-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                          {att.original_name}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-                <button type="button" onClick={() => fileInputRef.current?.click()}
-                  className="aspect-video rounded-lg border-2 border-dashed border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-colors flex flex-col items-center justify-center gap-1">
-                  <Upload className="w-4 h-4 text-slate-400" />
-                  <span className="text-xs text-slate-400">Tambah</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      </fieldset>
+
+      {/* Attachments — optional; for a new item files are queued and uploaded right after it is created */}
+      <AttachmentSection ref={attachRef} basePath="/backlog" deletePath="/attachments" entityId={item?.id} noun="item" />
 
       {/* Children (Stories for Epic, Tasks+Bugs for Story) — only when editing */}
       {item?.id && (item.type === 'epic' || item.type === 'story') && (
@@ -870,72 +711,13 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
       )}
 
       <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-slate-100">
-        <button type="button" className="btn-secondary" onClick={onClose}>Batal</button>
-        <button type="submit" className="btn-primary" disabled={saving}>
-          {saving ? 'Menyimpan...' : (item?.id ? 'Perbarui' : 'Tambah Item')}
-        </button>
-      </div>
-
-      {previewImage && (
-        <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6"
-          onClick={() => setPreviewImage(null)}>
-          <button type="button" onClick={() => setPreviewImage(null)}
-            className="absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2">
-            <X className="w-5 h-5" />
+        <button type="button" className="btn-secondary" onClick={onClose}>{readOnly ? 'Tutup' : 'Batal'}</button>
+        {!readOnly && (
+          <button type="submit" className="btn-primary" disabled={saving}>
+            {saving ? 'Menyimpan...' : (item?.id ? 'Perbarui' : 'Tambah Item')}
           </button>
-          <img src={`/api/attachments/file/${previewImage.filename}`} alt={previewImage.original_name}
-            className="max-w-full max-h-full rounded-lg shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
-        </div>
-      )}
-
-      {previewDoc && (
-        <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6"
-          onClick={() => setPreviewDoc(null)}>
-          <div className="w-full h-full max-w-4xl bg-white rounded-lg shadow-2xl flex flex-col overflow-hidden"
-            onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 shrink-0">
-              <p className="text-sm font-medium text-slate-700 truncate pr-2">{previewDoc.att.original_name}</p>
-              <div className="flex items-center gap-1 shrink-0">
-                <a href={`/api/attachments/file/${previewDoc.att.filename}`} target="_blank" rel="noreferrer"
-                  className="btn-ghost btn-sm rounded-lg p-1.5" title="Buka di tab baru">
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-                <button type="button" onClick={() => setPreviewDoc(null)} className="btn-ghost btn-sm rounded-lg p-1.5">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 overflow-auto bg-slate-50">
-              {previewDoc.kind === 'pdf' && (
-                <iframe src={`/api/attachments/file/${previewDoc.att.filename}`} title={previewDoc.att.original_name}
-                  className="w-full h-full border-0" />
-              )}
-              {previewDoc.kind === 'txt' && (
-                docLoading
-                  ? <p className="p-4 text-sm text-slate-400">Memuat...</p>
-                  : <pre className="p-4 text-xs text-slate-700 whitespace-pre-wrap break-words">{docContent}</pre>
-              )}
-              {previewDoc.kind === 'csv' && (
-                docLoading
-                  ? <p className="p-4 text-sm text-slate-400">Memuat...</p>
-                  : (
-                    <table className="text-xs border-collapse">
-                      <tbody>
-                        {parseCsvSimple(docContent).map((row, i) => (
-                          <tr key={i} className={i === 0 ? 'bg-slate-100 font-semibold' : 'even:bg-white odd:bg-slate-50'}>
-                            {row.map((cell, j) => (
-                              <td key={j} className="border border-slate-200 px-2 py-1 whitespace-nowrap">{cell}</td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </form>
   );
 }
@@ -1107,6 +889,7 @@ export default function Backlog() {
 
   const rowActions = (item) => (
     <div className="flex items-center gap-0.5 justify-end md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+      <CopyLinkButton path={`/backlog?item=${item.id}`} label={`Salin link ${item.code}`} />
       {canEdit && (
         <button className="w-7 h-7 grid place-items-center rounded-md text-slate-500 hover:bg-slate-200/70 hover:text-slate-800"
           title={`Edit ${item.code}`} onClick={e => { stop(e); setModal({ open: true, item, defaults: null }); }}>
@@ -1137,8 +920,15 @@ export default function Backlog() {
               <Link2 className="w-2.5 h-2.5" />{item.parent_code}
             </span>
           )}
-          {(item.feature_name || item.epic_name) && (
-            <span className="text-xs text-slate-400 truncate min-w-0">{item.feature_name || item.epic_name}</span>
+          {item.features?.length > 0 ? (
+            <span className="flex items-center gap-1 min-w-0 overflow-hidden" title={`Impacted Features: ${item.features.map(f => f.name).join(', ')}`}>
+              <span className="min-w-0 max-w-[160px] truncate text-[11px] px-1.5 leading-[18px] rounded bg-slate-100 text-slate-600">{item.features[0].name}</span>
+              {item.features.length > 1 && (
+                <span className="shrink-0 text-[11px] px-1.5 leading-[18px] rounded bg-slate-100 text-slate-500 font-medium">+{item.features.length - 1}</span>
+              )}
+            </span>
+          ) : item.epic_name && (
+            <span className="text-xs text-slate-400 truncate min-w-0">{item.epic_name}</span>
           )}
         </div>
       </td>
@@ -1300,7 +1090,7 @@ export default function Backlog() {
                 <th className="text-right font-normal px-3 py-2 w-12">Pts</th>
                 <th className="text-left font-normal px-3 py-2 w-[84px]">Produk</th>
                 <th className="text-left font-normal px-3 py-2 w-40">Sprint</th>
-                <th className="w-[72px]"><span className="sr-only">Aksi</span></th>
+                <th className="w-[104px]"><span className="sr-only">Aksi</span></th>
               </tr>
             </thead>
             <tbody>
@@ -1351,12 +1141,13 @@ export default function Backlog() {
                 </div>
                 {list.map(item => (
                   <div key={item.id} onClick={() => openItem(item)}
-                    className={`bg-white border border-slate-200 rounded-[10px] px-3 py-2.5 flex flex-col gap-2 text-left hover:border-slate-300 hover:shadow-sm transition ${canEdit ? 'cursor-pointer' : ''}`}>
+                    className={`group bg-white border border-slate-200 rounded-[10px] px-3 py-2.5 flex flex-col gap-2 text-left hover:border-slate-300 hover:shadow-sm transition ${canEdit ? 'cursor-pointer' : ''}`}>
                     <div className="flex items-center gap-1.5 min-w-0">
                       <StatusMenuButton variant="icon" status={item.status} canChange={canEdit} onChange={st => quickStatus(item.id, st)} />
                       <span className="font-mono text-[11.5px] text-slate-400">{item.code}</span>
                       <TypeTag type={item.type} />
                       <span className="ml-auto"><ProductTag item={item} /></span>
+                      <CopyLinkButton path={`/backlog?item=${item.id}`} label={`Salin link ${item.code}`} className="-my-1 -mr-1.5 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity" />
                     </div>
                     <p className={`text-[13.5px] font-medium leading-snug ${item.type === 'epic' ? 'text-purple-700' : 'text-slate-800'}`}>{item.title}</p>
                     {item.parent_code && (
@@ -1387,8 +1178,10 @@ export default function Backlog() {
       )}
 
       <Modal open={modal.open} onClose={closeModal}
-        title={modal.item ? `Edit Item — ${modal.item.code}` : 'Tambah Backlog Item'} size="lg">
+        title={modal.item ? `${canEdit ? 'Edit' : 'Detail'} Item — ${modal.item.code}` : 'Tambah Backlog Item'} size="lg"
+        shareLink={modal.item ? `/backlog?item=${modal.item.id}` : undefined}>
         <ItemForm
+          readOnly={!!modal.item && !canEdit}
           item={modal.item} defaults={modal.defaults} products={products} users={users}
           sprints={sprints} features={features} epics={epics}
           onSave={() => { closeModal(); load(); }}

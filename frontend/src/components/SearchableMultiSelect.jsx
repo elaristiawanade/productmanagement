@@ -14,6 +14,7 @@ export default function SearchableMultiSelect({
   searchPlaceholder = 'Cari...',
   emptyMessage = 'Tidak ada opsi',
   disabled = false,
+  emptyLabel,   // button text when nothing is selected; default "Semua <label>" suits filters, forms pass e.g. "Pilih feature"
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -41,7 +42,7 @@ export default function SearchableMultiSelect({
 
   const count = selected.length;
   const buttonLabel = count === 0
-    ? `Semua ${label}`
+    ? (emptyLabel ?? `Semua ${label}`)
     : count === 1
       ? (options.find(o => o.v === selected[0])?.l ?? `${label} (1)`)
       : `${label} (${count})`;

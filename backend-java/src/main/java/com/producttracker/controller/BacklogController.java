@@ -46,7 +46,12 @@ public class BacklogController {
         "  'id', au.id, 'name', au.name, 'color', au.avatar_color, 'email', au.email" +
         " ) ORDER BY bia.is_primary DESC, au.name), '[]'::json)::text " +
         " FROM backlog_item_assignees bia JOIN users au ON au.id = bia.user_id " +
-        " WHERE bia.backlog_item_id = bi.id) AS assignees_json ";
+        " WHERE bia.backlog_item_id = bi.id) AS assignees_json, " +
+        // Impacted Features: full set from backlog_item_features (bi.feature_id stays as the first one)
+        "(SELECT COALESCE(json_agg(json_build_object('id', pf.id, 'name', pf.feature_name) " +
+        " ORDER BY pf.feature_name, pf.id), '[]'::json)::text " +
+        " FROM backlog_item_features bif JOIN product_roadmap pf ON pf.id = bif.roadmap_id " +
+        " WHERE bif.backlog_item_id = bi.id) AS features_json ";
 
     private static final String ITEM_JOINS =
         "FROM backlog_items bi " +
@@ -63,7 +68,7 @@ public class BacklogController {
     @GetMapping
     public ResponseEntity<?> list(
             @AuthenticationPrincipal Object principal,
-            @RequestParam(required = false) Long product_id,
+            @RequestParam(required = false) String product_id,
             @RequestParam(required = false) Long sprint_id,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String priority,
@@ -99,7 +104,19 @@ public class BacklogController {
         }
 
         if (hide_done && status == null) { filters.add("bi.status != 'done'"); }
-        if (product_id != null)  { filters.add("bi.product_id = ?");  params.add(product_id); }
+        // product_id may be a comma-joined list (multi-select Produk filter in the Backlog page)
+        if (product_id != null && !product_id.isBlank()) {
+            List<Long> productIds = new ArrayList<>();
+            for (String v : product_id.split(",")) {
+                Long l = toLong(v.trim());
+                if (l != null) productIds.add(l);
+            }
+            if (!productIds.isEmpty()) {
+                String ph = productIds.stream().map(x -> "?").collect(Collectors.joining(","));
+                filters.add("bi.product_id IN (" + ph + ")");
+                params.addAll(productIds);
+            }
+        }
         if (sprint_id != null)   { filters.add("bi.sprint_id = ?");   params.add(sprint_id); }
         if (status != null)      { filters.add(buildInFilter("bi.status", status, params)); }
         if (priority != null)    { filters.add(buildInFilter("bi.priority", priority, params)); }
@@ -221,6 +238,11 @@ public class BacklogController {
         Map<String, Object> actor = toMap(principal);
         String actorName = actor != null ? str(actor.get("name")) : "System";
 
+        // Impacted Features: feature_ids (array); a lone legacy feature_id is still accepted
+        List<Long> featureIds = resolveFeatureIds(body, null);
+        ResponseEntity<?> featErr = validateFeatureIds(featureIds, toLong(body.get("product_id")), Set.of());
+        if (featErr != null) return featErr;
+
         try {
             Map<String, Object> created = jdbc.queryForMap(
                 "INSERT INTO backlog_items " +
@@ -229,7 +251,7 @@ public class BacklogController {
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id, code",
                 toLong(body.get("product_id")), itemCode, body.get("title"),
                 type,
-                toLong(body.get("feature_id")), toLong(body.get("epic_id")),
+                featureIds.isEmpty() ? null : featureIds.get(0), toLong(body.get("epic_id")),
                 parentId,
                 orDefault(body.get("priority"), "medium"),
                 "independent".equals(type) ? 0 : orDefault(body.get("story_points"), 0),
@@ -247,6 +269,7 @@ public class BacklogController {
             Long assigneeId = toLong(body.get("assignee_id"));
             List<Long> additionalIds = parseIdList(body.get("additional_assignee_ids"));
             syncAssignees(newId, assigneeId, additionalIds);
+            syncFeatures(newId, featureIds);
 
             List<Map<String, Object>> detail = jdbc.queryForList(
                 "SELECT " + ITEM_FIELDS + ITEM_JOINS + "WHERE bi.id=?", newId
@@ -327,11 +350,19 @@ public class BacklogController {
         Map<String, Object> actor = toMap(principal);
         String actorName = actor != null ? str(actor.get("name")) : "System";
 
+        // Impacted Features: feature_ids wins, a lone legacy feature_id still works, neither sent = unchanged.
+        // Only newly added ids are checked against the item's product, so legacy links never block a save.
+        List<Long> prevFeatureIds = extractFeatureIds(prev);
+        List<Long> featureIds = resolveFeatureIds(body, prevFeatureIds);
+        ResponseEntity<?> featErr = validateFeatureIds(featureIds, toLong(prev.get("product_id")),
+            new HashSet<>(prevFeatureIds));
+        if (featErr != null) return featErr;
+
         jdbc.update(
             "UPDATE backlog_items SET title=?,type=?,feature_id=?,epic_id=?,parent_id=?,priority=?," +
             "story_points=?,estimated_hours=?,status=?,sprint_id=?,assignee_id=?,acceptance_criteria=?,notes=?,deadline=? WHERE id=?",
             body.get("title"), type,
-            toLong(body.get("feature_id")), toLong(body.get("epic_id")),
+            featureIds.isEmpty() ? null : featureIds.get(0), toLong(body.get("epic_id")),
             parentId,
             body.get("priority"),
             "independent".equals(type) ? 0 : orDefault(body.get("story_points"), 0),
@@ -357,6 +388,7 @@ public class BacklogController {
         Long newAssigneeId = toLong(body.get("assignee_id"));
         List<Long> additionalIds = parseIdList(body.get("additional_assignee_ids"));
         syncAssignees(id, newAssigneeId, additionalIds);
+        syncFeatures(id, featureIds);
 
         List<Map<String, Object>> detail = jdbc.queryForList(
             "SELECT " + ITEM_FIELDS + ITEM_JOINS + "WHERE bi.id=?", id
@@ -559,6 +591,76 @@ public class BacklogController {
         }
     }
 
+    /**
+     * Impacted Features requested by the client, de-duplicated and in the order sent (first = legacy feature_id).
+     * Uses feature_ids when present, else a lone feature_id, else {@code fallback} (null = empty list).
+     */
+    private List<Long> resolveFeatureIds(Map<String, Object> body, List<Long> fallback) {
+        if (body.containsKey("feature_ids")) {
+            return new ArrayList<>(new LinkedHashSet<>(parseIdList(body.get("feature_ids"))));
+        }
+        if (body.containsKey("feature_id")) {
+            Long single = toLong(body.get("feature_id"));
+            List<Long> one = new ArrayList<>();
+            if (single != null) one.add(single);
+            return one;
+        }
+        return fallback != null ? fallback : new ArrayList<>();
+    }
+
+    /** 400 if any id outside {@code alreadyLinked} is not a roadmap feature of the item's product. */
+    private ResponseEntity<?> validateFeatureIds(List<Long> featureIds, Long productId, Set<Long> alreadyLinked) {
+        List<Long> toCheck = featureIds.stream().filter(f -> !alreadyLinked.contains(f)).collect(Collectors.toList());
+        if (toCheck.isEmpty()) return null;
+        String ph = toCheck.stream().map(x -> "?").collect(Collectors.joining(","));
+        List<Object> params = new ArrayList<>(toCheck);
+        params.add(productId);
+        Long valid = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM product_roadmap WHERE id IN (" + ph + ") AND product_id = ?",
+            Long.class, params.toArray());
+        if (valid == null || valid != toCheck.size()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Impacted Features harus milik produk item ini"));
+        }
+        return null;
+    }
+
+    /** Replaces this item's Impacted Features in the join table. */
+    private void syncFeatures(Long itemId, List<Long> featureIds) {
+        jdbc.update("DELETE FROM backlog_item_features WHERE backlog_item_id = ?", itemId);
+        for (Long fid : featureIds) {
+            jdbc.update("INSERT INTO backlog_item_features (backlog_item_id, roadmap_id) VALUES (?,?) ON CONFLICT DO NOTHING",
+                itemId, fid);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Long> extractFeatureIds(Map<String, Object> row) {
+        List<Long> ids = new ArrayList<>();
+        Object f = row.get("features");
+        if (!(f instanceof List)) return ids;
+        for (Object o : (List<Object>) f) {
+            if (o instanceof Map) {
+                Long id = toLong(((Map<String, Object>) o).get("id"));
+                if (id != null) ids.add(id);
+            }
+        }
+        return ids;
+    }
+
+    @SuppressWarnings("unchecked")
+    private String featureNamesJoined(Map<String, Object> row) {
+        Object f = row.get("features");
+        if (!(f instanceof List)) return "";
+        List<String> names = new ArrayList<>();
+        for (Object o : (List<Object>) f) {
+            if (o instanceof Map) {
+                Object n = ((Map<String, Object>) o).get("name");
+                if (n != null) names.add(n.toString());
+            }
+        }
+        return String.join(", ", names);
+    }
+
     @SuppressWarnings("unchecked")
     private List<Long> parseIdList(Object raw) {
         List<Long> ids = new ArrayList<>();
@@ -585,6 +687,16 @@ public class BacklogController {
             assignees = List.of();
         }
         row.put("assignees", assignees);
+
+        Object rawFeatures = row.remove("features_json");
+        List<Map<String, Object>> features;
+        try {
+            features = rawFeatures == null ? List.of()
+                : JSON.readValue(rawFeatures.toString(), new TypeReference<List<Map<String, Object>>>() {});
+        } catch (Exception e) {
+            features = List.of();
+        }
+        row.put("features", features);
     }
 
     @SuppressWarnings("unchecked")
@@ -635,6 +747,9 @@ public class BacklogController {
         checkChange(changes, "Sprint",
             str(prev.get("sprint_name")),
             str(after.get("sprint_name")));
+        checkChange(changes, "Impacted Features",
+            featureNamesJoined(prev),
+            featureNamesJoined(after));
         checkChange(changes, "Story Points",
             str(prev.get("story_points")), str(body.get("story_points")));
         return changes;

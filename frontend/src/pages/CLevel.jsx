@@ -8,6 +8,7 @@ import {
 import client from '../api/client';
 import { useDeepLink } from '../utils/deepLink';
 import Modal from '../components/Modal';
+import CopyLinkButton from '../components/CopyLinkButton';
 import StatusBadge from '../components/StatusBadge';
 import StatusMenu from '../components/StatusMenu';
 import PriorityBadge from '../components/PriorityBadge';
@@ -459,9 +460,12 @@ function TaskDetailPanel({ taskId, onClose, canWrite, currentUserId, onChanged }
                   <p className="font-mono text-xs text-slate-400 mb-1">{task.code}</p>
                   <h3 className="font-semibold text-slate-800 text-base leading-snug">{task.title}</h3>
                 </div>
-                <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 shrink-0">
-                  <X className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <CopyLinkButton path={`/c-level?task=${task.id}`} label={`Salin link ${task.code}`} />
+                  <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 shrink-0">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
               <div className="flex items-center gap-2 mt-3 flex-wrap">
                 <DeptTag dept={task.department} />
@@ -833,7 +837,8 @@ function TasksTab({ user, canWrite, departments, detailId, setDetailId, filterRe
         <div className="px-4 py-2.5 border-t border-slate-100 text-xs text-slate-400">{total} task</div>
       </div>
 
-      <Modal open={modal.open} onClose={closeModal} title={modal.task ? 'Edit Leader Task' : 'Tambah Leader Task'} size="md">
+      <Modal open={modal.open} onClose={closeModal} title={modal.task ? 'Edit Leader Task' : 'Tambah Leader Task'} size="md"
+        shareLink={modal.task ? `/c-level?task=${modal.task.id}` : undefined}>
         <TaskForm task={modal.task} user={user} users={users} departments={departments}
           onSaved={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
