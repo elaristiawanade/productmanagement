@@ -227,7 +227,8 @@ public class QaController {
     // ── QA DASHBOARD ──────────────────────────────────────────────────────────
 
     @GetMapping("/dashboard")
-    public ResponseEntity<?> dashboard(@RequestParam(required = false) Long product_id) {
+    public ResponseEntity<?> dashboard(@AuthenticationPrincipal Object principal,
+                                       @RequestParam(required = false) Long product_id) {
         String productFilter = product_id != null ? "AND tc.product_id = ?" : "";
         Object[] params = product_id != null ? new Object[]{product_id} : new Object[]{};
 
@@ -299,12 +300,47 @@ public class QaController {
             "ORDER BY tr.executed_at DESC NULLS LAST " +
             "LIMIT 10");
 
+        // Bug count per product per stage (the "Jumlah Issue per Produk" card). Follows the product filter.
+        // Gated by role name, NOT by bugs.access: manager / po / developer see this card without gaining
+        // access to the Bugs Incident module itself. Other roles get an empty list and the UI hides the card.
+        boolean bugOverviewAllowed = canViewBugOverview(principal);
+        List<Map<String, Object>> bugsByProduct = new ArrayList<>();
+        if (bugOverviewAllowed) {
+            String bugProductFilter = product_id != null ? "WHERE p.id = ? " : "";
+            bugsByProduct = jdbc.queryForList(
+                "SELECT p.id AS product_id, p.code AS product_code, p.name AS product, p.color, " +
+                "  COUNT(b.id)                                              AS total, " +
+                "  COUNT(CASE WHEN b.stage = 'open'          THEN 1 END)    AS open, " +
+                "  COUNT(CASE WHEN b.stage = 'in_progress'   THEN 1 END)    AS in_progress, " +
+                "  COUNT(CASE WHEN b.stage = 'ready_to_test' THEN 1 END)    AS ready_to_test, " +
+                "  COUNT(CASE WHEN b.stage = 'reopen'        THEN 1 END)    AS reopen, " +
+                "  COUNT(CASE WHEN b.stage = 'done'          THEN 1 END)    AS done, " +
+                "  COUNT(CASE WHEN b.stage = 'improvement'   THEN 1 END)    AS improvement " +
+                "FROM products p " +
+                "LEFT JOIN bugs b ON b.product_id = p.id " +
+                bugProductFilter +
+                "GROUP BY p.id, p.code, p.name, p.color " +
+                "ORDER BY p.id",
+                product_id != null ? new Object[]{product_id} : new Object[]{});
+        }
+
         return ResponseEntity.ok(Map.of(
             "summary", summary,
             "byProduct", byProduct,
             "bySprint", bySprint,
-            "recentFails", recentFails
+            "recentFails", recentFails,
+            "bugOverviewAllowed", bugOverviewAllowed,
+            "bugsByProduct", bugsByProduct
         ));
+    }
+
+    /** Roles that may see the bug-per-product overview on the QA dashboard. */
+    private static final java.util.Set<String> BUG_OVERVIEW_ROLES = java.util.Set.of("manager", "po", "developer", "qa");
+
+    private boolean canViewBugOverview(Object principal) {
+        if (PermissionHelper.isSuperAdmin(principal)) return true;
+        Map<String, Object> user = toMap(principal);
+        return user != null && BUG_OVERVIEW_ROLES.contains(String.valueOf(user.get("role_name")));
     }
 
     /** A feature is optional; when given it must belong to the same product as the test case. */

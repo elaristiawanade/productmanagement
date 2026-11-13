@@ -2,9 +2,20 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell
+  PieChart, Pie, Cell, BarChart, Bar
 } from 'recharts';
 import { useChartTheme } from '../utils/chartTheme';
+
+// Bug stages for the "Jumlah Issue per Produk" card. Same stages, order, labels and hues as the
+// Bugs Incident module (BugsIncident.jsx STAGES / STAGE_LABELS / STAGE_COLORS) — keep them in sync.
+const BUG_STAGE_BARS = [
+  { key: 'open',          name: 'Open',          color: '#E5484D' },
+  { key: 'in_progress',   name: 'In Progress',   color: '#3E63DD' },
+  { key: 'ready_to_test', name: 'Ready to Test', color: '#D9891A' },
+  { key: 'reopen',        name: 'Re-Open',       color: '#9B51E0' },
+  { key: 'done',          name: 'Done',          color: '#1F9D55' },
+  { key: 'improvement',   name: 'Improvement',   color: '#0B8FCB' },
+];
 
 const RESULT_LINES = [
   { key: 'pass_count',    name: 'Pass',    color: '#1F9D55' },
@@ -358,7 +369,8 @@ export default function QA() {
     const last = sprintGroups[sprintGroups.length - 1];
     if (last && last[0].product_id === r.product_id) last.push(r); else sprintGroups.push([r]);
   });
-  const sprintYMax = Math.max(1, ...sprintRows.flatMap(r => RESULT_LINES.map(l => +r[l.key] || 0)));
+  const bugsByProduct = dashboard?.bugsByProduct || [];
+  const sprintYMax =Math.max(1, ...sprintRows.flatMap(r => RESULT_LINES.map(l => +r[l.key] || 0)));
 
   return (
     <div className="space-y-5">
@@ -478,6 +490,51 @@ export default function QA() {
                 </div>
               </div>
               </div>
+
+              {/* Bugs per product, split by stage (only for roles the API returns it to) */}
+              {dashboard?.bugOverviewAllowed && (
+                <div className="card p-5">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-4">
+                    <h3 className="font-semibold text-slate-700">Jumlah Issue per Produk</h3>
+                    <span className="text-xs text-slate-400">berdasarkan stage di Bugs Incident</span>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 ml-auto text-xs text-slate-600">
+                      {BUG_STAGE_BARS.map(s => (
+                        <span key={s.key} className="inline-flex items-center gap-1.5">
+                          <i className="w-2.5 h-2.5 rounded-sm" style={{ background: s.color }} />{s.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* One selected product: the numbers per stage, big and readable */}
+                  {bugsByProduct.length === 1 && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+                      {BUG_STAGE_BARS.map(s => (
+                        <div key={s.key} className="rounded-lg border border-slate-100 px-3 py-2">
+                          <p className="text-xl font-bold" style={{ color: s.color }}>{bugsByProduct[0][s.key] ?? 0}</p>
+                          <p className="text-xs text-slate-500">{s.name}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {bugsByProduct.length === 0 || bugsByProduct.every(p => !p.total)
+                    ? <p className="text-center py-10 text-sm text-slate-400">Belum ada issue</p>
+                    : (
+                    <ResponsiveContainer width="100%" height={Math.max(120, bugsByProduct.length * 34 + 40)}>
+                      <BarChart data={bugsByProduct} layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} horizontal={false} />
+                        <XAxis type="number" allowDecimals={false} tick={ct.axisTick} stroke={ct.line} />
+                        <YAxis type="category" dataKey="product" width={130} interval={0} tick={{ ...ct.axisTick, fontSize: 11 }} stroke={ct.line} />
+                        <Tooltip {...ct.tooltip} cursor={{ fill: 'rgba(148,163,184,0.12)' }} />
+                        {BUG_STAGE_BARS.map(s => (
+                          <Bar key={s.key} dataKey={s.key} name={s.name} stackId="stage" fill={s.color} />
+                        ))}
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
