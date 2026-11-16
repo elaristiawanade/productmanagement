@@ -1,6 +1,7 @@
 package com.producttracker.controller;
 
 import com.producttracker.config.PermissionHelper;
+import com.producttracker.service.BugStats;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/qa")
@@ -17,6 +19,9 @@ public class QaController {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private BugStats bugStats;
 
     // ── TEST CASES ────────────────────────────────────────────────────────────
 
@@ -227,7 +232,8 @@ public class QaController {
     // ── QA DASHBOARD ──────────────────────────────────────────────────────────
 
     @GetMapping("/dashboard")
-    public ResponseEntity<?> dashboard(@RequestParam(required = false) Long product_id) {
+    public ResponseEntity<?> dashboard(@AuthenticationPrincipal Object principal,
+                                       @RequestParam(required = false) Long product_id) {
         String productFilter = product_id != null ? "AND tc.product_id = ?" : "";
         Object[] params = product_id != null ? new Object[]{product_id} : new Object[]{};
 
@@ -299,12 +305,29 @@ public class QaController {
             "ORDER BY tr.executed_at DESC NULLS LAST " +
             "LIMIT 10");
 
+        // "Bugs per Feature" card. Gated by role name, NOT by bugs.access: manager / po / developer see the
+        // counts without gaining access to the Bugs Incident module itself. Other roles get an empty list
+        // and the UI hides the card. Same query as the Bugs Incident dashboard (BugStats).
+        boolean bugOverviewAllowed = canViewBugOverview(principal);
+        List<Map<String, Object>> bugsByFeature = bugOverviewAllowed ? bugStats.bugsByFeature(product_id) : List.of();
+
         return ResponseEntity.ok(Map.of(
             "summary", summary,
             "byProduct", byProduct,
             "bySprint", bySprint,
-            "recentFails", recentFails
+            "recentFails", recentFails,
+            "bugOverviewAllowed", bugOverviewAllowed,
+            "bugsByFeature", bugsByFeature
         ));
+    }
+
+    /** Roles that may see the "Bugs per Feature" card on the QA dashboard (super_admin always may). */
+    private static final Set<String> BUG_OVERVIEW_ROLES = Set.of("manager", "po", "developer", "qa");
+
+    private boolean canViewBugOverview(Object principal) {
+        if (PermissionHelper.isSuperAdmin(principal)) return true;
+        Map<String, Object> user = toMap(principal);
+        return user != null && BUG_OVERVIEW_ROLES.contains(String.valueOf(user.get("role_name")));
     }
 
     /** A feature is optional; when given it must belong to the same product as the test case. */

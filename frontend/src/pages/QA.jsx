@@ -41,6 +41,7 @@ import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import SearchableSelect from '../components/SearchableSelect';
+import BugsPerFeatureCard from '../components/BugsPerFeatureCard';
 import { buildBacklogTreeOptions } from '../utils/backlogHierarchy';
 import { buildFeatureOptions, featureText } from '../utils/featureOptions';
 import AttachmentSection from '../components/AttachmentSection';import { useAuth } from '../context/AuthContext';
@@ -358,7 +359,8 @@ export default function QA() {
     const last = sprintGroups[sprintGroups.length - 1];
     if (last && last[0].product_id === r.product_id) last.push(r); else sprintGroups.push([r]);
   });
-  const sprintYMax = Math.max(1, ...sprintRows.flatMap(r => RESULT_LINES.map(l => +r[l.key] || 0)));
+  const bugOverviewAllowed = !!dashboard?.bugOverviewAllowed;
+  const sprintYMax =Math.max(1, ...sprintRows.flatMap(r => RESULT_LINES.map(l => +r[l.key] || 0)));
 
   return (
     <div className="space-y-5">
@@ -441,21 +443,30 @@ export default function QA() {
                   </div>
                 )}
 
-                {/* Distribution Pie */}
-                <div className="card p-5">
-                  <h3 className="font-semibold text-slate-700 mb-4">Overall Result Distribution</h3>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <PieChart>
-                      <Pie data={passPieData} cx="50%" cy="50%" innerRadius={45} outerRadius={72} paddingAngle={3} dataKey="value" label={({ name, percent }) => `${name} ${(percent*100).toFixed(0)}%`} labelLine={false}>
-                        {passPieData.map(d => <Cell key={d.name} fill={d.color} />)}
-                      </Pie>
-                      <Tooltip {...ct.tooltip} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                {/* Pie + Bugs per Feature. All products (sprint charts take the full row): both stack in the
+                    left column, beside Recent Failures, so the card fills the slot under the pie instead of
+                    sitting below a long failures list. One product: the wrapper is `display: contents`, so
+                    the pie sits beside the sprint chart and Bugs per Feature beside Recent Failures. */}
+                <div className={sprintGroups.length > 1 ? 'min-w-0 space-y-5' : 'contents'}>
+                  {/* Distribution Pie */}
+                  <div className="card p-5">
+                    <h3 className="font-semibold text-slate-700 mb-4">Overall Result Distribution</h3>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <PieChart>
+                        <Pie data={passPieData} cx="50%" cy="50%" innerRadius={45} outerRadius={72} paddingAngle={3} dataKey="value" label={({ name, percent }) => `${name} ${(percent*100).toFixed(0)}%`} labelLine={false}>
+                          {passPieData.map(d => <Cell key={d.name} fill={d.color} />)}
+                        </Pie>
+                        <Tooltip {...ct.tooltip} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Bugs per product feature (only for roles the API returns it to) */}
+                  {bugOverviewAllowed && <BugsPerFeatureCard rows={dashboard?.bugsByFeature || []} className="min-w-0 lg:self-start" />}
                 </div>
 
-              {/* Recent Failures: beside the pie when the sprint charts take the full row, else full width */}
-              <div className={`card overflow-hidden ${sprintGroups.length > 1 ? '' : 'lg:col-span-2'}`}>
+              {/* Recent Failures: right column; full width only when one product is shown and there is no bug card */}
+              <div className={`card overflow-hidden ${sprintGroups.length > 1 || bugOverviewAllowed ? '' : 'lg:col-span-2'}`}>
                 <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
                   <XCircle className="w-4 h-4 text-red-500" />
                   <h3 className="font-semibold text-slate-700">Recent Failures</h3>

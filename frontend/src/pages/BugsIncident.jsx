@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
 import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Upload, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff, AlertTriangle, XCircle, Lightbulb, HelpCircle } from 'lucide-react';
@@ -13,6 +13,7 @@ import Modal from '../components/Modal';
 import StatusMenu from '../components/StatusMenu';
 import { useChartTheme } from '../utils/chartTheme';
 import StatusBadge from '../components/StatusBadge';
+import BugsPerFeatureCard from '../components/BugsPerFeatureCard';
 import PriorityBadge from '../components/PriorityBadge';
 import LinkInsertButton from '../components/LinkInsertButton';
 import SearchableSelect from '../components/SearchableSelect';
@@ -888,22 +889,9 @@ export default function BugsIncident() {
                 ))}
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                {/* By Product */}
-                <div className="card p-5">
-                  <h3 className="font-semibold text-slate-700 mb-4">Bugs per Produk</h3>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={dashboard?.byProduct || []} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} />
-                      <XAxis dataKey="product" tick={{ ...ct.axisTick, fontSize: 10 }} stroke={ct.line} />
-                      <YAxis tick={ct.axisTick} stroke={ct.line} />
-                      <Tooltip {...ct.tooltip} />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Bar dataKey="open_count"   name="Open"   fill="#ef4444" radius={[4,4,0,0]} />
-                      <Bar dataKey="done_count"   name="Done"   fill="#10b981" radius={[4,4,0,0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                {/* Bugs per product feature (replaced the "Bugs per Produk" chart) — same card as the QA dashboard */}
+                <BugsPerFeatureCard rows={dashboard?.byFeature || []} className="min-w-0 lg:col-span-2" />
 
                 {/* Stage Distribution */}
                 <div className="card p-5">
