@@ -142,6 +142,10 @@ docker compose up -d --build backend frontend
 | Test Case | Method | Endpoint | Expected | Result | Notes |
 |-----------|--------|----------|----------|--------|-------|
 | QA Dashboard | GET | `/api/qa/dashboard` | 200 | ✅ 200 | |
+| QA Dashboard: Bugs per Feature (role manager/po/developer/qa/super_admin) | GET | `/api/qa/dashboard` | 200, `bugOverviewAllowed: true`, `bugsByFeature` terisi | ✅ 200 | 16 Nov 2026, akun dummy lokal; angka cocok dengan tabel `bugs` |
+| QA Dashboard: Bugs per Feature (role sme/commissioner) | GET | `/api/qa/dashboard` | 200, `bugOverviewAllowed: false`, `bugsByFeature: []` | ✅ 200 | sisa dashboard tetap tampil |
+| QA Dashboard: Bugs per Feature + filter produk | GET | `/api/qa/dashboard?product_id={id}` | hanya feature produk itu + baris "Tanpa Feature" produk itu | ✅ 200 | |
+| Bugs Dashboard: `byFeature` (ganti `byProduct`) | GET | `/api/bugs/dashboard?product_id={id}` | 200, `byFeature` sama dengan `bugsByFeature` QA, tanpa `byProduct` | ✅ 200 | role tanpa `bugs.access` tetap `403` |
 | List test cases | GET | `/api/qa/test-cases` | 200 | ✅ 200 | |
 | Filter test cases by product | GET | `/api/qa/test-cases?product_id={id}` | 200 | 🔧 → ✅ after rebuild | |
 | Create test case | POST | `/api/qa/test-cases` | 201 | ⚠️ Requires `backlog_item_id` | Not `product_id` — must link to a backlog item |

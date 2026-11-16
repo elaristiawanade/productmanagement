@@ -306,3 +306,20 @@ Fitur baru (PRD 3.17, v3.16). Butuh `migration_v26.sql`. Diuji otomatis di stack
 - 🧑 Buka link kartu Backlog (`/backlog?item=ID`) dan Bug (`/bugs?bug=ID`) yang punya banyak komentar: modal harus mulai dari **paling atas** (judul dan field terlihat), bukan di bagian Aktivitas. Daftar komentar tetap menampilkan komentar terbaru, dan setelah mengirim komentar daftar menggulung ke komentar baru tanpa menggeser modal
 - ⚠️ Link ke record yang tidak boleh diakses role penerima: halaman terbuka tapi modal tidak (mengikuti izin modul); Backlog membuka detail baca-saja. `GET /api/backlog/{id}` tidak membatasi per produk (perilaku lama)
 - ⚠️ Modul Users (user/role/departemen) sengaja tidak diberi tombol Salin link
+
+## 30. Bugs per Feature (QA Dashboard & Bugs Dashboard)
+
+Fitur baru (PRD 3.8 & 3.9, v3.19). Tanpa migrasi database. Diuji di stack Docker lokal (:8500) dengan akun dummy.
+
+- ✅ API `/api/qa/dashboard`: role Manager, PO, Developer, QA, dan Super Admin menerima `bugOverviewAllowed: true` + `bugsByFeature`; SME dan Commissioner menerima `false` + array kosong (dashboard lain tetap jalan)
+- ✅ Angka cocok dengan database: 13 bug = CRM-F1 2, HRS-F1 1, Tanpa Feature 10, dengan pecahan stage yang sama per baris; filter `product_id` hanya menampilkan feature produk itu
+- ✅ API `/api/bugs/dashboard`: `byFeature` identik dengan `bugsByFeature` QA, `byProduct` tidak ada lagi; Developer (tanpa `bugs.access` di data lokal) tetap `403`
+- ✅ UI QA, "Semua Produk": kartu di kolom kiri di bawah Overall Result Distribution, Recent Failures di kolom kanan
+- ✅ UI QA, satu produk dipilih: Overall Result Distribution di samping grafik sprint; Bugs per Feature dan Recent Failures sejajar di baris berikutnya
+- ✅ UI QA, role SME: kartu tidak muncul, layout lama (pie + Recent Failures) tetap
+- ✅ UI Bugs Dashboard: grafik Bugs per Produk hilang, tabel Bugs per Feature 2/3 lebar + Distribusi Stage 1/3
+- ✅ Header stage rata bawah dengan garis warna (sejajar walau label 1 atau 2 baris); nama feature tampil utuh di kartu setengah lebar (kode di atas, nama di bawah); dicek di tema terang dan gelap
+- 🧑 Cek di server kantor dengan data asli: urutan baris, jumlah feature yang banyak (tabel harus scroll di dalam kartu dengan header dan baris Total tetap terlihat), dan baris "Tanpa Feature"
+- ⚠️ Daftar role yang boleh melihat kartu di QA ditulis di kode (`BUG_OVERVIEW_ROLES` di `QaController`), belum bisa diatur dari Roles & Permissions. Role yang diganti nama atau role baru tidak otomatis ikut
+- ⚠️ Nilai tabel bergantung pada pengisian field **Feature (opsional)** di form Bug; bug tanpa Feature masuk "Tanpa Feature" dan tidak ditebak dari Impacted Features backlog item (supaya tidak terhitung ganda)
+- ⚠️ Baris diurutkan dari total bug terbanyak (termasuk yang sudah Done), bukan dari bug yang belum selesai

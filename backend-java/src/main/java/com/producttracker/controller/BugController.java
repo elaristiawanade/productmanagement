@@ -2,6 +2,7 @@ package com.producttracker.controller;
 
 import com.producttracker.config.BugHelper;
 import com.producttracker.service.AssigneeSupport;
+import com.producttracker.service.BugStats;
 import com.producttracker.service.EmailService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +27,9 @@ public class BugController {
 
     @Autowired
     private BugHelper bugHelper;
+
+    @Autowired
+    private BugStats bugStats;
 
     @Autowired
     private EmailService email;
@@ -344,15 +348,8 @@ public class BugController {
             params
         );
 
-        List<Map<String, Object>> byProduct = jdbc.queryForList(
-            "SELECT p.name AS product, p.color, " +
-            "  COUNT(b.id)                                                 AS total_bugs, " +
-            "  COUNT(CASE WHEN b.stage IN ('open','in_progress','reopen') THEN 1 END) AS open_count, " +
-            "  COUNT(CASE WHEN b.stage = 'done' THEN 1 END)                AS done_count " +
-            "FROM products p " +
-            "LEFT JOIN bugs b ON b.product_id = p.id " +
-            "GROUP BY p.id, p.name, p.color " +
-            "ORDER BY p.id");
+        // "Bugs per Feature" card (replaced the old "Bugs per Produk" chart); follows the product filter
+        List<Map<String, Object>> byFeature = bugStats.bugsByFeature(product_id);
 
         List<Map<String, Object>> byStage = jdbc.queryForList(
             "SELECT stage, COUNT(*) AS count FROM bugs b WHERE 1=1 " + productFilter + " GROUP BY stage",
@@ -384,7 +381,7 @@ public class BugController {
 
         return ResponseEntity.ok(Map.of(
             "summary", summary,
-            "byProduct", byProduct,
+            "byFeature", byFeature,
             "byStage", byStage,
             "recentActivity", recentActivity,
             "recentComments", recentComments
