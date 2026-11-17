@@ -152,6 +152,11 @@ docker compose up -d --build backend frontend
 | Update test case | PUT | `/api/qa/test-cases/{id}` | 200 | ✅ 200 | |
 | Create/update test case dengan `deadline` | POST / PUT | `/api/qa/test-cases`, `/api/qa/test-cases/{id}` | 201/200, `deadline` = `"yyyy-MM-dd"`; `""`/`null` mengosongkan; PUT **tanpa** key `deadline` mempertahankan nilai lama; format salah → 400 | ✅ | 17 Nov 2026, akun dummy lokal; butuh `migration_v29.sql` (tanpa migrasi create/edit 500) |
 | Create/update bug dengan `deadline` | POST / PUT | `/api/bugs`, `/api/bugs/{id}` | sama seperti test case; ganti stage lewat `POST /api/bugs/progress` tidak mengubah deadline | ✅ | 17 Nov 2026 |
+| List Type bug | GET | `/api/bug-types` | 200 + `bug_count` per Type (`bug`, `inquiry` bawaan); `bugs.access` atau `settings.update` boleh baca; role lain (mis. manager) → 403 | ✅ | 17 Nov 2026, akun dummy lokal; butuh `migration_v31.sql` |
+| Kelola Type bug (hanya Super Admin) | POST / PUT / DELETE | `/api/bug-types[/{id}]` | Super Admin: 201/200/200, `code` slug otomatis dan tidak berubah saat ganti nama; QA → 403; nama kembar (tak peka huruf) → 409 | ✅ | |
+| Hapus Type yang dipakai / Type bawaan | DELETE | `/api/bug-types/{id}` | Type yang dipakai tiket → 409 "pindahkan tiket dulu"; Type `bug` → 409; Type kosong → 200 | ✅ | |
+| Create/update bug dengan `type` | POST / PUT | `/api/bugs`, `/api/bugs/{id}` | `type` = code terdaftar → tersimpan, response memuat `type_name`/`type_color`; POST tanpa `type` → `bug`; PUT tanpa key `type` mempertahankan; code tak dikenal → 400; ganti nama Type langsung terlihat di GET berikutnya | ✅ | |
+| Import CSV kolom `Type` | POST | `/api/import/bugs` | `Type` berisi nama ("Change Request") atau code ("inquiry") dikenali; nilai asing → `bug` | ✅ 3 baris dibuat | UI Chrome headless juga lulus: halaman Bug Types, tombol Atur Type, dropdown/filter Type, hapus Type |
 | Import CSV berisi kolom `Deadline` | POST | `/api/import/bugs`, `/api/import/qa-test-cases` | 200, baris dibuat; kolom Deadline diabaikan (deadline kosong) | ✅ 200 | import belum membaca deadline |
 | Progress % di list Backlog/detail/create/update | GET / POST / PUT | `/api/backlog`, `/api/backlog/{id}` | field `progress` integer 0–100; item tanpa anak dari status (0/0/50/80/100, blocked 25); Story/Epic = rata-rata item di bawahnya berbobot story point; tetap benar pada halaman paginasi | ✅ 42/42 item cocok dengan hitungan independen dari baris DB | 17 Nov 2026, akun dummy lokal |
 | Progress % produk | GET | `/api/products` | `progress` = rata-rata item kerja produk (null bila kosong) | ✅ HRS 37, CRM 31, FIN 54 | menggantikan "% selesai" lama (30/27/38) |
@@ -182,6 +187,9 @@ docker compose up -d --build backend frontend
 | Velocity chart | GET | `/api/dashboard/velocity` | 200 | ✅ 200 | |
 | Team workload | GET | `/api/dashboard/workload` | 200 | ✅ 200 | count=7 |
 | Delayed items | GET | `/api/dashboard/delayed` | 200 | ✅ 200 | |
+| Item `in_review` tidak terlambat | GET | `/api/backlog`, `/api/dashboard/stats`, `/api/dashboard/delayed`, `/api/leader-tasks` | `is_delayed=false` untuk `in_review` walau deadline lewat; Delayed Dashboard 15 → 12, daftar Delayed 15 → 12, Leader Task `in_review` 2 → 0; status lain tidak bergeser | ✅ | 17 Nov 2026, akun dummy lokal (HRS-3, CRM-4, FIN-5 tidak lagi terlambat) |
+| Ganti status bolak-balik | PATCH | `/api/backlog/{id}/status` | item deadline lewat: `in_review` → false, `in_progress` → true, `in_review` → false, `blocked` → true | ✅ | item uji sementara, sudah dihapus |
+| Bugs: `ready_to_test` tidak merah | UI | `/bugs` | bug deadline lewat: stage `ready_to_test` → tanggal abu-abu; stage `open` → merah + ikon; Backlog in_review abu-abu, in_progress tetap merah | ✅ Chrome headless | |
 
 ### Notifications
 

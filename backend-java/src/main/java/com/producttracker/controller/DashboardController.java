@@ -30,7 +30,7 @@ public class DashboardController {
             "  COUNT(CASE WHEN bi.status = 'done'        THEN 1 END)               AS done, " +
             "  COUNT(CASE WHEN bi.status = 'blocked'     THEN 1 END)               AS blocked, " +
             "  COUNT(CASE WHEN bi.status = 'backlog'     THEN 1 END)               AS backlog_count, " +
-            "  COUNT(CASE WHEN bi.deadline < NOW() AND bi.status NOT IN ('done','backlog') THEN 1 END) AS delayed, " +
+            "  COUNT(CASE WHEN bi.deadline < NOW() AND bi.status NOT IN ('done','backlog','in_review') THEN 1 END) AS delayed, " +
             "  COALESCE(SUM(bi.story_points), 0)                                    AS total_points, " +
             "  COALESCE(SUM(CASE WHEN bi.status = 'done' THEN bi.story_points ELSE 0 END), 0) AS done_points, " +
             "  (SELECT name FROM sprints WHERE product_id = p.id AND status = 'active' LIMIT 1) AS active_sprint " +
@@ -45,7 +45,7 @@ public class DashboardController {
             "  COUNT(*)                                                              AS total_items, " +
             "  COUNT(CASE WHEN status = 'in_progress' THEN 1 END)                  AS in_progress, " +
             "  COUNT(CASE WHEN status = 'blocked'     THEN 1 END)                  AS blocked, " +
-            "  COUNT(CASE WHEN deadline < NOW() AND status NOT IN ('done','backlog') THEN 1 END) AS delayed, " +
+            "  COUNT(CASE WHEN deadline < NOW() AND status NOT IN ('done','backlog','in_review') THEN 1 END) AS delayed, " +
             "  COUNT(CASE WHEN status = 'done'        THEN 1 END)                  AS done " +
             "FROM backlog_items");
 
@@ -128,7 +128,7 @@ public class DashboardController {
             "JOIN products p ON p.id = bi.product_id " +
             "LEFT JOIN users u   ON u.id = bi.assignee_id " +
             "LEFT JOIN sprints s ON s.id = bi.sprint_id " +
-            "WHERE bi.deadline < NOW() AND bi.status NOT IN ('done','backlog') " +
+            "WHERE bi.deadline < NOW() AND bi.status NOT IN ('done','backlog','in_review') " +
             "ORDER BY bi.deadline ASC " +
             "LIMIT 20");
         return ResponseEntity.ok(rows);

@@ -34,7 +34,7 @@ public class LeaderTaskController {
         "u.name AS assignee_name, u.avatar_color AS assignee_color, u.email AS assignee_email, " +
         "par.code AS parent_code, par.title AS parent_title, " +
         "ln.note_date AS source_note_date, ln.goals_this_week AS source_note_goals, nu.name AS source_note_author, " +
-        "CASE WHEN lt.deadline < NOW() AND lt.status NOT IN ('done') THEN true ELSE false END AS is_delayed ";
+        "CASE WHEN lt.deadline < NOW() AND lt.status NOT IN ('done','in_review') THEN true ELSE false END AS is_delayed ";
 
     private static final String TASK_JOINS =
         "FROM leader_tasks lt " +

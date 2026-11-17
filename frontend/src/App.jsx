@@ -19,6 +19,7 @@ import CLevel     from './pages/CLevel';
 import NotificationSettings from './pages/NotificationSettings';
 import Clients    from './pages/Clients';
 import ClientSettings from './pages/ClientSettings';
+import BugTypeSettings from './pages/BugTypeSettings';
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -72,6 +73,7 @@ function AppRoutes() {
         <Route path="profile"      element={<Profile />} />
         <Route path="settings/notifications" element={<RequirePermission module="settings" action="update"><NotificationSettings /></RequirePermission>} />
         <Route path="settings/clients" element={<RequirePermission module="settings" action="update"><ClientSettings /></RequirePermission>} />
+        <Route path="settings/bug-types" element={<RequirePermission module="settings" action="update"><BugTypeSettings /></RequirePermission>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

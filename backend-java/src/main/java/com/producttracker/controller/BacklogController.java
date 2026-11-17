@@ -43,7 +43,8 @@ public class BacklogController {
         "u.name AS assignee_name, u.avatar_color AS assignee_color, u.email AS assignee_email, " +
         "cb.name AS created_by_name, " +
         "par.code AS parent_code, par.title AS parent_title, " +
-        "CASE WHEN bi.deadline < NOW() AND bi.status NOT IN ('done','backlog') THEN true ELSE false END AS is_delayed, " +
+        // in_review is waiting on someone else, so it is never counted as late (same rule in DashboardController)
+        "CASE WHEN bi.deadline < NOW() AND bi.status NOT IN ('done','backlog','in_review') THEN true ELSE false END AS is_delayed, " +
         "(SELECT COALESCE(json_agg(json_build_object(" +
         "  'id', au.id, 'name', au.name, 'color', au.avatar_color, 'email', au.email" +
         " ) ORDER BY bia.is_primary DESC, au.name), '[]'::json)::text " +

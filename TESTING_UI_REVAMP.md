@@ -395,3 +395,42 @@ Fitur baru (PRD 3.2, 3.3, 3.6, 3.7, 3.8, v3.22). Semua angka **dihitung**, tidak
 - ⚠️ Snapshot Standup memakai tanggal server (UTC) dengan toleransi 1 hari; standup yang tanggalnya lebih dari 1 hari dari hari ini tidak diberi progress. Isinya adalah angka **saat disimpan**, bukan angka hari itu bila diedit belakangan di hari yang sama
 - ⚠️ Item yang di-assign hanya lewat kolom `assignee_id` lama (tanpa baris `backlog_item_assignees`, mis. hasil Import Jira, lihat PRD 3.11) tidak dihitung di Progress Pekerjaan Standup, sama seperti tidak tampil di My Tasks
 - ⚠️ `docker-compose.yml` kini memasang v30 di initdb, jadi `docker compose up` berikutnya (tanpa `--no-deps`) membuat ulang `pt_postgres` (data volume aman, hanya restart singkat)
+
+## 34. Type tiket Bugs Incident bisa diatur (Bug Types)
+
+Fitur baru (PRD 3.9, v3.23). Daftar Type tidak lagi tetap `bug`/`inquiry`: Super Admin mengelolanya di **Admin → Bug Types**. Butuh `migration_v31.sql` (sebelum backend baru naik). Diuji di stack Docker lokal (:8500) dengan akun dummy: API lewat skrip Node/curl, UI lewat Chrome headless.
+
+- ✅ `migration_v31.sql` dijalankan **dua kali** tanpa error; `bug_types` berisi `bug` dan `inquiry`, `bugs.type` menjadi `VARCHAR(50)` dengan FK `bugs_type_fkey`, CHECK lama hilang, 14 tiket lama tidak berubah (13 `bug`, 1 `inquiry`)
+- ✅ Hak akses: `GET /api/bug-types` → Super Admin dan QA 200 (`bug_count` per Type), manager 403; `POST` sebagai QA → 403 "Hanya Super Admin"
+- ✅ Super Admin menambah "Change Request" → 201, `code` otomatis `change_request` dan **tetap** walau namanya diganti; nama kembar (huruf besar/kecil beda) → 409
+- ✅ Tiket: `POST /api/bugs` dengan `type: change_request` tersimpan dan response memuat `type_name`/`type_color`; tanpa `type` → `bug`; `type: nope` → 400; `PUT` dengan type tak dikenal → 400; `PUT` tanpa key `type` mempertahankan Type lama; mengganti ke `inquiry` bekerja
+- ✅ Ganti nama Type → `GET /api/bugs` langsung menampilkan nama baru pada tiket yang memakainya
+- ✅ Hapus: Type yang dipakai tiket → 409 "pindahkan tiket dulu"; Type `bug` → 409 (default); Type kosong → 200
+- ✅ Import CSV kolom `Type`: nama ("Change Request"), code ("inquiry"), dan nilai asing ("garbage" → `bug`) menghasilkan Type yang benar (3 baris dibuat)
+- ✅ UI Super Admin: menu **Admin → Bug Types** muncul; halaman menampilkan Type, kode, jumlah tiket, badge "default" pada Bug; tambah Type lewat modal berhasil (toast "Type ditambahkan"); tombol **Atur Type** ada di tab Bugs; dropdown **Type (opsional)** di form Edit memuat Type baru; hapus Type kosong lewat UI berhasil
+- ✅ Data uji (tiket dan Type sementara) dihapus kembali; jumlah tiket kembali seperti semula
+- ✅ Dites manual oleh pemilik di lokal (17 Nov 2026): fitur berjalan benar
+- 🧑 Jalankan `migration_v31.sql` di database server (backup dulu) **sebelum** backend baru naik, lalu buka Bugs Incident, buat dan edit satu tiket
+- 🧑 Login sebagai user non-Super Admin (mis. QA): menu Bug Types dan tombol Atur Type tidak tampil, `/settings/bug-types` ditolak, dropdown dan filter Type tetap berfungsi
+- 🧑 Cek Export CSV (kolom `Type` berisi code), Export MD (Type berisi nama), dan form Lapor Bug Publik (tiket tetap `bug`)
+- ⚠️ `code` Type dibuat otomatis dari nama dan **tidak pernah berubah** (itu yang disimpan di tiket dan Export CSV); mengganti nama hanya mengubah tampilan
+- ⚠️ Type bawaan `bug` tidak bisa dihapus (dipakai sebagai default dan oleh Lapor Bug Publik), tetapi namanya boleh diganti. Type lain yang masih dipakai tiket juga tidak bisa dihapus
+- ⚠️ Hanya Super Admin (`settings.update`) yang bisa mengubah daftar; user lain yang butuh Type baru harus meminta Super Admin
+- ⚠️ `docker-compose.yml` kini memasang v31 di initdb, jadi `docker compose up` berikutnya (tanpa `--no-deps`) membuat ulang `pt_postgres` (data volume aman, hanya restart singkat)
+
+## 35. Status In Review tidak dihitung terlambat
+
+Fitur baru (PRD 3.1, 3.2, 3.3, 3.9, C-Level, v3.24). Item `in_review` yang melewati deadline tidak lagi merah dan tidak masuk hitungan Delayed. **Tanpa migrasi.** Diuji di stack Docker lokal (:8500): data dibandingkan sebelum dan sesudah, status bolak-balik pada item uji sementara, UI lewat Chrome headless.
+
+- ✅ Sebelum → sesudah: Backlog `in_review` terlambat 3 → 0 (HRS-3, CRM-4, FIN-5); Dashboard Delayed 15 → 12 (HRS 6→5, CRM 5→4, FIN 4→3) dan daftar Delayed Items 15 → 12; Leader Tasks `in_review` terlambat 2 → 0; status lain (todo 5, in_progress 6, blocked 1) **tidak bergeser**
+- ✅ Item uji dengan deadline lewat: `in_review` → `is_delayed=false`, `in_progress` → true, `in_review` → false, `blocked` → true; Delayed Dashboard tetap 12 saat item uji `in_review`
+- ✅ UI Backlog: baris `in_review` tanggal abu-abu tanpa elemen merah; baris `in_progress` (HRS-2) tetap merah
+- ✅ UI Bugs Incident: bug stage `ready_to_test` dengan deadline lewat tampil abu-abu; bug stage `open` tampil merah dengan ikon
+- ✅ UI Dashboard: kartu Delayed menunjukkan 12, kolom Delayed per produk 5 / 4 / 3
+- ✅ Data uji dihapus kembali (Backlog 42 item)
+- ✅ Dites manual oleh pemilik di lokal (17 Nov 2026): berjalan benar
+- 🧑 Cek di data asli: My Tasks (kartu Overdue), Epic Board, dan C-Level (Leader Tasks) tidak menandai item `in_review` sebagai terlambat
+- 🧑 Deploy cukup rebuild backend dan frontend (tanpa migrasi)
+- ⚠️ Bugs: stage `ready_to_test` diperlakukan sebagai padanan In Review (perbaikan selesai, menunggu QA) sehingga tidak merah; ini keputusan pemilik dan mengubah perilaku yang sudah ada. QA Test Case tidak berubah (tidak punya status in review)
+- ⚠️ Story/Epic mengikuti status anak (maju saja): induk dengan satu anak `in_review` ikut `in_review` dan tidak merah, walau anak lain terlambat; anak yang terlambat tetap merah di barisnya sendiri
+- ⚠️ Tidak diubah: klik angka Delayed per produk di Dashboard membuka semua item aktif (tidak difilter tanggal); Backlog merah sejak hari H sedangkan Bugs/QA setelah hari H lewat

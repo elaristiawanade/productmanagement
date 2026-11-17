@@ -223,7 +223,7 @@ export function buildProductMarkdown(data, meta) {
       '- Ada **dua jenis "feature"** yang berbeda:',
       '  - **Roadmap** (bagian 4): fitur di roadmap produk. Inilah yang dipakai *Impacted Features* di kartu Backlog.',
       '  - **Product Features** (bagian 5, kode seperti `HRS-F1`): dipakai kolom *Feature* di Bugs Incident dan QA Test Case.',
-      `- Status backlog: ${BACKLOG_STATUSES.map(s => `\`${s}\``).join(', ')}. Status Epic dan Story otomatis mengikuti anaknya. **TERLAMBAT** = deadline lewat dan status belum \`done\`/\`backlog\`.`,
+      `- Status backlog: ${BACKLOG_STATUSES.map(s => `\`${s}\``).join(', ')}. Status Epic dan Story otomatis mengikuti anaknya. **TERLAMBAT** = deadline lewat dan status bukan \`done\`, \`backlog\`, atau \`in_review\` (item yang sedang di-review tidak dianggap terlambat).`,
       '- **Progress %** selalu dihitung otomatis (tidak diisi manual). Kartu Backlog tanpa anak: dari status (`backlog`/`todo` 0%, `in_progress` 50%, `in_review` 80%, `done` 100%, `blocked` 25%). Epic/Story yang punya anak: rata-rata progress item di bawahnya, dibobot story point. Produk: rata-rata seluruh kartu kerjanya. Test case: dari hasil run terakhir (`pass` 100%, `fail` 50%, `blocked` 25%, belum dijalankan/`pending` 0%).',
       '- Stage bug: `open` → `in_progress` → `ready_to_test` → (`reopen`) → `done`; `improvement` = masukan/ide, bukan bug. Type: `bug`, atau `inquiry` (laporan yang perlu klarifikasi).',
       `- Status test case: ${TC_STATUSES.map(s => `\`${s}\``).join(', ')}. Hasil test run: ${RUN_RESULTS.map(s => `\`${s}\``).join(', ')}.`,
@@ -360,7 +360,7 @@ export function buildProductMarkdown(data, meta) {
         return blocks(
           `### ${b.code} · ${one(b.title)}`,
           [
-            pairs([['Type', enumv(b.type || 'bug')], ['Stage', enumv(b.stage)], ['Severity', one(b.severity)], ['Prioritas', one(b.priority)]]),
+            pairs([['Type', enumv(b.type_name || b.type || 'bug')], ['Stage', enumv(b.stage)], ['Severity', one(b.severity)], ['Prioritas', one(b.priority)]]),
             pairs([['Backlog item', ref(b.item_code, b.item_title)], ['Feature', featureRef(b)]]),
             pairs([['Assignee', names(b.assignees, one(b.assigned_to_name))], ['Pelapor', reporter]]),
             pairs([
