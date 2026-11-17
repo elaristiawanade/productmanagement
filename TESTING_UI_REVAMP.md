@@ -368,3 +368,30 @@ Fitur baru (PRD 3.8 & 3.9, v3.21). Butuh `migration_v29.sql` **sebelum** backend
 - ⚠️ QA: merah tanpa syarat status, jadi test case yang sudah selesai dijalankan atau `deprecated` tetap merah bila tanggalnya lewat. Kosongkan deadline-nya kalau tidak relevan lagi
 - ⚠️ Belum ada: Import CSV membaca deadline, deadline di Export MD, filter deadline, hitungan terlambat di dashboard, dan notifikasi pengingat
 - ⚠️ `docker-compose.yml` kini memasang v29 di initdb, jadi `docker compose up` berikutnya (tanpa `--no-deps`) membuat ulang `pt_postgres` (data volume aman, hanya restart singkat)
+
+## 33. Progress % otomatis (Backlog, My Task, Products, QA, Standup)
+
+Fitur baru (PRD 3.2, 3.3, 3.6, 3.7, 3.8, v3.22). Semua angka **dihitung**, tidak ada input manual. Hanya Standup butuh `migration_v30.sql` (sebelum backend baru naik). Diuji di stack Docker lokal (:8500) dengan akun dummy: API lewat skrip Node yang menghitung ulang nilai harapan **secara independen dari baris database**, UI lewat Chrome headless. Semua data uji dihapus/dikembalikan (18 standup, 42 item Backlog, status item seperti semula).
+
+- ✅ `migration_v30.sql` dijalankan dua kali tanpa error; `standups.progress` ada, standup lama `NULL`
+- ✅ Backlog: 42 dari 42 item punya `progress` yang sama dengan hitungan independen (leaf dari status, Story/Epic = rata-rata item di bawahnya berbobot story point; contoh HRS-2 = 75%, CRM-3 = 50%); tetap benar pada halaman paginasi (`limit=3&page=2`); semua bilangan bulat 0–100; `GET /backlog/{id}`, POST, dan PUT ikut mengembalikan `progress`
+- ✅ Ganti status langsung mengubah angka (HRS-7 `todo` → `done`: item 0 → 100, produk HRS 37 → 47), dikembalikan lagi → 37, tanpa nilai basi
+- ✅ Products: HRS 37, CRM 31, FIN 54 (cocok dengan hitungan independen); menggantikan "% selesai" lama (30/27/38)
+- ✅ QA: 11 test case cocok dengan run terakhir masing-masing (pass 100, fail 50, blocked 25, belum dijalankan/pending 0, `deprecated` tampil `—`)
+- ✅ Standup: standup hari ini terisi otomatis hanya dari item **di sprint aktif** sesuai hitungan independen (Andi 45, Bella 65, Candra 50, Dimas 40) beserta rincian per status (`progress_detail`); Admin (6 item di-assign, 0 di sprint aktif) → kosong, bukan 100% seperti aturan cadangan versi pertama; muncul di list dan `/standups/today`; edit hari ini menyegarkan (Andi 45 → 70 setelah item selesai); list mengembalikan `prev_progress`/`prev_progress_date` dari standup terakhir yang punya progress (standup tanpa progress dilewati); standup tanggal mundur dan edit standup lama tetap kosong; user tanpa item → kosong tanpa error
+- ✅ UI Backlog: kolom **Progress** setelah Status, 29 baris cocok dengan API; modal Story (HRS-2) menampilkan Progress baca-saja tanpa input; tampilan Board: 29 kartu punya bar
+- ✅ UI Products: tiga kartu "Progress 37% / 31% / 54%", teks "% selesai" tidak ada lagi
+- ✅ UI QA: kolom **Progress** setelah Deadline, semua baris cocok API; warna bar sesuai hasil run (fail merah, pass hijau, blocked kuning)
+- ✅ UI My Task (Andi): kolom Progress cocok API; mengganti status di panel ke `done` mengubah progress di panel dan tabel jadi 100% tanpa muat ulang halaman
+- ✅ UI Standup: standup dikirim dari form → tersimpan 45 → kartu di tab Riwayat menampilkan "Progress Pekerjaan 45%", **"▲ +15% sejak 16 Nov"** (dibanding standup sebelumnya 30%), dan keterangan **"dari 3 item sprint aktif: 2 in progress · 1 blocked"**; kartu standup lama tidak menampilkan bar
+- ✅ Export MD: legenda menjelaskan Progress, produk dan 23 kartu Backlog dan 4 test case (bukan `deprecated`) mencantumkan Progress (28 field)
+- 🧑 Jalankan `migration_v30.sql` di database server (backup dulu) **sebelum** backend baru naik, lalu cek halaman Standup (list, kirim, edit)
+- 🧑 Cek di data asli: angka Products dan Epic/Story masuk akal; Story tanpa Task dihitung dari statusnya sendiri
+- 🧑 Cek tema gelap (warna bar dan teks angka)
+- ⚠️ **Angka progress Products berubah** dibanding "% selesai" lama karena rumusnya berbeda (item kerja, dibobot story point, In Progress/In Review dihitung sebagian). Bar persen di baris Product Features, Sprints, dan Epic Board **tidak diubah** dan bisa berbeda dari angka baru
+- ⚠️ Karena dari status, item In Progress selalu 50% (tidak ada gradasi di dalam satu task); Blocked 25% tetap angka tebakan. Semua angka ada di satu tempat (`ProgressSupport`)
+- ⚠️ QA: fail = 50% adalah pemetaan paling subjektif ("sudah dites, belum lolos"); warna merah menjaga supaya tidak terbaca sebagai kemajuan. Test case dengan beberapa run memakai run **terakhir** saja
+- ⚠️ Tanpa item di sprint aktif, kartu standup tidak menampilkan bar (disengaja). Standup yang sudah tersimpan dengan angka dari aturan lama (mis. 100% dari item lama) tidak berubah sampai disimpan ulang
+- ⚠️ Snapshot Standup memakai tanggal server (UTC) dengan toleransi 1 hari; standup yang tanggalnya lebih dari 1 hari dari hari ini tidak diberi progress. Isinya adalah angka **saat disimpan**, bukan angka hari itu bila diedit belakangan di hari yang sama
+- ⚠️ Item yang di-assign hanya lewat kolom `assignee_id` lama (tanpa baris `backlog_item_assignees`, mis. hasil Import Jira, lihat PRD 3.11) tidak dihitung di Progress Pekerjaan Standup, sama seperti tidak tampil di My Tasks
+- ⚠️ `docker-compose.yml` kini memasang v30 di initdb, jadi `docker compose up` berikutnya (tanpa `--no-deps`) membuat ulang `pt_postgres` (data volume aman, hanya restart singkat)

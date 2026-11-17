@@ -161,6 +161,7 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v27.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v28.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v29.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v30.sql"
 ```
 
 > **Penting:** `migration_v10.sql` menambahkan kolom `users.department`, yang di-query
@@ -259,6 +260,14 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 > ```
 > Additive dan idempotent (`ADD COLUMN IF NOT EXISTS`); data lama tidak berubah (Deadline `—`).
 
+> **Penting juga:** `migration_v30.sql` menambah kolom `standups.progress` (`SMALLINT`) dan `standups.progress_detail` (`TEXT`), keduanya opsional, untuk snapshot **Progress Pekerjaan**
+> di Daily Standup. **Jalankan SEBELUM backend baru naik** — query list/create/edit Standup menyebut kolom ini, jadi tanpa migrasi
+> halaman Standup gagal `500`. Pada database yang sudah ada jalankan manual (**backup dulu**):
+> ```bash
+> docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v30.sql
+> ```
+> Additive dan idempotent; standup lama tetap `NULL` (tanpa bar). Progress % di Backlog, My Tasks, Products, dan QA **tidak butuh migrasi** — dihitung saat dibaca oleh `ProgressSupport`.
+
 ---
 
 ## 8. Notifikasi Email (Testing Lokal)
@@ -326,7 +335,8 @@ product-tracker/
 │       ├── migration_v26.sql
 │       ├── migration_v27.sql
 │       ├── migration_v28.sql
-│       └── migration_v29.sql
+│       ├── migration_v29.sql
+│       └── migration_v30.sql
 ├── backend-java/          # Spring Boot API (port 4000)
 │   ├── src/
 │   ├── pom.xml
