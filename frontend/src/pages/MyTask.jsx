@@ -10,6 +10,7 @@ import client from '../api/client';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import StatusMenu from '../components/StatusMenu';
+import ProgressBar from '../components/ProgressBar';
 import { useAuth } from '../context/AuthContext';
 import { renderWithLinks } from '../utils/linkify';
 import toast from 'react-hot-toast';
@@ -91,6 +92,12 @@ function TaskPanel({ item, onClose, onStatusChange, onMarkDone }) {
                 <CheckCheck className="w-3.5 h-3.5" /> Tandai Selesai
               </button>
             )}
+          </div>
+
+          {/* Progress: derived, so read-only (from the status, or from the tasks under a story/epic) */}
+          <div>
+            <p className="text-xs text-slate-400 mb-1">Progress <span className="text-slate-300">· otomatis</span></p>
+            <ProgressBar value={item.progress} variant="block" />
           </div>
 
           {/* Meta grid */}
@@ -268,7 +275,15 @@ export default function MyTask() {
       await client.patch(`/backlog/${id}/status`, { status });
       setItems(prev => prev.map(i => i.id === id ? { ...i, status } : i));
       if (panel?.id === id) setPanel(prev => ({ ...prev, status }));
-    } catch { toast.error('Gagal mengubah status'); }
+    } catch { toast.error('Gagal mengubah status'); return; }
+    // Progress is derived (a story's progress also follows its tasks), so take the fresh values from the server
+    // without the full-page reload spinner. Order and filters of the list stay as they are.
+    try {
+      const res = await client.get('/backlog', { params: { assignee_id: user.id, limit: 500 } });
+      const fresh = new Map((res.data.items || []).map(i => [i.id, i]));
+      setItems(prev => prev.map(i => fresh.has(i.id) ? { ...i, status: fresh.get(i.id).status, progress: fresh.get(i.id).progress } : i));
+      setPanel(prev => prev && fresh.has(prev.id) ? { ...prev, status: fresh.get(prev.id).status, progress: fresh.get(prev.id).progress } : prev);
+    } catch { /* the status change itself succeeded; progress refreshes on the next load */ }
   };
 
   const markDone = async (id) => {
@@ -431,6 +446,7 @@ export default function MyTask() {
                     <th className="text-center px-3 py-2.5 w-20">Tipe</th>
                     <th className="text-center px-3 py-2.5 w-24">Prioritas</th>
                     <th className="text-center px-3 py-2.5 w-32">Status</th>
+                    <th className="text-left px-3 py-2.5 w-[110px]" title="Dihitung otomatis dari status, atau dari item di bawahnya untuk Epic/Story">Progress</th>
                     <th className="text-left px-3 py-2.5 w-28">Sprint</th>
                     <th className="text-left px-3 py-2.5 w-24">Deadline</th>
                     <th className="text-center px-3 py-2.5 w-20">Aksi</th>
@@ -482,6 +498,7 @@ export default function MyTask() {
                       <td className="px-3 py-3 text-center">
                         <StatusMenu status={item.status} statuses={STATUSES} onChange={s => quickStatus(item.id, s)} />
                       </td>
+                      <td className="px-3 py-3"><ProgressBar value={item.progress} /></td>
                       <td className="px-3 py-3 text-xs text-slate-500">{item.sprint_name || '—'}</td>
                       <td className="px-3 py-3 text-xs">
                         {item.deadline

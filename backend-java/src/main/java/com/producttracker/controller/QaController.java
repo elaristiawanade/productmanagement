@@ -2,6 +2,7 @@ package com.producttracker.controller;
 
 import com.producttracker.config.PermissionHelper;
 import com.producttracker.service.BugStats;
+import com.producttracker.service.ProgressSupport;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -47,7 +48,9 @@ public class QaController {
             "  COUNT(tr.id)                                      AS run_count, " +
             "  COUNT(CASE WHEN tr.result='pass'  THEN 1 END)     AS pass_count, " +
             "  COUNT(CASE WHEN tr.result='fail'  THEN 1 END)     AS fail_count, " +
-            "  MAX(tr.executed_at)                               AS last_run " +
+            "  MAX(tr.executed_at)                               AS last_run, " +
+            "  (SELECT r.result FROM qa_test_runs r WHERE r.test_case_id = tc.id " +
+            "     ORDER BY COALESCE(r.executed_at, r.created_at) DESC, r.id DESC LIMIT 1) AS last_result " +
             "FROM qa_test_cases tc " +
             "LEFT JOIN backlog_items bi ON bi.id = tc.backlog_item_id " +
             "LEFT JOIN products      p  ON p.id  = tc.product_id " +
@@ -58,6 +61,8 @@ public class QaController {
             "GROUP BY tc.id, bi.code, bi.title, p.name, p.code, f.code, f.name, u.name " +
             "ORDER BY tc.product_id, tc.code",
             params.toArray());
+        // Progress is derived from the latest test run (null for a deprecated test case)
+        for (Map<String, Object> r : rows) r.put("progress", ProgressSupport.testCasePct(r.get("status"), r.get("last_result")));
         return ResponseEntity.ok(rows);
     }
 

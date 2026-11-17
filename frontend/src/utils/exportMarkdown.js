@@ -224,6 +224,7 @@ export function buildProductMarkdown(data, meta) {
       '  - **Roadmap** (bagian 4): fitur di roadmap produk. Inilah yang dipakai *Impacted Features* di kartu Backlog.',
       '  - **Product Features** (bagian 5, kode seperti `HRS-F1`): dipakai kolom *Feature* di Bugs Incident dan QA Test Case.',
       `- Status backlog: ${BACKLOG_STATUSES.map(s => `\`${s}\``).join(', ')}. Status Epic dan Story otomatis mengikuti anaknya. **TERLAMBAT** = deadline lewat dan status belum \`done\`/\`backlog\`.`,
+      '- **Progress %** selalu dihitung otomatis (tidak diisi manual). Kartu Backlog tanpa anak: dari status (`backlog`/`todo` 0%, `in_progress` 50%, `in_review` 80%, `done` 100%, `blocked` 25%). Epic/Story yang punya anak: rata-rata progress item di bawahnya, dibobot story point. Produk: rata-rata seluruh kartu kerjanya. Test case: dari hasil run terakhir (`pass` 100%, `fail` 50%, `blocked` 25%, belum dijalankan/`pending` 0%).',
       '- Stage bug: `open` → `in_progress` → `ready_to_test` → (`reopen`) → `done`; `improvement` = masukan/ide, bukan bug. Type: `bug`, atau `inquiry` (laporan yang perlu klarifikasi).',
       `- Status test case: ${TC_STATUSES.map(s => `\`${s}\``).join(', ')}. Hasil test run: ${RUN_RESULTS.map(s => `\`${s}\``).join(', ')}.`,
       `- Status sprint: ${SPRINT_STATUSES.map(s => `\`${s}\``).join(', ')}.`,
@@ -252,7 +253,8 @@ export function buildProductMarkdown(data, meta) {
   const productSection = blocks(
     '## 3. Produk',
     [
-      pairs([['Kode', product.code], ['Nama', one(product.name)], ['Status', enumv(product.status)], ['Owner', one(product.owner_name)]]),
+      pairs([['Kode', product.code], ['Nama', one(product.name)], ['Status', enumv(product.status)], ['Owner', one(product.owner_name)],
+        ['Progress', product.progress != null ? `${product.progress}%` : '']]),
       pairs([['Repository', one(product.repository_url)], ['Link', link(`/products?product=${product.id}`)]]),
     ].filter(Boolean).join('\n'),
     textBlock('Deskripsi', product.description),
@@ -328,7 +330,7 @@ export function buildProductMarkdown(data, meta) {
       `${'#'.repeat(Math.min(3 + depth, 6))} [${TYPE_LABEL[it.type] || it.type}] ${it.code} · ${one(it.title)}`,
       [
         pairs([
-          ['Status', enumv(it.status)], ['Prioritas', one(it.priority)],
+          ['Status', enumv(it.status)], ['Progress', it.progress != null ? `${it.progress}%` : ''], ['Prioritas', one(it.priority)],
           ['Story points', it.story_points ?? ''], ['Estimasi', it.estimated_hours ? `${it.estimated_hours} jam` : ''],
           ['Deadline', it.deadline ? `${day(it.deadline)}${it.is_delayed ? ' (TERLAMBAT)' : ''}` : ''],
         ]),
@@ -386,7 +388,7 @@ export function buildProductMarkdown(data, meta) {
       return blocks(
         `### ${tc.code} · ${one(tc.title)}`,
         [
-          pairs([['Status', enumv(tc.status)], ['Prioritas', one(tc.priority)]]),
+          pairs([['Status', enumv(tc.status)], ['Progress', tc.progress != null ? `${tc.progress}%` : ''], ['Prioritas', one(tc.priority)]]),
           pairs([['Backlog item', ref(tc.item_code, tc.item_title)], ['Feature', featureRef(tc)]]),
           pairs([['Author', one(tc.created_by_name)], ['Dibuat', dt(tc.created_at)], ['Diperbarui', dt(tc.updated_at)]]),
           pairs([['Link', link(`/qa?case=${tc.id}`)]]),

@@ -43,6 +43,7 @@ import PriorityBadge from '../components/PriorityBadge';
 import SearchableSelect from '../components/SearchableSelect';
 import BugsPerFeatureCard from '../components/BugsPerFeatureCard';
 import DeadlineDate from '../components/DeadlineDate';
+import ProgressBar from '../components/ProgressBar';
 import { buildBacklogTreeOptions } from '../utils/backlogHierarchy';
 import { buildFeatureOptions, featureText } from '../utils/featureOptions';
 import AttachmentSection from '../components/AttachmentSection';import { useAuth } from '../context/AuthContext';
@@ -56,6 +57,13 @@ const RESULT_ICONS = {
   pending: { icon: Clock,        cls: 'text-slate-400'   },
   skip:    { icon: Clock,        cls: 'text-slate-300'   },
 };
+
+// Progress of a test case comes from its latest test run (backend): the bar takes the colour of that result.
+const RUN_COLOR = { pass: '#1F9D55', fail: '#E5484D', blocked: '#D9891A' };
+const RUN_LABEL = { pass: 'Pass', fail: 'Fail', blocked: 'Blocked', pending: 'Pending', skip: 'Skip' };
+const caseProgressTitle = (tc) => tc.last_result
+  ? `Progress dari run terakhir: ${RUN_LABEL[tc.last_result] || tc.last_result} (Pass 100%, Fail 50%, Blocked 25%)`
+  : 'Belum pernah dijalankan (0%)';
 
 function TestCaseForm({ tc, products, backlogItems, features, onSave, onClose }) {
   const [form, setForm] = useState({
@@ -537,7 +545,7 @@ export default function QA() {
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1530px] text-sm">
+                  <table className="w-full min-w-[1650px] text-sm">
                     <thead>
                       <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 whitespace-nowrap">
                         <th className="text-left px-4 py-3">Kode</th>
@@ -547,6 +555,7 @@ export default function QA() {
                         <th className="text-center px-3 py-3">Prioritas</th>
                         <th className="text-center px-3 py-3">Status</th>
                         <th className="text-left px-3 py-3">Deadline</th>
+                        <th className="text-left px-3 py-3" title="Dihitung otomatis dari hasil test run terakhir">Progress</th>
                         <th className="text-center px-3 py-3">Runs</th>
                         <th className="text-center px-3 py-3">Pass</th>
                         <th className="text-center px-3 py-3">Fail</th>
@@ -556,7 +565,7 @@ export default function QA() {
                       </tr>
                     </thead>
                     <tbody>
-                      {pagedCases.length === 0 && <tr><td colSpan={13} className="text-center py-10 text-slate-400">Belum ada test case</td></tr>}
+                      {pagedCases.length === 0 && <tr><td colSpan={14} className="text-center py-10 text-slate-400">Belum ada test case</td></tr>}
                       {pagedCases.map(tc => (
                         <tr key={tc.id}
                           // Whole row opens the test case (same as the pencil, so only with qa.update); inner controls stop propagation
@@ -587,6 +596,7 @@ export default function QA() {
                           <td className="px-3 py-3 text-center"><StatusBadge status={tc.status} /></td>
                           {/* Red as soon as the deadline day is over (test cases have no "finished" status) */}
                           <td className="px-3 py-3 text-xs whitespace-nowrap"><DeadlineDate date={tc.deadline} /></td>
+                          <td className="px-3 py-3"><ProgressBar value={tc.progress} color={RUN_COLOR[tc.last_result]} title={caseProgressTitle(tc)} /></td>
                           <td className="px-3 py-3 text-center text-slate-600 font-medium">{tc.run_count}</td>
                           <td className="px-3 py-3 text-center text-emerald-600 font-medium">{tc.pass_count}</td>
                           <td className="px-3 py-3 text-center text-red-600 font-medium">{tc.fail_count}</td>

@@ -1,6 +1,7 @@
 package com.producttracker.controller;
 
 import com.producttracker.config.PermissionHelper;
+import com.producttracker.service.ProgressSupport;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -17,6 +18,9 @@ public class ProductController {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private ProgressSupport progressSupport;
 
     @GetMapping
     public ResponseEntity<?> list(@AuthenticationPrincipal Object principal) {
@@ -41,6 +45,7 @@ public class ProductController {
                 ids.toArray()
             );
         }
+        progressSupport.attachToProducts(rows);   // "progress": derived from the product's backlog, null if it has no work items
         return ResponseEntity.ok(rows);
     }
 
