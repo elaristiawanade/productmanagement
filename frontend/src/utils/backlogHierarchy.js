@@ -25,13 +25,13 @@ const toOption = (item, depth) => ({
   badge: BACKLOG_TYPE_BADGE[item.type] || null,
 });
 
-// Flattens backlog items (Epic -> Story -> Task/Bug, via parent_id) into an
-// ordered, indented option list for SearchableSelect: Epics and standalone
-// Stories first (each followed by its descendants), then Independent items
-// last as their own group. An item whose parent isn't in this set (wrong
-// product, filtered out, or missing) is treated as a root rather than
-// dropped, so it stays visible instead of silently disappearing.
-export function buildBacklogTreeOptions(items) {
+// Orders backlog items as a tree (Epic -> Story -> Task/Bug, via parent_id) and
+// returns [{ item, depth }]: Epics and standalone Stories first (each followed
+// by its descendants), then Independent items last as their own group. An item
+// whose parent isn't in this set (wrong product, filtered out, or missing) is
+// treated as a root rather than dropped, and so is anything left over from a
+// circular parent_id chain — every item appears exactly once.
+export function flattenBacklogTree(items) {
   const byId = new Map(items.map(it => [it.id, it]));
   const childrenByParent = new Map();
   for (const it of items) {
@@ -51,7 +51,7 @@ export function buildBacklogTreeOptions(items) {
   const walk = (item, depth) => {
     if (visited.has(item.id)) return;
     visited.add(item.id);
-    result.push(toOption(item, depth));
+    result.push({ item, depth });
     for (const kid of childrenByParent.get(item.id) || []) walk(kid, depth + 1);
   };
 
@@ -63,5 +63,14 @@ export function buildBacklogTreeOptions(items) {
   const independents = items.filter(it => it.type === 'independent').sort(sortSiblings);
   for (const ind of independents) walk(ind, 0);
 
+  // Only reachable through a circular parent_id chain (no root above it).
+  for (const it of [...items].sort(sortSiblings)) walk(it, 0);
+
   return result;
+}
+
+// The same tree as an indented option list for SearchableSelect
+// (the QA / Bugs Incident backlog picker).
+export function buildBacklogTreeOptions(items) {
+  return flattenBacklogTree(items).map(({ item, depth }) => toOption(item, depth));
 }

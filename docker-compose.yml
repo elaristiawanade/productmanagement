@@ -39,6 +39,9 @@ services:
       - ./backend/db/migration_v25.sql:/docker-entrypoint-initdb.d/27_migration_v25.sql
       - ./backend/db/migration_v26.sql:/docker-entrypoint-initdb.d/28_migration_v26.sql
       - ./backend/db/migration_v27.sql:/docker-entrypoint-initdb.d/29_migration_v27.sql
+      - ./backend/db/migration_v28.sql:/docker-entrypoint-initdb.d/30_migration_v28.sql
+      - ./backend/db/migration_v29.sql:/docker-entrypoint-initdb.d/31_migration_v29.sql
+      - ./backend/db/migration_v30.sql:/docker-entrypoint-initdb.d/32_migration_v30.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d product_tracker"]
       interval: 10s

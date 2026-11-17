@@ -19,6 +19,7 @@ import { renderWithLinks } from '../utils/linkify';
 import { useDeepLink } from '../utils/deepLink';
 import CopyLinkButton from '../components/CopyLinkButton';
 import { toastCreated } from '../utils/createdToast';
+import ProgressBar from '../components/ProgressBar';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { format, parseISO, formatDistanceToNow } from 'date-fns';
@@ -672,6 +673,17 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
         <input type="date" className="input" value={form.deadline}
           onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))} />
       </F>
+      {/* Read-only: never typed in. Leaf item = from its status; Epic/Story = average of the items below it. */}
+      {item?.id && (
+        <div className="col-span-2">
+          <F label="Progress">
+            <div className="flex items-center gap-3">
+              <ProgressBar value={item.progress} variant="block" className="max-w-[260px]" />
+              <span className="text-xs text-slate-400">Otomatis: {['epic', 'story'].includes(item.type) ? 'rata-rata item di bawahnya (jika ada), jika tidak dari status' : 'dari status'}</span>
+            </div>
+          </F>
+        </div>
+      )}
       <div className="col-span-2">
         <F label="Acceptance Criteria">
           <textarea className="input h-20 resize-none" value={form.acceptance_criteria}
@@ -942,6 +954,7 @@ export default function Backlog() {
       <td className="px-3 py-2">
         <StatusMenuButton status={item.status} canChange={canEdit} onChange={s => quickStatus(item.id, s)} />
       </td>
+      <td className="px-3 py-2"><ProgressBar value={item.progress} /></td>
       <td className="px-3 py-2 text-right font-semibold text-slate-600 tabular-nums">{pointsCell(item)}</td>
       <td className="px-3 py-2"><ProductTag item={item} /></td>
       <td className="px-3 py-2">{sprintCell(item)}</td>
@@ -1079,7 +1092,7 @@ export default function Backlog() {
         </div>
       ) : view === 'list' ? (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] text-[13px]">
+          <table className="w-full min-w-[1090px] text-[13px]">
             <thead>
               <tr className="text-[12.5px] text-slate-500 border-b border-slate-200">
                 <th className="text-left font-normal pl-3 pr-3 py-2">Judul</th>
@@ -1087,6 +1100,7 @@ export default function Backlog() {
                 <th className="text-left font-normal px-3 py-2 w-[88px]">Deadline</th>
                 <th className="text-left font-normal px-3 py-2 w-24">Prioritas</th>
                 <th className="text-left font-normal px-3 py-2 w-32">Status</th>
+                <th className="text-left font-normal px-3 py-2 w-[110px]" title="Dihitung otomatis dari status, atau dari item di bawahnya untuk Epic/Story">Progress</th>
                 <th className="text-right font-normal px-3 py-2 w-12">Pts</th>
                 <th className="text-left font-normal px-3 py-2 w-[84px]">Produk</th>
                 <th className="text-left font-normal px-3 py-2 w-40">Sprint</th>
@@ -1099,7 +1113,7 @@ export default function Backlog() {
                 const closed = collapsedGroups.has(s);
                 return [
                   <tr key={`g-${s}`}>
-                    <td colSpan={9} className="pt-4 pb-1.5">
+                    <td colSpan={10} className="pt-4 pb-1.5">
                       <div className="flex items-center gap-2">
                         <button type="button" onClick={() => toggleGroup(s)} aria-expanded={!closed}
                           aria-label={`${closed ? 'Buka' : 'Tutup'} grup ${STATUS_MAP[s].label}`}
@@ -1163,6 +1177,7 @@ export default function Backlog() {
                         {item.assignees?.length > 0 && <AssigneeStack assignees={item.assignees} showName={false} />}
                       </span>
                     </div>
+                    <ProgressBar value={item.progress} variant="block" />
                   </div>
                 ))}
                 {canCreate && (

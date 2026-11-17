@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.producttracker.config.PermissionHelper;
 import com.producttracker.service.EmailService;
+import com.producttracker.service.ProgressSupport;
 import com.producttracker.service.TeamsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +27,7 @@ public class BacklogController {
     @Autowired private JdbcTemplate jdbc;
     @Autowired private TeamsService teams;
     @Autowired private EmailService email;
+    @Autowired private ProgressSupport progress;
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -170,6 +172,7 @@ public class BacklogController {
                 pageParams.toArray()
             );
             enrichAssignees(items);
+            progress.attachToItems(items);   // computed from the whole product tree, not just this page
 
             return ResponseEntity.ok(Map.of(
                 "items", items, "total", total != null ? total : 0, "page", page, "limit", limit
@@ -188,6 +191,7 @@ public class BacklogController {
         );
         if (rows.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "Item tidak ditemukan"));
         enrichAssignees(rows);
+        progress.attachToItems(rows);
         return ResponseEntity.ok(rows.get(0));
     }
 
@@ -282,6 +286,7 @@ public class BacklogController {
 
             // A new child can move its story/epic forward
             syncAncestorStatus(newId, actorName);
+            progress.attachToItems(detail);
 
             // Notification to every assignee (primary + additional)
             notifyAssignees(item, actor != null ? toLong(actor.get("id")) : null,
@@ -394,6 +399,7 @@ public class BacklogController {
             "SELECT " + ITEM_FIELDS + ITEM_JOINS + "WHERE bi.id=?", id
         );
         enrichAssignees(detail);
+        progress.attachToItems(detail);
         Map<String, Object> item = detail.get(0);
 
         // Build change description

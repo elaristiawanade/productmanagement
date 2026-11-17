@@ -112,6 +112,9 @@ public class BugController {
         if (!BUG_TYPES.contains(type)) {
             return ResponseEntity.badRequest().body(Map.of("error", "Type harus bug atau inquiry"));
         }
+        java.sql.Date deadline;
+        try { deadline = toSqlDate(body.get("deadline")); }
+        catch (IllegalArgumentException e) { return invalidDeadline(); }
         String bugCode = (String) body.get("code");
         if (bugCode == null || bugCode.isBlank()) {
             List<Map<String, Object>> pRows = jdbc.queryForList(
@@ -138,15 +141,16 @@ public class BugController {
         try {
             Map<String, Object> row = jdbc.queryForMap(
                 "INSERT INTO bugs " +
-                "(backlog_item_id, product_id, feature_id, type, code, title, description, steps_to_reproduce, severity, priority, stage, reported_by, assigned_to) " +
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING *",
+                "(backlog_item_id, product_id, feature_id, type, code, title, description, steps_to_reproduce, severity, priority, stage, reported_by, assigned_to, deadline) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING *",
                 toLong(body.get("backlog_item_id")), productId, featureId, type, bugCode,
                 body.get("title"), body.get("description"), body.get("steps_to_reproduce"),
                 orDefault(body.get("severity"), "medium"),
                 orDefault(body.get("priority"), "medium"),
                 initialStage,
                 user != null ? user.get("id") : null,
-                toLong(body.get("assigned_to"))
+                toLong(body.get("assigned_to")),
+                deadline
             );
 
             Long newBugId = toLong(row.get("id"));
@@ -190,12 +194,20 @@ public class BugController {
             return ResponseEntity.badRequest().body(Map.of("error", "Type harus bug atau inquiry"));
         }
 
+        // Deadline is only touched when the key is sent ("" / null clears it). A request without the key
+        // (e.g. a browser still running the previous frontend bundle) keeps the stored deadline.
+        boolean deadlineSent = body.containsKey("deadline");
+        java.sql.Date deadline;
+        try { deadline = toSqlDate(body.get("deadline")); }
+        catch (IllegalArgumentException e) { return invalidDeadline(); }
+
         int updated = jdbc.update(
-            "UPDATE bugs SET title=?,description=?,steps_to_reproduce=?,severity=?,priority=?,assigned_to=?,backlog_item_id=?,feature_id=?,type=COALESCE(?, type) WHERE id=?",
+            "UPDATE bugs SET title=?,description=?,steps_to_reproduce=?,severity=?,priority=?,assigned_to=?,backlog_item_id=?,feature_id=?,type=COALESCE(?, type)," +
+            "deadline = CASE WHEN ?::boolean THEN ?::date ELSE deadline END WHERE id=?",
             body.get("title"), body.get("description"), body.get("steps_to_reproduce"),
             body.get("severity"), body.get("priority"),
             toLong(body.get("assigned_to")), toLong(body.get("backlog_item_id")), featureId,
-            type.isEmpty() ? null : type, id
+            type.isEmpty() ? null : type, deadlineSent, deadline, id
         );
         if (updated == 0) return ResponseEntity.status(404).body(Map.of("error", "Bug tidak ditemukan"));
 
@@ -530,6 +542,22 @@ public class BugController {
         if (featureId == null) return true;
         List<Map<String, Object>> rows = jdbc.queryForList("SELECT product_id FROM features WHERE id=?", featureId);
         return !rows.isEmpty() && productId != null && productId.equals(toLong(rows.get(0).get("product_id")));
+    }
+
+    /**
+     * Optional deadline from the form's date input ("yyyy-MM-dd"; a longer ISO string is cut to its date part).
+     * null / blank = no deadline. Throws IllegalArgumentException for anything else, so a bad value is
+     * rejected with 400 instead of being silently dropped.
+     */
+    private java.sql.Date toSqlDate(Object v) {
+        if (v == null) return null;
+        String s = v.toString().trim();
+        if (s.isEmpty()) return null;
+        return java.sql.Date.valueOf(s.length() > 10 ? s.substring(0, 10) : s);
+    }
+
+    private ResponseEntity<?> invalidDeadline() {
+        return ResponseEntity.badRequest().body(Map.of("error", "Format deadline tidak valid (YYYY-MM-DD)"));
     }
 
     @SuppressWarnings("unchecked")

@@ -150,6 +150,14 @@ docker compose up -d --build backend frontend
 | Filter test cases by product | GET | `/api/qa/test-cases?product_id={id}` | 200 | 🔧 → ✅ after rebuild | |
 | Create test case | POST | `/api/qa/test-cases` | 201 | ⚠️ Requires `backlog_item_id` | Not `product_id` — must link to a backlog item |
 | Update test case | PUT | `/api/qa/test-cases/{id}` | 200 | ✅ 200 | |
+| Create/update test case dengan `deadline` | POST / PUT | `/api/qa/test-cases`, `/api/qa/test-cases/{id}` | 201/200, `deadline` = `"yyyy-MM-dd"`; `""`/`null` mengosongkan; PUT **tanpa** key `deadline` mempertahankan nilai lama; format salah → 400 | ✅ | 17 Nov 2026, akun dummy lokal; butuh `migration_v29.sql` (tanpa migrasi create/edit 500) |
+| Create/update bug dengan `deadline` | POST / PUT | `/api/bugs`, `/api/bugs/{id}` | sama seperti test case; ganti stage lewat `POST /api/bugs/progress` tidak mengubah deadline | ✅ | 17 Nov 2026 |
+| Import CSV berisi kolom `Deadline` | POST | `/api/import/bugs`, `/api/import/qa-test-cases` | 200, baris dibuat; kolom Deadline diabaikan (deadline kosong) | ✅ 200 | import belum membaca deadline |
+| Progress % di list Backlog/detail/create/update | GET / POST / PUT | `/api/backlog`, `/api/backlog/{id}` | field `progress` integer 0–100; item tanpa anak dari status (0/0/50/80/100, blocked 25); Story/Epic = rata-rata item di bawahnya berbobot story point; tetap benar pada halaman paginasi | ✅ 42/42 item cocok dengan hitungan independen dari baris DB | 17 Nov 2026, akun dummy lokal |
+| Progress % produk | GET | `/api/products` | `progress` = rata-rata item kerja produk (null bila kosong) | ✅ HRS 37, CRM 31, FIN 54 | menggantikan "% selesai" lama (30/27/38) |
+| Progress % test case | GET | `/api/qa/test-cases` | `progress` dari run terakhir (pass 100, fail 50, blocked 25, none/pending 0), `deprecated` → null; `last_result` ikut | ✅ 11/11 cocok | |
+| Progress % berubah segera saat status diganti | PATCH | `/api/backlog/{id}/status` | progress item dan produk naik/turun di GET berikutnya, tanpa nilai basi | ✅ HRS-7 0→100, produk 37→47, kembali 37 | |
+| Snapshot Progress Pekerjaan Standup | POST / PUT / GET | `/api/standups`, `/api/standups/today` | hari ini: terisi dari item **di sprint aktif** + `progress_detail` (jumlah per status); user dengan pekerjaan tapi tanpa item di sprint aktif: null; tanggal mundur / edit standup lama: null; list mengembalikan `prev_progress` dan `prev_progress_date` (standup terakhir yang punya progress); edit hari ini menyegarkan | ✅ Andi 45 `{"in_progress":2,"blocked":1}`, Bella 65, Candra 50, Dimas 40; Andi 45→70 setelah item selesai; Admin (6 item, 0 di sprint aktif) → null | butuh `migration_v30.sql` |
 | Delete test case | DELETE | `/api/qa/test-cases/{id}` | 200 | ✅ 200 | |
 | List test runs | GET | `/api/qa/test-runs` | 200 | ✅ 200 | |
 | Filter test runs by product | GET | `/api/qa/test-runs?product_id={id}` | 200 | 🔧 → ✅ after rebuild | |

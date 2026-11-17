@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import client from '../api/client';
 import Modal from '../components/Modal';
+import ProgressBar from '../components/ProgressBar';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
@@ -102,6 +103,44 @@ function StandupForm({ standup, onSave, onClose }) {
   );
 }
 
+// ─── StandupProgress ───────────────────────────────────────────────────
+// Snapshot of the author's work in the ACTIVE sprint, taken when this standup was saved (backend: standups.progress).
+// Empty for old/imported/backdated standups and for people with nothing in an active sprint -> nothing is shown.
+const PROGRESS_STATUS_LABEL = { done: 'done', in_review: 'in review', in_progress: 'in progress', blocked: 'blocked', todo: 'to do', backlog: 'backlog' };
+
+function StandupProgress({ standup }) {
+  if (standup.progress === null || standup.progress === undefined) return null;
+
+  let detail = null;
+  try { detail = standup.progress_detail ? JSON.parse(standup.progress_detail) : null; } catch { /* keep the bar without the caption */ }
+  const parts = detail ? Object.entries(detail).map(([st, n]) => `${n} ${PROGRESS_STATUS_LABEL[st] || st}`) : [];
+  const total = detail ? Object.values(detail).reduce((a, b) => a + b, 0) : 0;
+
+  // Movement since the author's previous stamped standup (long tasks stay flat; finished work shows as up)
+  const hasPrev = standup.prev_progress !== null && standup.prev_progress !== undefined;
+  const diff = hasPrev ? standup.progress - standup.prev_progress : 0;
+  const since = standup.prev_progress_date ? format(parseISO(String(standup.prev_progress_date).slice(0, 10)), 'dd MMM') : '';
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide shrink-0">Progress Pekerjaan</span>
+        <ProgressBar value={standup.progress} variant="block" className="max-w-[260px]"
+          title={`Progress ${standup.progress}% — rata-rata item yang di-assign ke penulis di sprint aktif, dihitung saat standup disimpan`} />
+        {hasPrev && (
+          <span className={`text-xs font-medium tabular-nums ${diff > 0 ? 'text-emerald-600' : diff < 0 ? 'text-amber-600' : 'text-slate-400'}`}
+            title={`Dibanding standup ${since}: ${standup.prev_progress}%`}>
+            {diff > 0 ? `▲ +${diff}%` : diff < 0 ? `▼ −${Math.abs(diff)}%` : '● tetap'} sejak {since}
+          </span>
+        )}
+      </div>
+      {parts.length > 0 && (
+        <p className="text-xs text-slate-400">dari {total} item sprint aktif: {parts.join(' · ')}</p>
+      )}
+    </div>
+  );
+}
+
 // ─── StandupCard ──────────────────────────────────────────────────────────────
 function StandupCard({ standup, onEdit, canEdit }) {
   const dateStr = standup.standup_date
@@ -138,6 +177,7 @@ function StandupCard({ standup, onEdit, canEdit }) {
           <p className="text-sm text-slate-700 whitespace-pre-wrap">{standup.today}</p>
         </div>
       </div>
+      <StandupProgress standup={standup} />
       {standup.has_blocker && standup.blocker && (
         <div className="bg-red-50 rounded-lg p-3 space-y-1.5">
           <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">Blocker</p>

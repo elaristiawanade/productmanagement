@@ -1,6 +1,7 @@
 package com.producttracker.controller;
 
 import com.producttracker.config.PermissionHelper;
+import com.producttracker.service.ProgressSupport;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -25,6 +26,9 @@ public class StandupController {
     @Autowired
     private JdbcTemplate jdbc;
 
+    @Autowired
+    private ProgressSupport progressSupport;
+
     // ─── LIST ─────────────────────────────────────────────────────────────
 
     @GetMapping
@@ -40,7 +44,12 @@ public class StandupController {
 
         StringBuilder sql = new StringBuilder(
             "SELECT s.id, s.standup_date, s.yesterday, s.today, " +
-            "       s.has_blocker, s.blocker, s.blocker_plan, " +
+            "       s.has_blocker, s.blocker, s.blocker_plan, s.progress, s.progress_detail, " +
+            // the author's previous stamped standup, so the card can show how far the work moved since then
+            "       (SELECT p.progress FROM standups p WHERE p.user_id = s.user_id AND p.standup_date < s.standup_date " +
+            "          AND p.progress IS NOT NULL ORDER BY p.standup_date DESC LIMIT 1) AS prev_progress, " +
+            "       (SELECT p.standup_date FROM standups p WHERE p.user_id = s.user_id AND p.standup_date < s.standup_date " +
+            "          AND p.progress IS NOT NULL ORDER BY p.standup_date DESC LIMIT 1) AS prev_progress_date, " +
             "       s.created_at, s.updated_at, " +
             "       u.id AS user_id, u.name AS user_name, u.avatar_color " +
             "FROM standups s " +
@@ -104,15 +113,20 @@ public class StandupController {
         boolean hasBlocker = Boolean.TRUE.equals(body.get("has_blocker")) ||
             "true".equals(String.valueOf(body.get("has_blocker")));
 
+        // Progress snapshot of the author's work, only for a standup of (about) today; backdated ones stay empty
+        ProgressSupport.WorkProgress work = ProgressSupport.isCurrentStandupDate(standupDate) ? progressSupport.workProgressOfUser(userId) : null;
+
         try {
             Map<String, Object> row = jdbc.queryForMap(
-                "INSERT INTO standups (user_id, standup_date, yesterday, today, has_blocker, blocker, blocker_plan) " +
-                "VALUES (?,?,?,?,?,?,?) RETURNING *",
+                "INSERT INTO standups (user_id, standup_date, yesterday, today, has_blocker, blocker, blocker_plan, progress, progress_detail) " +
+                "VALUES (?,?,?,?,?,?,?,?,?) RETURNING *",
                 userId, standupDate,
                 body.get("yesterday"), body.get("today"),
                 hasBlocker,
                 hasBlocker ? body.get("blocker") : null,
-                hasBlocker ? body.get("blocker_plan") : null
+                hasBlocker ? body.get("blocker_plan") : null,
+                work != null ? work.pct : null,
+                work != null ? work.detailJson : null
             );
             return ResponseEntity.status(201).body(row);
         } catch (Exception e) {
@@ -183,6 +197,15 @@ public class StandupController {
                 return ResponseEntity.status(409).body(Map.of("error", "Standup untuk tanggal ini sudah ada"));
             }
             return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
+        }
+
+        // Re-stamp the progress snapshot when the standup is (about) today; older standups keep theirs
+        Map<String, Object> saved = jdbc.queryForMap("SELECT standup_date FROM standups WHERE id=?", id);
+        java.sql.Date savedDate = (java.sql.Date) saved.get("standup_date");
+        if (ProgressSupport.isCurrentStandupDate(savedDate)) {
+            ProgressSupport.WorkProgress work = progressSupport.workProgressOfUser(ownerId);
+            jdbc.update("UPDATE standups SET progress=?, progress_detail=? WHERE id=?",
+                work != null ? work.pct : null, work != null ? work.detailJson : null, id);
         }
 
         Map<String, Object> updated = jdbc.queryForMap("SELECT * FROM standups WHERE id=?", id);

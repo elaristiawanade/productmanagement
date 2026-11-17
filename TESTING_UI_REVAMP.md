@@ -323,3 +323,75 @@ Fitur baru (PRD 3.8 & 3.9, v3.19). Tanpa migrasi database. Diuji di stack Docker
 - ⚠️ Daftar role yang boleh melihat kartu di QA ditulis di kode (`BUG_OVERVIEW_ROLES` di `QaController`), belum bisa diatur dari Roles & Permissions. Role yang diganti nama atau role baru tidak otomatis ikut
 - ⚠️ Nilai tabel bergantung pada pengisian field **Feature (opsional)** di form Bug; bug tanpa Feature masuk "Tanpa Feature" dan tidak ditebak dari Impacted Features backlog item (supaya tidak terhitung ganda)
 - ⚠️ Baris diurutkan dari total bug terbanyak (termasuk yang sudah Done), bukan dari bug yang belum selesai
+
+## 31. Export MD (paket data produk untuk AI)
+
+Fitur baru (PRD 3.6 & 3.10, v3.20). Frontend saja; `migration_v28.sql` opsional (hanya permission). Diuji di stack Docker lokal dengan akun dummy: generator dijalankan di Node terhadap API asli, lalu Chrome headless lewat Vite dev server.
+
+- ✅ Paket HRS sebagai Super Admin: 23 kartu Backlog tersusun Epic → Story → Task (anak di heading lebih dalam), 6 bug lengkap dengan riwayat progress, 4 test case dengan riwayat test run, tabel Roadmap/Product Features/Epic/Sprint, legenda dua jenis feature; 39 request, semua "silent" (tidak memunculkan toast error)
+- ✅ PO (tanpa akses Bugs Incident): bagian Bugs diganti catatan "tidak disertakan", tidak ada request `403`, ringkasan menyebut alasannya
+- ✅ Kasus pinggir (data buatan): rantai `parent_id` melingkar dan parent yang tidak ada → semua item tetap muncul tepat sekali; komentar multi-baris berawalan `#` tidak membentuk heading baru; `|` di sel tabel di-escape; mention `@[Nama]` jadi `@Nama`; riwayat yang gagal dimuat ditandai per kartu + catatan di header; pelapor publik tampil "(pelapor publik)" tanpa e-mail; entri otomatis tanpa user tidak menampilkan "—"
+- ✅ UI (Chrome headless): tombol **Export MD** di setiap kartu produk untuk Super Admin dan PO, label berubah "Menyiapkan…" selama proses, file `PO-Tracker_HRS_<tanggal>.md` terunduh, toast "Paket HRS diunduh", tombol aktif lagi; Developer tidak melihat tombol
+- ✅ Roles & Permissions: baris **Export MD → Paket Produk (.md)** tampil di matrix dan di kartu role; PO tercentang setelah `migration_v28.sql`; migrasi dijalankan dua kali tanpa error dan permission lain tidak tertimpa
+- ✅ Dropdown Backlog Item di QA/Bugs memakai fungsi pohon yang sama (`flattenBacklogTree`), jumlah opsi tidak berubah
+- ✅ Tabel Sprint: "Progress poin" dihitung dari kartu task/bug/independent dan sama dengan halaman Sprints (HRS Sprint 2 = 1 / 6). "Item per status" mencakup semua status termasuk `backlog` dan `in_review`. Angka committed/completed manual dari form sprint ditampilkan terpisah sebagai "Velocity manual" (dulu tertulis "Poin selesai 18", padahal yang benar-benar selesai baru 1 poin)
+- ✅ Diuji dengan file hasil unduhan user: semua angka ringkasan, jumlah per status/tipe, kartu terlambat, susunan pohon, dan riwayat cocok dengan database lokal
+- ✅ Uji keterbacaan AI (17 Nov): file HRS (±26 ribu karakter, ±8 ribu token) dibaca tanpa melihat kode lalu dipakai menjawab pertanyaan PO/QA/manager. Jumlah backlog dan 6 kartu terlambat, progress Sprint 2 (1 / 6 poin), TC-002 gagal → BUG-001, bug per feature Check-in via GPS (sama dengan kartu Bugs per Feature), dan 9 entri riwayat HRS-9 semuanya cocok dengan database
+- ✅ Generator dijalankan sebagai PO dan Developer: bagian Bugs tertulis "tidak disertakan (tidak punya akses)", jadi AI tidak menyimpulkan produk bebas bug
+- 🧑 Jalankan `migration_v28.sql` di database yang sudah ada (opsional, aman kapan saja), lalu refresh/login ulang: tombol muncul untuk Manager, PO, QA. Tanpa migrasi hanya Super Admin yang melihatnya
+- 🧑 Export produk dengan data asli yang besar (ratusan kartu): progres "Mengambil komentar & aktivitas x/y" berjalan, file terunduh, lalu unggah ke Claude dan ChatGPT dan tanyakan hal seperti "kartu mana yang terlambat dan siapa assignee-nya?"
+- 🧑 Centang/hapus **Export MD** untuk role lain (mis. Developer) di Roles & Permissions dan pastikan tombol muncul/hilang setelah refresh
+- ⚠️ Riwayat diambil satu request per kartu Backlog/Bug (6 paralel); produk dengan ratusan kartu butuh beberapa detik sampai puluhan detik. Kalau nanti terasa lambat, opsi berikutnya adalah endpoint backend khusus export
+- ⚠️ Permission `export.md` hanya mengatur tombol. Data di dalam file tetap dibatasi hak akses data biasa (produk yang ditugaskan, akses Bugs), jadi file tidak pernah berisi lebih dari yang bisa dilihat akun itu di aplikasi
+- ⚠️ File berisi data internal kantor. Setelah diunduh, file tidak lagi dilindungi hak akses aplikasi, jadi perlakukan seperti dokumen internal saat dibagikan atau diunggah ke AI
+- ⚠️ `docker-compose.yml` kini memasang v28 di initdb, jadi `docker compose up` berikutnya (tanpa `--no-deps`) membuat ulang `pt_postgres` (data volume aman, hanya restart singkat)
+- ⚠️ "Kerjaan Andi apa saja?" → file menyebut 6 kartu, Backlog hanya 4. HRS-2-S1/S2 (dan CRM-3-S1/S2) hanya punya kolom `assignee_id` lama tanpa baris `backlog_item_assignees`; export memakai kolom lama sebagai cadangan, Backlog/My Tasks tidak. Di produksi sumbernya Import Jira (`ImportController` tidak menulis tabel assignee, lihat PRD 3.11)
+- ⚠️ Kandidat perbaikan berikutnya: legenda belum menjelaskan dua arti **Epic** (tipe kartu vs Epic produk) dan **Bug** (tipe kartu vs tiket Bugs Incident); judul tiket bug dan test case belum berlabel tipe; belum ada tabel ringkas satu baris per kartu untuk produk besar
+
+## 32. Deadline di Bugs Incident & QA Module
+
+Fitur baru (PRD 3.8 & 3.9, v3.21). Butuh `migration_v29.sql` **sebelum** backend baru naik. Diuji di stack Docker lokal (:8500) dengan akun dummy: API lewat skrip Node, UI lewat Chrome headless. Data uji dihapus lagi (13 bug, 10 test case seperti semula).
+
+- ✅ `migration_v29.sql` dijalankan dua kali tanpa error; kolom `deadline DATE` ada di `bugs` dan `qa_test_cases`, data lama `NULL`
+- ✅ API Bugs & QA: create dengan deadline tersimpan `"yyyy-MM-dd"`, create tanpa deadline → `null`, edit mengganti, `""`/`null` mengosongkan, format salah (`besok`, `20-11-2026`, `2026/11/01`) → `400 Format deadline tidak valid (YYYY-MM-DD)`
+- ✅ Edit **tanpa** field `deadline` (meniru browser yang masih memakai frontend lama) tidak menghapus deadline
+- ✅ Ganti stage bug (Update Progress / dropdown Stage) tidak mengubah deadline
+- ✅ Import CSV bug dan test case berisi kolom `Deadline` tetap jalan (deadline diabaikan, kosong)
+- ✅ UI Bugs: kolom **Deadline** setelah Stage; tanggal lewat + stage Open merah dengan ikon dan tooltip "Lewat deadline"; tanggal mendatang abu-abu; bug **Done** dengan tanggal lewat tidak merah; bug tanpa deadline `—`
+- ✅ UI Bugs: sort Deadline (klik pertama) → paling dekat dulu, tanpa deadline paling bawah
+- ✅ UI Bugs: form Edit menampilkan deadline tersimpan, ubah tanggal → tabel ikut berubah dan tidak merah lagi; form Buat Bug dengan deadline → tampil di tabel. Assigned To dan Deadline bersebelahan
+- ✅ UI QA: kolom **Deadline** setelah Status; tanggal lewat merah; deadline **hari ini** belum merah; test case lama `—`; form Edit menampilkan deadline, mengosongkan tanggal → `—`
+- ✅ Export CSV Bugs dan Test Cases punya kolom `Deadline` (`yyyy-MM-dd`)
+- 🧑 Jalankan `migration_v29.sql` di database server (backup dulu) **sebelum** backend baru naik, lalu cek Buat/Edit bug dan test case
+- 🧑 Cek tampilan di tema gelap dan di browser dengan locale Indonesia (input tanggal tampil `dd/mm/yyyy`)
+- ⚠️ "Merah" dihitung dari tanggal lokal komputer pengguna, jadi bergantung jam/tanggal komputer itu. Hari H deadline belum merah (Backlog sudah merah di hari H karena memakai `NOW()` di database)
+- ⚠️ QA: merah tanpa syarat status, jadi test case yang sudah selesai dijalankan atau `deprecated` tetap merah bila tanggalnya lewat. Kosongkan deadline-nya kalau tidak relevan lagi
+- ⚠️ Belum ada: Import CSV membaca deadline, deadline di Export MD, filter deadline, hitungan terlambat di dashboard, dan notifikasi pengingat
+- ⚠️ `docker-compose.yml` kini memasang v29 di initdb, jadi `docker compose up` berikutnya (tanpa `--no-deps`) membuat ulang `pt_postgres` (data volume aman, hanya restart singkat)
+
+## 33. Progress % otomatis (Backlog, My Task, Products, QA, Standup)
+
+Fitur baru (PRD 3.2, 3.3, 3.6, 3.7, 3.8, v3.22). Semua angka **dihitung**, tidak ada input manual. Hanya Standup butuh `migration_v30.sql` (sebelum backend baru naik). Diuji di stack Docker lokal (:8500) dengan akun dummy: API lewat skrip Node yang menghitung ulang nilai harapan **secara independen dari baris database**, UI lewat Chrome headless. Semua data uji dihapus/dikembalikan (18 standup, 42 item Backlog, status item seperti semula).
+
+- ✅ `migration_v30.sql` dijalankan dua kali tanpa error; `standups.progress` ada, standup lama `NULL`
+- ✅ Backlog: 42 dari 42 item punya `progress` yang sama dengan hitungan independen (leaf dari status, Story/Epic = rata-rata item di bawahnya berbobot story point; contoh HRS-2 = 75%, CRM-3 = 50%); tetap benar pada halaman paginasi (`limit=3&page=2`); semua bilangan bulat 0–100; `GET /backlog/{id}`, POST, dan PUT ikut mengembalikan `progress`
+- ✅ Ganti status langsung mengubah angka (HRS-7 `todo` → `done`: item 0 → 100, produk HRS 37 → 47), dikembalikan lagi → 37, tanpa nilai basi
+- ✅ Products: HRS 37, CRM 31, FIN 54 (cocok dengan hitungan independen); menggantikan "% selesai" lama (30/27/38)
+- ✅ QA: 11 test case cocok dengan run terakhir masing-masing (pass 100, fail 50, blocked 25, belum dijalankan/pending 0, `deprecated` tampil `—`)
+- ✅ Standup: standup hari ini terisi otomatis hanya dari item **di sprint aktif** sesuai hitungan independen (Andi 45, Bella 65, Candra 50, Dimas 40) beserta rincian per status (`progress_detail`); Admin (6 item di-assign, 0 di sprint aktif) → kosong, bukan 100% seperti aturan cadangan versi pertama; muncul di list dan `/standups/today`; edit hari ini menyegarkan (Andi 45 → 70 setelah item selesai); list mengembalikan `prev_progress`/`prev_progress_date` dari standup terakhir yang punya progress (standup tanpa progress dilewati); standup tanggal mundur dan edit standup lama tetap kosong; user tanpa item → kosong tanpa error
+- ✅ UI Backlog: kolom **Progress** setelah Status, 29 baris cocok dengan API; modal Story (HRS-2) menampilkan Progress baca-saja tanpa input; tampilan Board: 29 kartu punya bar
+- ✅ UI Products: tiga kartu "Progress 37% / 31% / 54%", teks "% selesai" tidak ada lagi
+- ✅ UI QA: kolom **Progress** setelah Deadline, semua baris cocok API; warna bar sesuai hasil run (fail merah, pass hijau, blocked kuning)
+- ✅ UI My Task (Andi): kolom Progress cocok API; mengganti status di panel ke `done` mengubah progress di panel dan tabel jadi 100% tanpa muat ulang halaman
+- ✅ UI Standup: standup dikirim dari form → tersimpan 45 → kartu di tab Riwayat menampilkan "Progress Pekerjaan 45%", **"▲ +15% sejak 16 Nov"** (dibanding standup sebelumnya 30%), dan keterangan **"dari 3 item sprint aktif: 2 in progress · 1 blocked"**; kartu standup lama tidak menampilkan bar
+- ✅ Export MD: legenda menjelaskan Progress, produk dan 23 kartu Backlog dan 4 test case (bukan `deprecated`) mencantumkan Progress (28 field)
+- 🧑 Jalankan `migration_v30.sql` di database server (backup dulu) **sebelum** backend baru naik, lalu cek halaman Standup (list, kirim, edit)
+- 🧑 Cek di data asli: angka Products dan Epic/Story masuk akal; Story tanpa Task dihitung dari statusnya sendiri
+- 🧑 Cek tema gelap (warna bar dan teks angka)
+- ⚠️ **Angka progress Products berubah** dibanding "% selesai" lama karena rumusnya berbeda (item kerja, dibobot story point, In Progress/In Review dihitung sebagian). Bar persen di baris Product Features, Sprints, dan Epic Board **tidak diubah** dan bisa berbeda dari angka baru
+- ⚠️ Karena dari status, item In Progress selalu 50% (tidak ada gradasi di dalam satu task); Blocked 25% tetap angka tebakan. Semua angka ada di satu tempat (`ProgressSupport`)
+- ⚠️ QA: fail = 50% adalah pemetaan paling subjektif ("sudah dites, belum lolos"); warna merah menjaga supaya tidak terbaca sebagai kemajuan. Test case dengan beberapa run memakai run **terakhir** saja
+- ⚠️ Tanpa item di sprint aktif, kartu standup tidak menampilkan bar (disengaja). Standup yang sudah tersimpan dengan angka dari aturan lama (mis. 100% dari item lama) tidak berubah sampai disimpan ulang
+- ⚠️ Snapshot Standup memakai tanggal server (UTC) dengan toleransi 1 hari; standup yang tanggalnya lebih dari 1 hari dari hari ini tidak diberi progress. Isinya adalah angka **saat disimpan**, bukan angka hari itu bila diedit belakangan di hari yang sama
+- ⚠️ Item yang di-assign hanya lewat kolom `assignee_id` lama (tanpa baris `backlog_item_assignees`, mis. hasil Import Jira, lihat PRD 3.11) tidak dihitung di Progress Pekerjaan Standup, sama seperti tidak tampil di My Tasks
+- ⚠️ `docker-compose.yml` kini memasang v30 di initdb, jadi `docker compose up` berikutnya (tanpa `--no-deps`) membuat ulang `pt_postgres` (data volume aman, hanya restart singkat)

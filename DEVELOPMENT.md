@@ -159,6 +159,9 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v25.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v26.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v27.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v28.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v29.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v30.sql"
 ```
 
 > **Penting:** `migration_v10.sql` menambahkan kolom `users.department`, yang di-query
@@ -239,6 +242,32 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 > ```
 > Additive dan idempotent (`CREATE TABLE IF NOT EXISTS`, backfill `ON CONFLICT DO NOTHING`); kolom `feature_id` lama tetap ada.
 
+> **Catatan:** `migration_v28.sql` hanya **menggabungkan** permission `export.md` (tombol **Export MD** di Products) ke
+> `roles.permissions` Super Admin, Manager, PO, dan QA — tanpa tabel/kolom baru, backend tidak berubah. **Opsional dan aman
+> dijalankan kapan saja** (sebelum atau sesudah frontend baru naik). Tanpa migrasi ini hanya Super Admin yang melihat tombolnya
+> sampai role lain dicentang manual di Users & Roles → Roles & Permissions (modul **Export MD**).
+> ```bash
+> docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v28.sql
+> ```
+> Idempotent. User harus refresh/login ulang agar tombol muncul (permission dibaca dari `/api/auth/me`).
+
+> **Penting juga:** `migration_v29.sql` menambah kolom `deadline` (`DATE`, opsional) di tabel `bugs` dan `qa_test_cases`
+> (kolom/input tanggal **Deadline** di Bugs Incident & QA Module). **Jalankan SEBELUM backend baru naik** — INSERT/UPDATE bug
+> dan test case di backend baru menyebut kolom ini, jadi tanpa migrasi Buat/Edit gagal `500`. Pada database yang sudah ada
+> jalankan manual (**backup dulu**):
+> ```bash
+> docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v29.sql
+> ```
+> Additive dan idempotent (`ADD COLUMN IF NOT EXISTS`); data lama tidak berubah (Deadline `—`).
+
+> **Penting juga:** `migration_v30.sql` menambah kolom `standups.progress` (`SMALLINT`) dan `standups.progress_detail` (`TEXT`), keduanya opsional, untuk snapshot **Progress Pekerjaan**
+> di Daily Standup. **Jalankan SEBELUM backend baru naik** — query list/create/edit Standup menyebut kolom ini, jadi tanpa migrasi
+> halaman Standup gagal `500`. Pada database yang sudah ada jalankan manual (**backup dulu**):
+> ```bash
+> docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v30.sql
+> ```
+> Additive dan idempotent; standup lama tetap `NULL` (tanpa bar). Progress % di Backlog, My Tasks, Products, dan QA **tidak butuh migrasi** — dihitung saat dibaca oleh `ProgressSupport`.
+
 ---
 
 ## 8. Notifikasi Email (Testing Lokal)
@@ -304,7 +333,10 @@ product-tracker/
 │       ├── migration_v24.sql
 │       ├── migration_v25.sql
 │       ├── migration_v26.sql
-│       └── migration_v27.sql
+│       ├── migration_v27.sql
+│       ├── migration_v28.sql
+│       ├── migration_v29.sql
+│       └── migration_v30.sql
 ├── backend-java/          # Spring Boot API (port 4000)
 │   ├── src/
 │   ├── pom.xml

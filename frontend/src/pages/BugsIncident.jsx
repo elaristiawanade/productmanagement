@@ -20,6 +20,7 @@ import SearchableSelect from '../components/SearchableSelect';
 import SearchableMultiSelect from '../components/SearchableMultiSelect';
 import AssigneeStack from '../components/AssigneeStack';
 import AttachmentSection from '../components/AttachmentSection';
+import DeadlineDate from '../components/DeadlineDate';
 import { renderWithLinks } from '../utils/linkify';
 import { buildBacklogTreeOptions } from '../utils/backlogHierarchy';
 import { buildFeatureOptions, featureText } from '../utils/featureOptions';import { useAuth } from '../context/AuthContext';
@@ -78,6 +79,7 @@ const SORTABLE_COLUMNS = {
   severity:    { type: 'rank', rank: PRIORITY_RANK, defaultDir: 'asc' },  // asc = critical first
   priority:    { type: 'rank', rank: PRIORITY_RANK, defaultDir: 'asc' },  // asc = critical first
   stage:       { type: 'rank', rank: STAGE_RANK,    defaultDir: 'asc' },  // asc = open -> done
+  deadline:    { type: 'date', defaultDir: 'asc' },                      // asc = nearest deadline first
   created_at:  { type: 'date', defaultDir: 'desc' },                     // desc = newest first
   closed_at:   { type: 'date', defaultDir: 'desc' },
   last_update: { type: 'date', defaultDir: 'desc' },
@@ -355,6 +357,7 @@ function BugForm({ bug, products, backlogItems, features, users, onSave, onClose
     severity: bug?.severity || 'medium', priority: bug?.priority || 'medium',
     stage: 'open', // only sent on create; existing bugs change stage via Update Progress / the table dropdown
     assignee_ids: (bug?.assignees || []).map(a => a.id),
+    deadline: bug?.deadline ? String(bug.deadline).slice(0, 10) : '', // optional; '' clears it on update
   });
   const [saving, setSaving] = useState(false);
   const attachRef = useRef(null);
@@ -456,13 +459,19 @@ function BugForm({ bug, products, backlogItems, features, users, onSave, onClose
           {['critical','high','medium','low'].map(p => <option key={p} value={p}>{p}</option>)}
         </select>
       </div>
-      <div className="col-span-2">
+      {/* Assignee + Deadline side by side, same as the Backlog form */}
+      <div>
         <label className="label">Assigned To</label>
         <SearchableMultiSelect label="assignee"
           options={users.map(u => ({ v: u.id, l: u.name }))}
           selected={form.assignee_ids}
           searchPlaceholder="Cari nama assignee..."
           onChange={vals => setForm(f => ({ ...f, assignee_ids: vals }))} />
+      </div>
+      <div>
+        <label className="label">Deadline (opsional)</label>
+        <input type="date" className="input" value={form.deadline}
+          onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))} />
       </div>
       {/* Attachments — queued locally until the bug is created, uploaded live once it exists */}
       <AttachmentSection ref={attachRef} basePath="/bugs" deletePath="/bugs/attachments" entityId={bug?.id} noun="bug" />
@@ -755,9 +764,10 @@ export default function BugsIncident() {
   };
 
   const exportBugsCSV = () => {
-    const headers = ['Kode', 'Judul', 'Type', 'Deskripsi', 'Langkah Reproduksi', 'Severity', 'Prioritas', 'Stage', 'Backlog Item', 'Features', 'Produk', 'Assigned To', 'Reported By', 'Tanggal Incident', 'Tanggal Closed', 'Update Terakhir', 'Update Terakhir Oleh'];
+    const headers = ['Kode', 'Judul', 'Type', 'Deskripsi', 'Langkah Reproduksi', 'Severity', 'Prioritas', 'Stage', 'Deadline', 'Backlog Item', 'Features', 'Produk', 'Assigned To', 'Reported By', 'Tanggal Incident', 'Tanggal Closed', 'Update Terakhir', 'Update Terakhir Oleh'];
     const rows = sortedBugs.map(b => [
       b.code, b.title, b.type || 'bug', b.description, b.steps_to_reproduce, b.severity, b.priority, b.stage,
+      b.deadline ? String(b.deadline).slice(0, 10) : '',
       b.item_code ? `[${b.item_code}] ${b.item_title || ''}` : '',
       featureText(b),
       b.product_code || b.product_name || '',
@@ -1055,7 +1065,7 @@ export default function BugsIncident() {
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1740px] text-sm">
+                  <table className="w-full min-w-[1850px] text-sm">
                     <thead>
                       <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 whitespace-nowrap">
                         <th className="text-left px-4 py-3">Kode</th>
@@ -1066,6 +1076,7 @@ export default function BugsIncident() {
                         {renderSortableTh('severity', 'Severity')}
                         {renderSortableTh('priority', 'Prioritas')}
                         {renderSortableTh('stage', 'Stage')}
+                        {renderSortableTh('deadline', 'Deadline', 'left')}
                         <th className="text-left px-3 py-3">Assigned To</th>
                         <th className="text-left px-3 py-3">Incident Author</th>
                         <th className="text-left px-3 py-3">Produk</th>
@@ -1076,7 +1087,7 @@ export default function BugsIncident() {
                       </tr>
                     </thead>
                     <tbody>
-                      {pagedBugs.length === 0 && <tr><td colSpan={15} className="text-center py-10 text-slate-400">Belum ada bug</td></tr>}
+                      {pagedBugs.length === 0 && <tr><td colSpan={16} className="text-center py-10 text-slate-400">Belum ada bug</td></tr>}
                       {pagedBugs.map(b => (
                         <tr key={b.id}
                           // Whole row opens the bug (same as the pencil, so only with bugs.access); inner controls stop propagation
@@ -1110,6 +1121,8 @@ export default function BugsIncident() {
                           <td className="px-3 py-3 text-center">
                             <StatusMenu status={b.stage} statuses={STAGES} canChange={canAccess} onChange={s => quickStage(b, s)} />
                           </td>
+                          {/* Red once the deadline day is over, unless the bug is Done */}
+                          <td className="px-3 py-3 text-xs whitespace-nowrap"><DeadlineDate date={b.deadline} done={b.stage === 'done'} /></td>
                           <td className="px-3 py-3">
                             {b.assignees?.length > 0
                               ? <AssigneeStack assignees={b.assignees} />

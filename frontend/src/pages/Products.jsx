@@ -4,6 +4,7 @@ import { format, parseISO } from 'date-fns';
 import client from '../api/client';
 import { useDeepLink } from '../utils/deepLink';
 import Modal from '../components/Modal';
+import ExportMdButton from '../components/ExportMdButton';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import { useAuth } from '../context/AuthContext';
@@ -324,7 +325,9 @@ export default function Products() {
           {products.map(product => {
             const pFeatures = features.filter(f => f.product_id === product.id);
             const pEpics    = epics.filter(e => e.product_id === product.id);
-            const pct = product.total_items > 0 ? Math.round((product.done_items / product.total_items) * 100) : 0;
+            // Progress is derived by the backend from the product's Backlog (status of each item without children,
+            // weighted by story points); null = the product has no work items yet
+            const pct = product.progress ?? 0;
             const isExpanded = expanded[product.id];
 
             return (
@@ -352,14 +355,16 @@ export default function Products() {
                         </a>
                       )}
                     </div>
-                    <div className="mt-3 flex items-center gap-2">
+                    <div className="mt-3 flex items-center gap-2"
+                      title="Progress dihitung otomatis dari item Backlog produk ini: In Progress 50%, In Review 80%, Done 100%, dibobot story point">
                       <div className="flex-1 max-w-[200px] h-1.5 bg-slate-100 rounded-full overflow-hidden">
                         <div className="h-full bg-slate-800 rounded-full" style={{ width: `${pct}%` }} />
                       </div>
-                      <span className="text-xs text-slate-400">{pct}% selesai</span>
+                      <span className="text-xs text-slate-400">Progress {pct}%</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    <ExportMdButton product={product} />
                     {can('products', 'update') && (
                       <button className="btn-ghost btn-sm p-1.5 rounded-lg" onClick={() => setModal({ open: true, type: 'product', data: product, productId: product.id })}>
                         <Pencil className="w-4 h-4" />

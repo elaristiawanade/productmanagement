@@ -210,6 +210,9 @@ const MODULE_CATALOG = [
     { key: 'access', label: 'Akses' }, { key: 'create', label: 'Buat' },
     { key: 'update', label: 'Ubah & Catatan' }, { key: 'delete', label: 'Hapus' },
   ]},
+  { module: 'export', label: 'Export MD', actions: [
+    { key: 'md', label: 'Paket Produk (.md)' },
+  ]},
   { module: 'standup', label: 'Standup', actions: [
     { key: 'edit_any', label: 'Edit Milik Orang Lain' }, { key: 'import', label: 'Import Data' },
   ]},
