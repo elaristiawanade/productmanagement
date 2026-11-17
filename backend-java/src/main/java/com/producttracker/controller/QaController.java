@@ -92,19 +92,23 @@ public class QaController {
         if (!featureMatchesProduct(featureId, toLong(body.get("product_id")))) {
             return ResponseEntity.badRequest().body(Map.of("error", "Feature tidak sesuai dengan produk yang dipilih"));
         }
+        java.sql.Date deadline;
+        try { deadline = toSqlDate(body.get("deadline")); }
+        catch (IllegalArgumentException e) { return invalidDeadline(); }
 
         Map<String, Object> user = toMap(principal);
         try {
             Map<String, Object> row = jdbc.queryForMap(
                 "INSERT INTO qa_test_cases " +
-                "(backlog_item_id, product_id, feature_id, code, title, description, steps, expected_result, status, priority, created_by) " +
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?) RETURNING *",
+                "(backlog_item_id, product_id, feature_id, code, title, description, steps, expected_result, status, priority, created_by, deadline) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) RETURNING *",
                 toLong(body.get("backlog_item_id")), toLong(body.get("product_id")), featureId, tcCode,
                 body.get("title"), body.get("description"),
                 body.get("steps"), body.get("expected_result"),
                 orDefault(body.get("status"), "draft"),
                 orDefault(body.get("priority"), "medium"),
-                user != null ? user.get("id") : null
+                user != null ? user.get("id") : null,
+                deadline
             );
             return ResponseEntity.status(201).body(row);
         } catch (Exception e) {
@@ -126,11 +130,18 @@ public class QaController {
         if (!featureMatchesProduct(featureId, toLong(current.get(0).get("product_id")))) {
             return ResponseEntity.badRequest().body(Map.of("error", "Feature tidak sesuai dengan produk test case ini"));
         }
+        // Deadline is only touched when the key is sent ("" / null clears it). A request without the key
+        // (e.g. a browser still running the previous frontend bundle) keeps the stored deadline.
+        boolean deadlineSent = body.containsKey("deadline");
+        java.sql.Date deadline;
+        try { deadline = toSqlDate(body.get("deadline")); }
+        catch (IllegalArgumentException e) { return invalidDeadline(); }
         int updated = jdbc.update(
-            "UPDATE qa_test_cases SET title=?,description=?,steps=?,expected_result=?,status=?,priority=?,feature_id=? WHERE id=?",
+            "UPDATE qa_test_cases SET title=?,description=?,steps=?,expected_result=?,status=?,priority=?,feature_id=?," +
+            "deadline = CASE WHEN ?::boolean THEN ?::date ELSE deadline END WHERE id=?",
             body.get("title"), body.get("description"),
             body.get("steps"), body.get("expected_result"),
-            body.get("status"), body.get("priority"), featureId, id
+            body.get("status"), body.get("priority"), featureId, deadlineSent, deadline, id
         );
         if (updated == 0) return ResponseEntity.status(404).body(Map.of("error", "Test case tidak ditemukan"));
         Map<String, Object> row = jdbc.queryForMap("SELECT * FROM qa_test_cases WHERE id=?", id);
@@ -335,6 +346,22 @@ public class QaController {
         if (featureId == null) return true;
         List<Map<String, Object>> rows = jdbc.queryForList("SELECT product_id FROM features WHERE id=?", featureId);
         return !rows.isEmpty() && productId != null && productId.equals(toLong(rows.get(0).get("product_id")));
+    }
+
+    /**
+     * Optional deadline from the form's date input ("yyyy-MM-dd"; a longer ISO string is cut to its date part).
+     * null / blank = no deadline. Throws IllegalArgumentException for anything else, so a bad value is
+     * rejected with 400 instead of being silently dropped.
+     */
+    private java.sql.Date toSqlDate(Object v) {
+        if (v == null) return null;
+        String s = v.toString().trim();
+        if (s.isEmpty()) return null;
+        return java.sql.Date.valueOf(s.length() > 10 ? s.substring(0, 10) : s);
+    }
+
+    private ResponseEntity<?> invalidDeadline() {
+        return ResponseEntity.badRequest().body(Map.of("error", "Format deadline tidak valid (YYYY-MM-DD)"));
     }
 
     @SuppressWarnings("unchecked")

@@ -42,6 +42,7 @@ import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import SearchableSelect from '../components/SearchableSelect';
 import BugsPerFeatureCard from '../components/BugsPerFeatureCard';
+import DeadlineDate from '../components/DeadlineDate';
 import { buildBacklogTreeOptions } from '../utils/backlogHierarchy';
 import { buildFeatureOptions, featureText } from '../utils/featureOptions';
 import AttachmentSection from '../components/AttachmentSection';import { useAuth } from '../context/AuthContext';
@@ -63,6 +64,7 @@ function TestCaseForm({ tc, products, backlogItems, features, onSave, onClose })
     title: tc?.title || '', description: tc?.description || '',
     steps: tc?.steps || '', expected_result: tc?.expected_result || '',
     status: tc?.status || 'draft', priority: tc?.priority || 'medium',
+    deadline: tc?.deadline ? String(tc.deadline).slice(0, 10) : '', // optional; '' clears it on update
   });
   const [saving, setSaving] = useState(false);
   const attachRef = useRef(null);
@@ -146,6 +148,11 @@ function TestCaseForm({ tc, products, backlogItems, features, onSave, onClose })
         <select className="select" value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
           {['critical','high','medium','low'].map(p => <option key={p} value={p}>{p}</option>)}
         </select>
+      </div>
+      <div>
+        <label className="label">Deadline (opsional)</label>
+        <input type="date" className="input" value={form.deadline}
+          onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))} />
       </div>
       {/* Attachments — queued locally until the test case is created, uploaded live once it exists */}
       <AttachmentSection ref={attachRef} basePath="/qa/test-cases" deletePath="/qa/attachments" entityId={tc?.id} noun="test case" />
@@ -290,9 +297,10 @@ export default function QA() {
   };
 
   const exportTestCasesCSV = () => {
-    const headers = ['Kode', 'Judul', 'Deskripsi', 'Langkah', 'Expected Result', 'Status', 'Prioritas', 'Backlog Item', 'Features', 'Produk', 'Author'];
+    const headers = ['Kode', 'Judul', 'Deskripsi', 'Langkah', 'Expected Result', 'Status', 'Prioritas', 'Deadline', 'Backlog Item', 'Features', 'Produk', 'Author'];
     const rows = testCases.map(tc => [
       tc.code, tc.title, tc.description, tc.steps, tc.expected_result, tc.status, tc.priority,
+      tc.deadline ? String(tc.deadline).slice(0, 10) : '',
       tc.item_code ? `[${tc.item_code}] ${tc.item_title || ''}` : '',
       featureText(tc),
       tc.product_code || tc.product_name || '',
@@ -529,7 +537,7 @@ export default function QA() {
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1420px] text-sm">
+                  <table className="w-full min-w-[1530px] text-sm">
                     <thead>
                       <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 whitespace-nowrap">
                         <th className="text-left px-4 py-3">Kode</th>
@@ -538,6 +546,7 @@ export default function QA() {
                         <th className="text-left px-3 py-3">Features</th>
                         <th className="text-center px-3 py-3">Prioritas</th>
                         <th className="text-center px-3 py-3">Status</th>
+                        <th className="text-left px-3 py-3">Deadline</th>
                         <th className="text-center px-3 py-3">Runs</th>
                         <th className="text-center px-3 py-3">Pass</th>
                         <th className="text-center px-3 py-3">Fail</th>
@@ -547,7 +556,7 @@ export default function QA() {
                       </tr>
                     </thead>
                     <tbody>
-                      {pagedCases.length === 0 && <tr><td colSpan={12} className="text-center py-10 text-slate-400">Belum ada test case</td></tr>}
+                      {pagedCases.length === 0 && <tr><td colSpan={13} className="text-center py-10 text-slate-400">Belum ada test case</td></tr>}
                       {pagedCases.map(tc => (
                         <tr key={tc.id}
                           // Whole row opens the test case (same as the pencil, so only with qa.update); inner controls stop propagation
@@ -576,6 +585,8 @@ export default function QA() {
                           </td>
                           <td className="px-3 py-3 text-center"><PriorityBadge priority={tc.priority} /></td>
                           <td className="px-3 py-3 text-center"><StatusBadge status={tc.status} /></td>
+                          {/* Red as soon as the deadline day is over (test cases have no "finished" status) */}
+                          <td className="px-3 py-3 text-xs whitespace-nowrap"><DeadlineDate date={tc.deadline} /></td>
                           <td className="px-3 py-3 text-center text-slate-600 font-medium">{tc.run_count}</td>
                           <td className="px-3 py-3 text-center text-emerald-600 font-medium">{tc.pass_count}</td>
                           <td className="px-3 py-3 text-center text-red-600 font-medium">{tc.fail_count}</td>
