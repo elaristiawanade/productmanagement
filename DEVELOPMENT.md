@@ -159,6 +159,7 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v25.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v26.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v27.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v28.sql"
 ```
 
 > **Penting:** `migration_v10.sql` menambahkan kolom `users.department`, yang di-query
@@ -239,6 +240,15 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 > ```
 > Additive dan idempotent (`CREATE TABLE IF NOT EXISTS`, backfill `ON CONFLICT DO NOTHING`); kolom `feature_id` lama tetap ada.
 
+> **Catatan:** `migration_v28.sql` hanya **menggabungkan** permission `export.md` (tombol **Export MD** di Products) ke
+> `roles.permissions` Super Admin, Manager, PO, dan QA — tanpa tabel/kolom baru, backend tidak berubah. **Opsional dan aman
+> dijalankan kapan saja** (sebelum atau sesudah frontend baru naik). Tanpa migrasi ini hanya Super Admin yang melihat tombolnya
+> sampai role lain dicentang manual di Users & Roles → Roles & Permissions (modul **Export MD**).
+> ```bash
+> docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v28.sql
+> ```
+> Idempotent. User harus refresh/login ulang agar tombol muncul (permission dibaca dari `/api/auth/me`).
+
 ---
 
 ## 8. Notifikasi Email (Testing Lokal)
@@ -304,7 +314,8 @@ product-tracker/
 │       ├── migration_v24.sql
 │       ├── migration_v25.sql
 │       ├── migration_v26.sql
-│       └── migration_v27.sql
+│       ├── migration_v27.sql
+│       └── migration_v28.sql
 ├── backend-java/          # Spring Boot API (port 4000)
 │   ├── src/
 │   ├── pom.xml

@@ -323,3 +323,27 @@ Fitur baru (PRD 3.8 & 3.9, v3.19). Tanpa migrasi database. Diuji di stack Docker
 - ⚠️ Daftar role yang boleh melihat kartu di QA ditulis di kode (`BUG_OVERVIEW_ROLES` di `QaController`), belum bisa diatur dari Roles & Permissions. Role yang diganti nama atau role baru tidak otomatis ikut
 - ⚠️ Nilai tabel bergantung pada pengisian field **Feature (opsional)** di form Bug; bug tanpa Feature masuk "Tanpa Feature" dan tidak ditebak dari Impacted Features backlog item (supaya tidak terhitung ganda)
 - ⚠️ Baris diurutkan dari total bug terbanyak (termasuk yang sudah Done), bukan dari bug yang belum selesai
+
+## 31. Export MD (paket data produk untuk AI)
+
+Fitur baru (PRD 3.6 & 3.10, v3.20). Frontend saja; `migration_v28.sql` opsional (hanya permission). Diuji di stack Docker lokal dengan akun dummy: generator dijalankan di Node terhadap API asli, lalu Chrome headless lewat Vite dev server.
+
+- ✅ Paket HRS sebagai Super Admin: 23 kartu Backlog tersusun Epic → Story → Task (anak di heading lebih dalam), 6 bug lengkap dengan riwayat progress, 4 test case dengan riwayat test run, tabel Roadmap/Product Features/Epic/Sprint, legenda dua jenis feature; 39 request, semua "silent" (tidak memunculkan toast error)
+- ✅ PO (tanpa akses Bugs Incident): bagian Bugs diganti catatan "tidak disertakan", tidak ada request `403`, ringkasan menyebut alasannya
+- ✅ Kasus pinggir (data buatan): rantai `parent_id` melingkar dan parent yang tidak ada → semua item tetap muncul tepat sekali; komentar multi-baris berawalan `#` tidak membentuk heading baru; `|` di sel tabel di-escape; mention `@[Nama]` jadi `@Nama`; riwayat yang gagal dimuat ditandai per kartu + catatan di header; pelapor publik tampil "(pelapor publik)" tanpa e-mail; entri otomatis tanpa user tidak menampilkan "—"
+- ✅ UI (Chrome headless): tombol **Export MD** di setiap kartu produk untuk Super Admin dan PO, label berubah "Menyiapkan…" selama proses, file `PO-Tracker_HRS_<tanggal>.md` terunduh, toast "Paket HRS diunduh", tombol aktif lagi; Developer tidak melihat tombol
+- ✅ Roles & Permissions: baris **Export MD → Paket Produk (.md)** tampil di matrix dan di kartu role; PO tercentang setelah `migration_v28.sql`; migrasi dijalankan dua kali tanpa error dan permission lain tidak tertimpa
+- ✅ Dropdown Backlog Item di QA/Bugs memakai fungsi pohon yang sama (`flattenBacklogTree`), jumlah opsi tidak berubah
+- ✅ Tabel Sprint: "Progress poin" dihitung dari kartu task/bug/independent dan sama dengan halaman Sprints (HRS Sprint 2 = 1 / 6). "Item per status" mencakup semua status termasuk `backlog` dan `in_review`. Angka committed/completed manual dari form sprint ditampilkan terpisah sebagai "Velocity manual" (dulu tertulis "Poin selesai 18", padahal yang benar-benar selesai baru 1 poin)
+- ✅ Diuji dengan file hasil unduhan user: semua angka ringkasan, jumlah per status/tipe, kartu terlambat, susunan pohon, dan riwayat cocok dengan database lokal
+- ✅ Uji keterbacaan AI (17 Nov): file HRS (±26 ribu karakter, ±8 ribu token) dibaca tanpa melihat kode lalu dipakai menjawab pertanyaan PO/QA/manager. Jumlah backlog dan 6 kartu terlambat, progress Sprint 2 (1 / 6 poin), TC-002 gagal → BUG-001, bug per feature Check-in via GPS (sama dengan kartu Bugs per Feature), dan 9 entri riwayat HRS-9 semuanya cocok dengan database
+- ✅ Generator dijalankan sebagai PO dan Developer: bagian Bugs tertulis "tidak disertakan (tidak punya akses)", jadi AI tidak menyimpulkan produk bebas bug
+- 🧑 Jalankan `migration_v28.sql` di database yang sudah ada (opsional, aman kapan saja), lalu refresh/login ulang: tombol muncul untuk Manager, PO, QA. Tanpa migrasi hanya Super Admin yang melihatnya
+- 🧑 Export produk dengan data asli yang besar (ratusan kartu): progres "Mengambil komentar & aktivitas x/y" berjalan, file terunduh, lalu unggah ke Claude dan ChatGPT dan tanyakan hal seperti "kartu mana yang terlambat dan siapa assignee-nya?"
+- 🧑 Centang/hapus **Export MD** untuk role lain (mis. Developer) di Roles & Permissions dan pastikan tombol muncul/hilang setelah refresh
+- ⚠️ Riwayat diambil satu request per kartu Backlog/Bug (6 paralel); produk dengan ratusan kartu butuh beberapa detik sampai puluhan detik. Kalau nanti terasa lambat, opsi berikutnya adalah endpoint backend khusus export
+- ⚠️ Permission `export.md` hanya mengatur tombol. Data di dalam file tetap dibatasi hak akses data biasa (produk yang ditugaskan, akses Bugs), jadi file tidak pernah berisi lebih dari yang bisa dilihat akun itu di aplikasi
+- ⚠️ File berisi data internal kantor. Setelah diunduh, file tidak lagi dilindungi hak akses aplikasi, jadi perlakukan seperti dokumen internal saat dibagikan atau diunggah ke AI
+- ⚠️ `docker-compose.yml` kini memasang v28 di initdb, jadi `docker compose up` berikutnya (tanpa `--no-deps`) membuat ulang `pt_postgres` (data volume aman, hanya restart singkat)
+- ⚠️ "Kerjaan Andi apa saja?" → file menyebut 6 kartu, Backlog hanya 4. HRS-2-S1/S2 (dan CRM-3-S1/S2) hanya punya kolom `assignee_id` lama tanpa baris `backlog_item_assignees`; export memakai kolom lama sebagai cadangan, Backlog/My Tasks tidak. Di produksi sumbernya Import Jira (`ImportController` tidak menulis tabel assignee, lihat PRD 3.11)
+- ⚠️ Kandidat perbaikan berikutnya: legenda belum menjelaskan dua arti **Epic** (tipe kartu vs Epic produk) dan **Bug** (tipe kartu vs tiket Bugs Incident); judul tiket bug dan test case belum berlabel tipe; belum ada tabel ringkas satu baris per kartu untuk produk besar

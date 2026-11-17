@@ -3,8 +3,8 @@
 
 | | |
 |---|---|
-| **Versi** | 3.19 |
-| **Tanggal** | 16 November 2026 |
+| **Versi** | 3.20 |
+| **Tanggal** | 17 November 2026 |
 | **Status** | Live — Production |
 | **Pemilik** | Tim Internal |
 
@@ -173,6 +173,18 @@ Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus 
 - Kelola features per produk
 - Assign member ke produk (menentukan scope akses Developer/QA)
 - Roadmap produk (timeline feature) — status item: `planned`, `research`, `on_progress`, `testing` (sedang tahap testing), `active`, `offline`
+- **Export MD (untuk AI)** — tombol **Export MD** di setiap kartu produk mengunduh **satu file Markdown** berisi paket data lengkap produk itu, siap diunggah ke AI apa pun (Claude, ChatGPT, Gemini, dll.):
+  - Isi: legenda cara membaca, ringkasan angka, data produk, Roadmap, Product Features, Epic, Sprint, **Backlog** tersusun Epic → Story → Task/Bug (termasuk acceptance criteria, catatan, **komentar & riwayat aktivitas**), **Bugs Incident** (deskripsi, langkah reproduksi, **riwayat progress**, komentar & aktivitas), dan **QA Test Case** (langkah, expected result, **riwayat test run**). Tiap kartu punya link ke kartu aslinya
+  - Legenda menjelaskan bahwa ada dua jenis feature: Roadmap (dipakai Impacted Features di Backlog) dan Product Features (dipakai Bugs/QA)
+  - Isi file mengikuti hak akses akun pengekspor (produk yang ditugaskan, akses Bugs Incident); tanpa akses Bugs, bagian Bugs diganti catatan. **Tidak disertakan:** Client Management, alamat e-mail, dan lampiran (hanya teks)
+  - Dibuat sepenuhnya di browser dari endpoint GET yang sudah ada (pola sama seperti Export CSV); riwayat tiap kartu diambil paralel dengan indikator progres di toast. Riwayat kartu yang gagal dimuat ditandai di kartunya, export tidak dibatalkan
+  - Nama file: `PO-Tracker_<KODE>_<yyyyMMdd_HHmm>.md`
+  - **Akses:** permission `export.md` (modul **Export MD** di Roles & Permissions, 3.10). Default (`migration_v28.sql`): Super Admin, Manager, Product Owner, QA Engineer
+  - **Uji keterbacaan AI (17 Nov 2026):** file dibaca AI tanpa melihat kode, lalu jawabannya dicocokkan dengan database. Ringkasan angka, kartu terlambat, progress sprint, test run yang gagal beserta bug-nya, dan bug per feature semuanya cocok. **Keterbatasan yang diketahui:**
+    - Istilah **Epic** dan **Bug** masing-masing punya dua arti (kartu Backlog bertipe Epic/Bug vs Epic produk seperti `HRS-E1` / tiket Bugs Incident) dan belum dijelaskan di legenda, sehingga pertanyaan "berapa epic/bug?" bisa dijawab dua versi
+    - Judul tiket Bugs Incident dan QA Test Case belum diberi label tipe seperti `[Story]` di Backlog, padahal kode bug berformat `HRS-051` mirip kode Backlog
+    - Belum ada tabel ringkas satu baris per kartu. Untuk produk dengan ratusan kartu, AI yang membaca file per potongan (mis. ChatGPT) bisa melewatkan kartu saat menghitung atau merangkum per orang
+    - Assignee kartu hasil Import Jira (3.11) tetap tercantum di file walau tidak tampil di Backlog/My Tasks, karena export memakai kolom assignee lama sebagai cadangan
 
 ---
 
@@ -296,7 +308,7 @@ Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus 
 
 **Tab Roles & Permissions — Fitur:**
 - **Role dibuat bebas** — bukan daftar tetap di kode. Tombol "Tambah Role" membuka form: nama (slug, tidak bisa diubah setelah dibuat), display name, dan tabel hak akses
-- **Matrix Modul × Aksi** — satu baris per modul (Backlog, Epic, Features, Products, Roadmap, Sprint, QA, Bugs Incident, C-Level Dashboard, Client Management, Standup, Import Jira, Users, Roles, Departemen, Pengaturan), tiap baris cuma menampilkan checkbox untuk aksi yang benar-benar relevan untuk modul itu (bukan grid 5 kolom seragam untuk semua modul — mis. modul Bugs Incident cuma punya 1 aksi "Akses", modul Users punya 5: Buat/Ubah/Reset Password/Nonaktifkan/Hapus)
+- **Matrix Modul × Aksi** — satu baris per modul (Backlog, Epic, Features, Products, Roadmap, Sprint, QA, Bugs Incident, C-Level Dashboard, Client Management, Export MD, Standup, Import Jira, Users, Roles, Departemen, Pengaturan), tiap baris cuma menampilkan checkbox untuk aksi yang benar-benar relevan untuk modul itu (bukan grid 5 kolom seragam untuk semua modul — mis. modul Bugs Incident cuma punya 1 aksi "Akses", modul Users punya 5: Buat/Ubah/Reset Password/Nonaktifkan/Hapus)
 - Role **`super_admin`** checkbox-nya di-disable (selalu akses penuh lewat bypass hardcode, bukan dari matrix — supaya tidak ada skenario Super Admin terkunci sendiri dari sistem akibat salah klik)
 - Perubahan tersimpan langsung berefek nyata di frontend (tombol/menu muncul-hilang) **dan** backend (`403` kalau dipanggil API langsung tanpa aksi yang sesuai) — satu sumber kebenaran untuk keduanya
 - List role menampilkan badge per modul yang dapat aksi (mis. "Backlog: Buat, Ubah, Hapus")
@@ -321,6 +333,7 @@ Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus 
 - Mapping kolom Jira ke format Product Tracker
 - Preview hasil mapping sebelum import
 - Laporan hasil import
+- ⚠️ **Diketahui (17 Nov 2026, belum diperbaiki):** import hanya mengisi kolom assignee lama `backlog_items.assignee_id` dan tidak menulis ke `backlog_item_assignees` (sumber assignee sejak `migration_v19.sql`). Akibatnya kartu hasil import tampil tanpa assignee di Backlog, tidak muncul di My Tasks milik assignee-nya, dan tidak ikut filter Assignee. Export MD (3.6) tetap mencantumkan assignee-nya
 
 ---
 
@@ -860,6 +873,7 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | `migration_v25.sql` | Tabel `qa_attachments` + index untuk lampiran test case (3.8). Additive dan idempotent. Dipasang di initdb `docker-compose.yml`, tetapi initdb hanya jalan saat volume pertama dibuat — **database yang sudah ada wajib menjalankannya manual SEBELUM backend baru naik** (endpoint unduh file mencari nama asli di tabel ini, dan upload/list lampiran QA gagal `500` tanpa tabelnya) |
 | `migration_v26.sql` | Modul Client Management (3.17): tabel `client_statuses` (+5 status awal), `clients`, `client_products`, `client_comments` dan permission modul `clients` yang **digabung** (`||`, bukan ditimpa) ke `roles.permissions` Super Admin/Manager (penuh) dan PO (`access`+`update`). Additive dan idempotent. Dipasang di initdb `docker-compose.yml`, tetapi initdb hanya jalan saat volume pertama dibuat — **database yang sudah ada wajib menjalankannya manual SEBELUM backend baru naik** (endpoint `/api/clients` membaca tabel-tabelnya, jadi tanpa migrasi gagal `500`) |
 | `migration_v27.sql` | Impacted Features (3.2): tabel `backlog_item_features` + backfill dari `backlog_items.feature_id` yang sudah ada. Additive & idempotent. Dipasang di initdb `docker-compose.yml`, tetapi initdb hanya jalan saat volume pertama dibuat — **database yang sudah ada wajib menjalankannya manual SEBELUM backend baru naik** (list/create/edit Backlog membaca tabel ini, jadi tanpa migrasi gagal `500`) |
+| `migration_v28.sql` | Permission **Export MD** (3.6): `{"export": {"md": true}}` **digabung** (`||`) ke `roles.permissions` Super Admin, Manager, PO, dan QA. Tanpa tabel/kolom baru dan backend tidak berubah, jadi **opsional dan aman dijalankan kapan saja**. Tanpa migrasi ini hanya Super Admin yang melihat tombol Export MD sampai role lain dicentang manual di Roles & Permissions. Idempotent; dipasang di initdb `docker-compose.yml` |
 
 ---
 
@@ -931,3 +945,4 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | 11 Nov 2026 | 3.17 | **Impacted Features** (3.2): field Feature di form Tambah/Edit Backlog item kini multi-select ber-label "Impacted Features" — satu item bisa menandai banyak feature roadmap; tabel Backlog dan My Tasks menampilkan semuanya sebagai chip. Hanya di Backlog (Bugs/QA tidak berubah). `migration_v27.sql`: tabel `backlog_item_features` + backfill; `feature_id` lama dipertahankan sebagai feature pertama |
 | 11 Nov 2026 | 3.18 | **Share link kartu** (3.2): tombol **Salin link** di semua modal/kartu/baris yang punya deep link (Backlog, Bugs, QA, Sprint, Produk, Client, Leader Task, My Tasks, Epic Board), fallback salin untuk server http, **redirect kembali ke link setelah login** (juga untuk link notifikasi), dan Backlog **baca-saja** untuk role tanpa izin edit. Tampilan Impacted Features di tabel Backlog diubah jadi feature pertama + badge **+N**. Frontend saja |
 | 16 Nov 2026 | 3.19 | **Bugs per Feature** — tabel angka jumlah bug per Feature produk per stage (Open, In Progress, Ready to Test, Re-Open, Done, Improvement + Total; bug tanpa Feature di baris "Tanpa Feature"), ikut filter produk. **QA Dashboard (3.8):** kartu baru di bawah Overall Result Distribution, hanya untuk role Manager/PO/Developer/QA (+Super Admin) tanpa memberi akses modul Bugs Incident. **Bugs Dashboard (3.9):** menggantikan grafik **Bugs per Produk** (2/3 lebar, Distribusi Stage 1/3). Satu komponen (`BugsPerFeatureCard`) dan satu query (`BugStats`) untuk kedua halaman. API: `/api/qa/dashboard` + `bugOverviewAllowed`/`bugsByFeature`; `/api/bugs/dashboard` + `byFeature`, `byProduct` dihapus. Tanpa migrasi database |
+| 16 Nov 2026 | 3.20 | **Export MD (untuk AI)** (3.6): tombol **Export MD** di setiap kartu produk (Products) mengunduh satu file Markdown berisi paket data lengkap produk itu — Roadmap, Product Features, Epic, Sprint, Backlog (pohon Epic → Story → Task/Bug), Bugs Incident, dan QA Test Case, lengkap dengan komentar, riwayat aktivitas, riwayat progress bug, dan riwayat test run — supaya bisa diolah AI apa pun. Isi mengikuti hak akses akun pengekspor; Client Management, e-mail, dan lampiran tidak disertakan. Permission baru `export.md` di Roles & Permissions (3.10), default Super Admin/Manager/PO/QA lewat `migration_v28.sql` (opsional, tanpa perubahan skema). Frontend saja (`utils/exportMarkdown.js`, `components/ExportMdButton.jsx`); `utils/backlogHierarchy.js` kini mengekspor `flattenBacklogTree` (dipakai juga oleh dropdown Backlog Item QA/Bugs, yang kini juga menampilkan item dari rantai parent melingkar alih-alih menghilangkannya). Tanpa perubahan backend. Hasil uji keterbacaan AI dan keterbatasannya dicatat di 3.6 (17 Nov); temuan bug lama assignee Import Jira dicatat di 3.11 |
