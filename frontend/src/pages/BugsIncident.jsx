@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
-import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Upload, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff, AlertTriangle, XCircle, Lightbulb, HelpCircle } from 'lucide-react';
+import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Upload, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff, AlertTriangle, XCircle, Lightbulb, Tag, Settings2 } from 'lucide-react';
 import client from '../api/client';
 import { useDeepLink } from '../utils/deepLink';
 import { toastCreated } from '../utils/createdToast';
@@ -50,21 +50,15 @@ const INITIAL_STAGES = ['open', 'improvement'];
 const SEVERITIES = ['critical', 'high', 'medium', 'low'];
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
 
-// Ticket type: a real bug, or an unclear report that needs clarification first (independent of stage).
-const TYPES = ['bug', 'inquiry'];
-const TYPE_META = {
-  bug:     { label: 'Bug',                   c: '#E5484D', icon: BugIcon    },
-  inquiry: { label: 'Inquiry / Clarification', c: '#0B8FCB', icon: HelpCircle },
-};
+// Ticket type is configurable (Super Admin, /settings/bug-types): the list comes from GET /bug-types and each
+// bug row carries its type's current `type_name` / `type_color`. `type` is the stable code stored on the bug.
 
-// Same pill look as the stage badge; unknown/missing type reads as a regular bug.
-function TypeBadge({ type }) {
-  const t = TYPE_META[type] ?? TYPE_META.bug;
-  const Icon = t.icon;
+// Same pill look as the stage badge; a missing name (should not happen) falls back to the raw code.
+function TypeBadge({ type, name, color }) {
   return (
-    <span className="status-pill h-6 px-2 gap-1.5 text-[11px]" style={{ '--c': t.c }}>
-      <Icon className="w-3 h-3 shrink-0" />
-      {t.label}
+    <span className="status-pill h-6 px-2 gap-1.5 text-[11px]" style={{ '--c': color || '#64748B' }}>
+      <Tag className="w-3 h-3 shrink-0" />
+      {name || type || 'bug'}
     </span>
   );
 }
@@ -347,7 +341,7 @@ function ActivitySection({ bugId, users = [] }) {
   );
 }
 
-function BugForm({ bug, products, backlogItems, features, users, onSave, onClose }) {
+function BugForm({ bug, products, backlogItems, features, users, bugTypes, onSave, onClose }) {
   const [form, setForm] = useState({
     product_id: bug?.product_id || '', backlog_item_id: bug?.backlog_item_id || '',
     feature_id: bug?.feature_id || '',
@@ -436,7 +430,9 @@ function BugForm({ bug, products, backlogItems, features, users, onSave, onClose
       <div className={bug?.id ? 'col-span-2' : ''}>
         <label className="label">Type (opsional)</label>
         <select className="select" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
-          {TYPES.map(t => <option key={t} value={t}>{TYPE_META[t].label}</option>)}
+          {bugTypes.map(t => <option key={t.code} value={t.code}>{t.name}</option>)}
+          {/* bugTypes loads together with the form, but never leave the stored value without an option */}
+          {!bugTypes.some(t => t.code === form.type) && <option value={form.type}>{form.type}</option>}
         </select>
       </div>
       {!bug?.id && (
@@ -634,6 +630,7 @@ export default function BugsIncident() {
   const [backlogItems, setBacklogItems] = useState([]);
   const [features,     setFeatures]    = useState([]);
   const [users,        setUsers]       = useState([]);
+  const [bugTypes,     setBugTypes]    = useState([]);
   const [dashboard,    setDashboard]   = useState(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const productParam = searchParams.get('product') || '';
@@ -667,7 +664,7 @@ export default function BugsIncident() {
     setLoading(true);
     try {
       const params = filters.product_id ? { product_id: filters.product_id } : {};
-      const [pr, bg, pg, bl, ft, us, db] = await Promise.all([
+      const [pr, bg, pg, bl, ft, us, db, bt] = await Promise.all([
         products.length ? null : client.get('/products'),
         client.get('/bugs',          { params }),
         client.get('/bugs/progress', { params }),
@@ -675,7 +672,9 @@ export default function BugsIncident() {
         features.length ? null : client.get('/features'),
         users.length ? null : client.get('/users'),
         client.get('/bugs/dashboard', { params }),
+        client.get('/bug-types'),   // refetched on every load so an edit in Bug Types shows up right away
       ]);
+      setBugTypes(bt.data);
       if (pr) setProducts(pr.data);
       setBugs(bg.data);
       setProgress(pg.data);
@@ -1010,7 +1009,7 @@ export default function BugsIncident() {
                   />
                 </div>
                 {[
-                  { key: 'type',     label: 'Type',      opts: TYPES.map(t => ({ v: t, l: TYPE_META[t].label })) },
+                  { key: 'type',     label: 'Type',      opts: bugTypes.map(t => ({ v: t.code, l: t.name })) },
                   { key: 'stage',    label: 'Stage',    opts: STAGES.map(s => ({ v: s, l: STAGE_LABELS[s] || s })) },
                   { key: 'severity', label: 'Severity',  opts: SEVERITIES.map(s => ({ v: s, l: s })) },
                   { key: 'priority', label: 'Prioritas', opts: PRIORITIES.map(p => ({ v: p, l: p })) },
@@ -1045,6 +1044,11 @@ export default function BugsIncident() {
                   <button className="btn-secondary" onClick={exportBugsCSV} disabled={filteredBugs.length === 0}>
                     <Download className="w-4 h-4" /> Export CSV
                   </button>
+                  {can('settings', 'update') && (
+                    <Link to="/settings/bug-types" className="btn-secondary">
+                      <Settings2 className="w-4 h-4" /> Atur Type
+                    </Link>
+                  )}
                   {canAccess && (
                     <button className="btn-primary" onClick={() => setModal({ open: true, type: 'bug', data: null })}>
                       <Plus className="w-4 h-4" /> Buat Bug
@@ -1098,7 +1102,7 @@ export default function BugsIncident() {
                             <p className="font-medium text-slate-700 truncate">{b.title}</p>
                             {b.description && <p className="text-xs text-slate-400 truncate">{b.description}</p>}
                           </td>
-                          <td className="px-3 py-3"><TypeBadge type={b.type} /></td>
+                          <td className="px-3 py-3"><TypeBadge type={b.type} name={b.type_name} color={b.type_color} /></td>
                           <td className="px-3 py-3 text-xs text-slate-500">
                             {/* One line: code never wraps, title truncates (full text on hover) */}
                             {b.item_code ? (
@@ -1268,7 +1272,7 @@ export default function BugsIncident() {
       <Modal open={modal.open && modal.type === 'bug'} onClose={() => setModal({ ...modal, open: false })}
         title={modal.data ? 'Edit Bug' : 'Buat Bug'} size="lg"
         shareLink={modal.data ? `/bugs?bug=${modal.data.id}` : undefined}>
-        <BugForm bug={modal.data} products={products} backlogItems={backlogItems} features={features} users={users}
+        <BugForm bug={modal.data} products={products} backlogItems={backlogItems} features={features} users={users} bugTypes={bugTypes}
           onSave={() => { setModal({ ...modal, open: false }); load(); }}
           onClose={() => setModal({ ...modal, open: false })} />
       </Modal>

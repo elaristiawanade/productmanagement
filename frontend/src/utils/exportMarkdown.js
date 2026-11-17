@@ -360,7 +360,7 @@ export function buildProductMarkdown(data, meta) {
         return blocks(
           `### ${b.code} · ${one(b.title)}`,
           [
-            pairs([['Type', enumv(b.type || 'bug')], ['Stage', enumv(b.stage)], ['Severity', one(b.severity)], ['Prioritas', one(b.priority)]]),
+            pairs([['Type', enumv(b.type_name || b.type || 'bug')], ['Stage', enumv(b.stage)], ['Severity', one(b.severity)], ['Prioritas', one(b.priority)]]),
             pairs([['Backlog item', ref(b.item_code, b.item_title)], ['Feature', featureRef(b)]]),
             pairs([['Assignee', names(b.assignees, one(b.assigned_to_name))], ['Pelapor', reporter]]),
             pairs([

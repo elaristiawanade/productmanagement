@@ -39,8 +39,15 @@ public class BugController {
 
     private static final Pattern MENTION_PATTERN = Pattern.compile("@\\[([^\\]]+)\\]");
 
-    // Ticket type: a real bug, or an unclear report that needs clarification first.
-    private static final Set<String> BUG_TYPES = Set.of("bug", "inquiry");
+    /** Ticket types are configurable (bug_types table, managed by Super Admin); bugs.type stores the type's code. */
+    private boolean typeExists(String code) {
+        Long n = jdbc.queryForObject("SELECT COUNT(*) FROM bug_types WHERE code = ?", Long.class, code);
+        return n != null && n > 0;
+    }
+
+    private ResponseEntity<?> invalidType() {
+        return ResponseEntity.badRequest().body(Map.of("error", "Type tidak dikenal. Pilih salah satu Type yang tersedia."));
+    }
 
     private ResponseEntity<?> forbidden() {
         return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses ke modul Bugs Incident"));
@@ -69,6 +76,7 @@ public class BugController {
             "  p.name AS product_name, p.code AS product_code, " +
             "  f.code AS feature_code, f.name AS feature_name, " +
             "  ru.name AS reported_by_name, au.name AS assigned_to_name, " +
+            "  bt.name AS type_name, bt.color AS type_color, " +
             "  COUNT(bp.id)          AS update_count, " +
             "  MAX(bp.created_at)    AS last_update, " +
             "  (SELECT u3.name FROM bug_progress_updates bp3 " +
@@ -81,9 +89,10 @@ public class BugController {
             "LEFT JOIN features      f  ON f.id  = b.feature_id " +
             "LEFT JOIN users         ru ON ru.id = b.reported_by " +
             "LEFT JOIN users         au ON au.id = b.assigned_to " +
+            "LEFT JOIN bug_types     bt ON bt.code = b.type " +
             "LEFT JOIN bug_progress_updates bp ON bp.bug_id = b.id " +
             where +
-            "GROUP BY b.id, bi.code, bi.title, p.name, p.code, f.code, f.name, ru.name, au.name " +
+            "GROUP BY b.id, bi.code, bi.title, p.name, p.code, f.code, f.name, ru.name, au.name, bt.name, bt.color " +
             "ORDER BY b.product_id, b.code",
             params.toArray());
         assigneeSupport.enrich(rows);
@@ -108,10 +117,8 @@ public class BugController {
         }
         // Type is optional on create and defaults to a regular bug
         String type = str(body.get("type")).trim();
-        if (type.isEmpty()) type = "bug";
-        if (!BUG_TYPES.contains(type)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Type harus bug atau inquiry"));
-        }
+        if (type.isEmpty()) type = BugTypeController.DEFAULT_CODE;
+        if (!typeExists(type)) return invalidType();
         java.sql.Date deadline;
         try { deadline = toSqlDate(body.get("deadline")); }
         catch (IllegalArgumentException e) { return invalidDeadline(); }
@@ -190,9 +197,7 @@ public class BugController {
 
         // Unlike the other columns, an absent type keeps the stored one (COALESCE) instead of being overwritten
         String type = str(body.get("type")).trim();
-        if (!type.isEmpty() && !BUG_TYPES.contains(type)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Type harus bug atau inquiry"));
-        }
+        if (!type.isEmpty() && !typeExists(type)) return invalidType();
 
         // Deadline is only touched when the key is sent ("" / null clears it). A request without the key
         // (e.g. a browser still running the previous frontend bundle) keeps the stored deadline.
@@ -528,8 +533,10 @@ public class BugController {
     private Map<String, Object> bugDetail(Long bugId) {
         List<Map<String, Object>> rows = jdbc.queryForList(
             "SELECT b.*, au.name AS assigned_to_name, au.email AS assigned_to_email, " +
+            "  bt.name AS type_name, bt.color AS type_color, " +
             "  " + assigneeSupport.assigneesJsonSelect("bug_assignees", "bug_id", "b") + " " +
-            "FROM bugs b LEFT JOIN users au ON au.id = b.assigned_to WHERE b.id = ?",
+            "FROM bugs b LEFT JOIN users au ON au.id = b.assigned_to " +
+            "LEFT JOIN bug_types bt ON bt.code = b.type WHERE b.id = ?",
             bugId
         );
         if (rows.isEmpty()) return null;

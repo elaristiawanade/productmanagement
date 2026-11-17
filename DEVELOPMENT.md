@@ -162,6 +162,7 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v28.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v29.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v30.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v31.sql"
 ```
 
 > **Penting:** `migration_v10.sql` menambahkan kolom `users.department`, yang di-query
@@ -268,6 +269,14 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 > ```
 > Additive dan idempotent; standup lama tetap `NULL` (tanpa bar). Progress % di Backlog, My Tasks, Products, dan QA **tidak butuh migrasi** — dihitung saat dibaca oleh `ProgressSupport`.
 
+> **Penting juga:** `migration_v31.sql` membuat tabel `bug_types` (daftar **Type** tiket Bugs Incident yang bisa diatur Super Admin di **Admin → Bug Types**)
+> dan mengganti CHECK `bugs_type_check` dengan FOREIGN KEY `bugs.type` → `bug_types(code)`. **Jalankan SEBELUM backend baru naik** — list/create/edit bug, import, dan
+> halaman Bug Types membaca tabel ini, jadi tanpa migrasi Bugs Incident gagal `500`. Pada database yang sudah ada jalankan manual (**backup dulu**):
+> ```bash
+> docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v31.sql
+> ```
+> Idempotent; Type `bug` dan `inquiry` di-seed lebih dulu sehingga semua tiket lama tetap valid dan tidak berubah.
+
 ---
 
 ## 8. Notifikasi Email (Testing Lokal)
@@ -336,7 +345,8 @@ product-tracker/
 │       ├── migration_v27.sql
 │       ├── migration_v28.sql
 │       ├── migration_v29.sql
-│       └── migration_v30.sql
+│       ├── migration_v30.sql
+│       └── migration_v31.sql
 ├── backend-java/          # Spring Boot API (port 4000)
 │   ├── src/
 │   ├── pom.xml

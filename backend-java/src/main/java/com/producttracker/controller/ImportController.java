@@ -437,12 +437,20 @@ public class ImportController {
         return allowed.contains(v) ? v : fallback;
     }
 
-    // Optional "Type" column: the key the Export CSV writes ("bug" / "inquiry") or the UI label
-    // ("Inquiry / Clarification"). Empty or anything unrecognised imports as a regular bug.
+    // Optional "Type" column: the code the Export CSV writes ("bug", "inquiry", ...) or a Type's display name,
+    // matched case-insensitively against the configurable bug_types table. Empty or anything unrecognised
+    // imports as a regular bug.
     private String normalizeBugType(String value) {
-        if (value == null) return "bug";
-        String v = value.trim().toLowerCase();
-        return (v.startsWith("inquiry") || v.startsWith("clarification")) ? "inquiry" : "bug";
+        if (value == null || value.isBlank()) return "bug";
+        String v = value.trim();
+        List<Map<String, Object>> rows = jdbc.queryForList(
+            "SELECT code FROM bug_types WHERE LOWER(code) = LOWER(?) OR LOWER(name) = LOWER(?) LIMIT 1", v, v);
+        if (!rows.isEmpty()) return (String) rows.get(0).get("code");
+        // Files exported before Types were configurable carry the old "Inquiry / Clarification" label
+        String lower = v.toLowerCase();
+        boolean legacyInquiry = lower.startsWith("inquiry") || lower.startsWith("clarification");
+        if (legacyInquiry && !jdbc.queryForList("SELECT 1 FROM bug_types WHERE code = 'inquiry'").isEmpty()) return "inquiry";
+        return "bug";
     }
 
     // Optional "Features" column, same "[CODE] Name" shape the Export CSV writes (a bare code works too).
