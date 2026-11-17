@@ -45,6 +45,10 @@ const STAGE_LABELS = {
   open: 'Open', in_progress: 'In Progress', ready_to_test: 'Ready to Test', reopen: 'Re-Open', done: 'Done',
   improvement: 'Improvement',
 };
+// A bug in one of these stages is never shown as late (red Deadline): `done` is finished, and `ready_to_test`
+// is the Bugs equivalent of Backlog's `in_review` (the fix is done and waits on QA), which is exempt as well.
+const NOT_LATE_STAGES = ['done', 'ready_to_test'];
+
 // Stages a brand-new ticket can start in (the rest only make sense once work has started).
 const INITIAL_STAGES = ['open', 'improvement'];
 const SEVERITIES = ['critical', 'high', 'medium', 'low'];
@@ -1126,7 +1130,7 @@ export default function BugsIncident() {
                             <StatusMenu status={b.stage} statuses={STAGES} canChange={canAccess} onChange={s => quickStage(b, s)} />
                           </td>
                           {/* Red once the deadline day is over, unless the bug is Done */}
-                          <td className="px-3 py-3 text-xs whitespace-nowrap"><DeadlineDate date={b.deadline} done={b.stage === 'done'} /></td>
+                          <td className="px-3 py-3 text-xs whitespace-nowrap"><DeadlineDate date={b.deadline} done={NOT_LATE_STAGES.includes(b.stage)} /></td>
                           <td className="px-3 py-3">
                             {b.assignees?.length > 0
                               ? <AssigneeStack assignees={b.assignees} />

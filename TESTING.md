@@ -187,6 +187,9 @@ docker compose up -d --build backend frontend
 | Velocity chart | GET | `/api/dashboard/velocity` | 200 | ✅ 200 | |
 | Team workload | GET | `/api/dashboard/workload` | 200 | ✅ 200 | count=7 |
 | Delayed items | GET | `/api/dashboard/delayed` | 200 | ✅ 200 | |
+| Item `in_review` tidak terlambat | GET | `/api/backlog`, `/api/dashboard/stats`, `/api/dashboard/delayed`, `/api/leader-tasks` | `is_delayed=false` untuk `in_review` walau deadline lewat; Delayed Dashboard 15 → 12, daftar Delayed 15 → 12, Leader Task `in_review` 2 → 0; status lain tidak bergeser | ✅ | 17 Nov 2026, akun dummy lokal (HRS-3, CRM-4, FIN-5 tidak lagi terlambat) |
+| Ganti status bolak-balik | PATCH | `/api/backlog/{id}/status` | item deadline lewat: `in_review` → false, `in_progress` → true, `in_review` → false, `blocked` → true | ✅ | item uji sementara, sudah dihapus |
+| Bugs: `ready_to_test` tidak merah | UI | `/bugs` | bug deadline lewat: stage `ready_to_test` → tanggal abu-abu; stage `open` → merah + ikon; Backlog in_review abu-abu, in_progress tetap merah | ✅ Chrome headless | |
 
 ### Notifications
 
