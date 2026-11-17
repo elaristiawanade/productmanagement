@@ -593,6 +593,7 @@ GET    /api/backlog               List item
                                           assignee_id, parent_id, deadline_from, deadline_to,
                                           search, page, limit, hide_done
                                   hide_done=true → sembunyikan item status 'done' (default UI)
+                                  Setiap item berisi `progress` (0–100, dihitung otomatis; lihat 3.2) — juga di detail, POST, dan PUT
 GET    /api/backlog/:id           Detail satu item
 POST   /api/backlog               Buat item baru (auto-cascade SP ke parent)
                                   400 jika parent_id akan membentuk siklus
@@ -631,8 +632,11 @@ POST /api/sprints/:id/burndown  Catat titik burndown harian
 ### Standup
 ```
 GET    /api/standups              List standup (default: standup user sendiri)
+                                   Berisi `progress` (0–100), `progress_detail` (JSON status → jumlah item), `prev_progress`, dan
+                                   `prev_progress_date` (standup terakhir penulis yang punya progress) — lihat 3.7
                                   Params: date_from, date_to, user_id (Manager+ untuk filter user lain)
 POST   /api/standups              Buat standup (1 per user per hari, duplikat ditolak)
+                                   Standup hari ini (POST dan PUT) otomatis diberi snapshot progress dari item di sprint aktif
 PUT    /api/standups/:id          Edit standup
 GET    /api/standups/today        Cek apakah user sudah submit standup hari ini
 GET    /api/standups/achievement  Statistik konsistensi standup per user (streak, persentase, dll.)
@@ -658,6 +662,7 @@ PUT    /api/users/me/password     Ganti password sendiri (perlu current_password
 ### Products, Epics & Roadmap
 ```
 GET/POST          /api/products         List & buat produk
+                                            List berisi `progress` (0–100, rata-rata item kerja produk; null bila belum ada item; lihat 3.6)
 GET/PUT/DELETE    /api/products/:id     Detail, update, hapus produk
 CRUD              /api/epics            Epic per produk (params: product_id)
 CRUD              /api/features         Feature / kategori per produk
@@ -667,6 +672,9 @@ CRUD              /api/roadmap          Roadmap item (timeline feature per produ
 ### QA
 ```
 GET/POST          /api/qa/test-cases           List & buat test case
+                                             POST/PUT menerima `deadline` opsional (`YYYY-MM-DD`; `""`/null mengosongkan; PUT tanpa key `deadline`
+                                             mempertahankan nilai lama; format salah → `400`). List menambah `deadline`, `progress` (0–100, dari run
+                                             terakhir; null untuk `deprecated`), dan `last_result` (lihat 3.8)
 PUT/DELETE        /api/qa/test-cases/:id       Update & hapus test case
 GET/POST          /api/qa/test-cases/:id/attachments List & upload lampiran test case (max 10MB; gambar/PDF/Word/Excel/PowerPoint/ZIP/CSV/TXT)
 DELETE            /api/qa/attachments/:id      Hapus lampiran test case (butuh qa.update)
@@ -686,6 +694,8 @@ GET/POST          /api/bugs                List & buat bug (params: product_id, 
                                             `stage` awal `open` (default) atau `improvement`; nilai lain jatuh ke `open`.
                                             POST/PUT menerima `feature_id` opsional (`400` kalau bukan feature produk bug
                                             tsb); response list menambah `feature_id`, `feature_code`, `feature_name`
+                                            POST/PUT menerima `deadline` opsional (`YYYY-MM-DD`; `""`/null mengosongkan; PUT tanpa key `deadline`
+                                            mempertahankan nilai lama; format salah → `400`); response list berisi `deadline` (lihat 3.9)
 PUT/DELETE        /api/bugs/:id            Update (tanpa field stage) & hapus bug (cascade ke progress)
 GET/POST          /api/bugs/progress       List & buat entry progress (params: bug_id, product_id). POST juga dipakai dropdown
                                             Stage di tabel Bugs (body: bug_id, stage, note opsional) — stage bebas ke salah satu
