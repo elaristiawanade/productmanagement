@@ -347,3 +347,24 @@ Fitur baru (PRD 3.6 & 3.10, v3.20). Frontend saja; `migration_v28.sql` opsional 
 - ⚠️ `docker-compose.yml` kini memasang v28 di initdb, jadi `docker compose up` berikutnya (tanpa `--no-deps`) membuat ulang `pt_postgres` (data volume aman, hanya restart singkat)
 - ⚠️ "Kerjaan Andi apa saja?" → file menyebut 6 kartu, Backlog hanya 4. HRS-2-S1/S2 (dan CRM-3-S1/S2) hanya punya kolom `assignee_id` lama tanpa baris `backlog_item_assignees`; export memakai kolom lama sebagai cadangan, Backlog/My Tasks tidak. Di produksi sumbernya Import Jira (`ImportController` tidak menulis tabel assignee, lihat PRD 3.11)
 - ⚠️ Kandidat perbaikan berikutnya: legenda belum menjelaskan dua arti **Epic** (tipe kartu vs Epic produk) dan **Bug** (tipe kartu vs tiket Bugs Incident); judul tiket bug dan test case belum berlabel tipe; belum ada tabel ringkas satu baris per kartu untuk produk besar
+
+## 32. Deadline di Bugs Incident & QA Module
+
+Fitur baru (PRD 3.8 & 3.9, v3.21). Butuh `migration_v29.sql` **sebelum** backend baru naik. Diuji di stack Docker lokal (:8500) dengan akun dummy: API lewat skrip Node, UI lewat Chrome headless. Data uji dihapus lagi (13 bug, 10 test case seperti semula).
+
+- ✅ `migration_v29.sql` dijalankan dua kali tanpa error; kolom `deadline DATE` ada di `bugs` dan `qa_test_cases`, data lama `NULL`
+- ✅ API Bugs & QA: create dengan deadline tersimpan `"yyyy-MM-dd"`, create tanpa deadline → `null`, edit mengganti, `""`/`null` mengosongkan, format salah (`besok`, `20-11-2026`, `2026/11/01`) → `400 Format deadline tidak valid (YYYY-MM-DD)`
+- ✅ Edit **tanpa** field `deadline` (meniru browser yang masih memakai frontend lama) tidak menghapus deadline
+- ✅ Ganti stage bug (Update Progress / dropdown Stage) tidak mengubah deadline
+- ✅ Import CSV bug dan test case berisi kolom `Deadline` tetap jalan (deadline diabaikan, kosong)
+- ✅ UI Bugs: kolom **Deadline** setelah Stage; tanggal lewat + stage Open merah dengan ikon dan tooltip "Lewat deadline"; tanggal mendatang abu-abu; bug **Done** dengan tanggal lewat tidak merah; bug tanpa deadline `—`
+- ✅ UI Bugs: sort Deadline (klik pertama) → paling dekat dulu, tanpa deadline paling bawah
+- ✅ UI Bugs: form Edit menampilkan deadline tersimpan, ubah tanggal → tabel ikut berubah dan tidak merah lagi; form Buat Bug dengan deadline → tampil di tabel. Assigned To dan Deadline bersebelahan
+- ✅ UI QA: kolom **Deadline** setelah Status; tanggal lewat merah; deadline **hari ini** belum merah; test case lama `—`; form Edit menampilkan deadline, mengosongkan tanggal → `—`
+- ✅ Export CSV Bugs dan Test Cases punya kolom `Deadline` (`yyyy-MM-dd`)
+- 🧑 Jalankan `migration_v29.sql` di database server (backup dulu) **sebelum** backend baru naik, lalu cek Buat/Edit bug dan test case
+- 🧑 Cek tampilan di tema gelap dan di browser dengan locale Indonesia (input tanggal tampil `dd/mm/yyyy`)
+- ⚠️ "Merah" dihitung dari tanggal lokal komputer pengguna, jadi bergantung jam/tanggal komputer itu. Hari H deadline belum merah (Backlog sudah merah di hari H karena memakai `NOW()` di database)
+- ⚠️ QA: merah tanpa syarat status, jadi test case yang sudah selesai dijalankan atau `deprecated` tetap merah bila tanggalnya lewat. Kosongkan deadline-nya kalau tidak relevan lagi
+- ⚠️ Belum ada: Import CSV membaca deadline, deadline di Export MD, filter deadline, hitungan terlambat di dashboard, dan notifikasi pengingat
+- ⚠️ `docker-compose.yml` kini memasang v29 di initdb, jadi `docker compose up` berikutnya (tanpa `--no-deps`) membuat ulang `pt_postgres` (data volume aman, hanya restart singkat)

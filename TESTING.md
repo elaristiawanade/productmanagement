@@ -150,6 +150,9 @@ docker compose up -d --build backend frontend
 | Filter test cases by product | GET | `/api/qa/test-cases?product_id={id}` | 200 | 🔧 → ✅ after rebuild | |
 | Create test case | POST | `/api/qa/test-cases` | 201 | ⚠️ Requires `backlog_item_id` | Not `product_id` — must link to a backlog item |
 | Update test case | PUT | `/api/qa/test-cases/{id}` | 200 | ✅ 200 | |
+| Create/update test case dengan `deadline` | POST / PUT | `/api/qa/test-cases`, `/api/qa/test-cases/{id}` | 201/200, `deadline` = `"yyyy-MM-dd"`; `""`/`null` mengosongkan; PUT **tanpa** key `deadline` mempertahankan nilai lama; format salah → 400 | ✅ | 17 Nov 2026, akun dummy lokal; butuh `migration_v29.sql` (tanpa migrasi create/edit 500) |
+| Create/update bug dengan `deadline` | POST / PUT | `/api/bugs`, `/api/bugs/{id}` | sama seperti test case; ganti stage lewat `POST /api/bugs/progress` tidak mengubah deadline | ✅ | 17 Nov 2026 |
+| Import CSV berisi kolom `Deadline` | POST | `/api/import/bugs`, `/api/import/qa-test-cases` | 200, baris dibuat; kolom Deadline diabaikan (deadline kosong) | ✅ 200 | import belum membaca deadline |
 | Delete test case | DELETE | `/api/qa/test-cases/{id}` | 200 | ✅ 200 | |
 | List test runs | GET | `/api/qa/test-runs` | 200 | ✅ 200 | |
 | Filter test runs by product | GET | `/api/qa/test-runs?product_id={id}` | 200 | 🔧 → ✅ after rebuild | |
