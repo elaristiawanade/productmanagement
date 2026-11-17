@@ -4,6 +4,7 @@ import { format, parseISO } from 'date-fns';
 import client from '../api/client';
 import { useDeepLink } from '../utils/deepLink';
 import Modal from '../components/Modal';
+import ExportMdButton from '../components/ExportMdButton';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import { useAuth } from '../context/AuthContext';
@@ -360,6 +361,7 @@ export default function Products() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    <ExportMdButton product={product} />
                     {can('products', 'update') && (
                       <button className="btn-ghost btn-sm p-1.5 rounded-lg" onClick={() => setModal({ open: true, type: 'product', data: product, productId: product.id })}>
                         <Pencil className="w-4 h-4" />
