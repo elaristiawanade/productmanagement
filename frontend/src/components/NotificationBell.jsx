@@ -82,7 +82,7 @@ export default function NotificationBell() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={toggleOpen}
-        className="relative w-8 h-8 grid place-items-center rounded-md text-frame-ink-2 hover:bg-frame-2 hover:text-[#fff] transition-colors"
+        className="relative w-8 h-8 grid place-items-center rounded-md text-frame-ink-2 hover:bg-frame-2 hover:text-frame-ink transition-colors"
         title="Notifikasi">
         <Bell className="w-[18px] h-[18px]" />
         {unread > 0 && (

@@ -7,9 +7,8 @@ const readTheme = () => {
   try { return localStorage.getItem('pt_theme') === 'dark' ? 'dark' : 'light'; } catch { return 'light'; }
 };
 
-// The top bar is black in both themes, so a dark track disappeared into it. The track is a bright
-// colour instead (amber in light mode, blue in dark mode) and both icons stay visible, so it
-// reads as a two-way switch at a glance. Hard-coded hex on purpose: the bar never changes with the theme.
+// The track is a bright colour (amber in light mode, blue in dark mode) and both icons stay visible,
+// so it reads as a two-way switch at a glance on both the light-grey and the near-black top bar.
 export default function ThemeToggle() {
   const [theme, setTheme] = useState(readTheme);
   const dark = theme === 'dark';
@@ -30,7 +29,7 @@ export default function ThemeToggle() {
       title={dark ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'}
       onClick={toggle}
       className={`relative w-[60px] h-[30px] rounded-full shrink-0 mr-1.5 transition-colors duration-200
-        focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#fff]
+        focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500
         ${dark ? 'bg-[#3B82F6] hover:bg-[#60A5FA]' : 'bg-[#F5B83D] hover:bg-[#F8C85F]'}`}>
       <span className={`absolute left-0 inset-y-0 w-7 grid place-items-center z-10 transition-colors duration-200
         ${dark ? 'text-[#0A2247]' : 'text-[#FBBF24]'}`}>

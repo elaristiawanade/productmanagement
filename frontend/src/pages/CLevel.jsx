@@ -934,7 +934,7 @@ function MineTab({ user, detailId, setDetailId }) {
         {STATUS_TABS.map(t => (
           <button key={t.key}
             className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors
-              ${tab === t.key ? 'border-slate-800 text-slate-800 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+              ${tab === t.key ? 'border-indigo-600 text-slate-800 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
             onClick={() => setTab(t.key)}>
             {t.label}
           </button>
@@ -1283,7 +1283,7 @@ export default function CLevel() {
           ].map(([id, label]) => (
             <button key={id} onClick={() => { setTab(id); setDetailId(null); }}
               className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors
-                ${tab === id ? 'border-slate-800 text-slate-800 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+                ${tab === id ? 'border-indigo-600 text-slate-800 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
               {label}
             </button>
           ))}

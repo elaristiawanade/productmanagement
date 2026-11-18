@@ -266,7 +266,7 @@ export default function Sprints() {
                 <span>Progress</span><span>{pct}%</span>
               </div>
               <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full bg-slate-800 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                <div className="h-full bg-indigo-600 rounded-full transition-all" style={{ width: `${pct}%` }} />
               </div>
             </div>
           </div>

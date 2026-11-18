@@ -97,24 +97,32 @@ export default function Layout() {
 
   return (
     <PresenceProvider>
-    <div className="h-screen flex flex-col overflow-hidden bg-frame">
+    <div className="h-screen flex overflow-hidden bg-frame">
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      {/* Desktop: full-height icon rail with the logo on top (ClickUp style). Mobile gets the rail inside the drawer. */}
+      <div className="hidden md:flex w-16 shrink-0 flex-col">
+        <Link to="/" title="PT Abhimata Persada — Product Tracker" className="h-12 shrink-0 grid place-items-center">
+          <img src="/logo-mark.png" alt="PT Abhimata Persada" className="w-8 h-8 rounded-[8px] bg-[#fff] p-0.5 ring-1 ring-black/10" />
+        </Link>
+        <IconRail activeKey={section.key} />
+      </div>
+      <div className="flex-1 min-w-0 flex flex-col">
       {/* Top bar */}
       <header className="h-12 shrink-0 flex items-center gap-3 pl-3.5 pr-3 text-frame-ink">
         <button onClick={toggleMenu} aria-label="Buka/tutup menu"
           title={collapsed ? 'Tampilkan sidebar' : 'Sembunyikan sidebar'}
-          className="w-8 h-8 grid place-items-center rounded-md text-frame-ink-2 hover:bg-frame-2 hover:text-[#fff]">
+          className="w-8 h-8 grid place-items-center rounded-md text-frame-ink-2 hover:bg-frame-2 hover:text-frame-ink">
           <Menu className="w-5 h-5" />
         </button>
         <Link to="/" className="flex items-center gap-2 min-w-0">
-          <img src="/logo-mark.png" alt="PT Abhimata Persada" className="w-7 h-7 rounded-[7px] bg-[#fff] p-0.5 shrink-0" />
+          <img src="/logo-mark.png" alt="PT Abhimata Persada" className="md:hidden w-7 h-7 rounded-[7px] bg-[#fff] p-0.5 shrink-0 ring-1 ring-black/10" />
           <span className="hidden sm:block font-semibold text-[13.5px] whitespace-nowrap">
             PTAP <span className="text-frame-ink-2 font-medium">· Product Tracker</span>
           </span>
         </Link>
         <div className="flex-1 flex justify-center min-w-0">
           <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Cari (Ctrl K)"
-            className="flex items-center gap-2 h-8 w-8 sm:w-full sm:max-w-[520px] justify-center sm:justify-start px-0 sm:pl-3 sm:pr-1.5 rounded-lg bg-frame-2 border border-frame-3 text-frame-ink-2 text-[13px] hover:border-[#3d3d44] hover:text-frame-ink transition-colors">
+            className="flex items-center gap-2 h-8 w-8 sm:w-full sm:max-w-[520px] justify-center sm:justify-start px-0 sm:pl-3 sm:pr-1.5 rounded-lg bg-frame-2 border border-frame-3 text-frame-ink-2 text-[13px] hover:border-frame-ink-2 hover:text-frame-ink transition-colors">
             <Search className="w-[15px] h-[15px] shrink-0" />
             <span className="hidden sm:block flex-1 text-left truncate">Cari halaman, tiket, atau aksi…</span>
             <kbd className="hidden sm:block font-sans text-[11px] font-medium px-1.5 py-0.5 rounded bg-frame-3 text-frame-ink-2">Ctrl K</kbd>
@@ -131,7 +139,7 @@ export default function Layout() {
         {/* Rail + secondary sidebar: inline on desktop, a drawer under the top bar on mobile */}
         <div className={`flex shrink-0 max-md:fixed max-md:top-12 max-md:bottom-0 max-md:left-0 max-md:z-40 max-md:bg-frame
           max-md:transition-transform max-md:duration-200 ${drawer ? '' : 'max-md:-translate-x-full'}`}>
-          <IconRail activeKey={section.key} />
+          <div className="md:hidden"><IconRail activeKey={section.key} /></div>
           <div className={`w-[264px] max-md:w-[min(264px,calc(100vw-104px))] rounded-tl-xl max-md:rounded-none overflow-hidden
             ${collapsed ? 'md:hidden' : ''}`}>
             <Sidebar section={section} onCollapse={() => setCollapsedSaved(true)} />
@@ -162,6 +170,7 @@ export default function Layout() {
             <Outlet />
           </div>
         </main>
+      </div>
       </div>
     </div>
     </PresenceProvider>

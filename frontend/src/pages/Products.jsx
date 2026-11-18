@@ -305,7 +305,7 @@ export default function Products() {
         ].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors
-              ${tab === id ? 'border-slate-800 text-slate-800 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+              ${tab === id ? 'border-indigo-600 text-slate-800 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
             {label}
           </button>
         ))}
@@ -358,7 +358,7 @@ export default function Products() {
                     <div className="mt-3 flex items-center gap-2"
                       title="Progress dihitung otomatis dari item Backlog produk ini: In Progress 50%, In Review 80%, Done 100%, dibobot story point">
                       <div className="flex-1 max-w-[200px] h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-slate-800 rounded-full" style={{ width: `${pct}%` }} />
+                        <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${pct}%` }} />
                       </div>
                       <span className="text-xs text-slate-400">Progress {pct}%</span>
                     </div>
@@ -446,7 +446,7 @@ export default function Products() {
                                   <span className="text-xs text-slate-400">{f.target_release || '—'}</span>
                                   <div className="flex items-center gap-1.5 w-24 shrink-0">
                                     <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                      <div className="h-full bg-slate-800 rounded-full" style={{ width: `${pct2}%` }} />
+                                      <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${pct2}%` }} />
                                     </div>
                                     <span className="text-xs text-slate-400">{pct2}%</span>
                                   </div>

@@ -375,12 +375,12 @@ export default function MyTask() {
             <button key={t.key}
               className={`flex items-center gap-1.5 h-10 text-[13.5px] whitespace-nowrap border-b-2 transition-colors -mb-px
                 ${tab === t.key
-                  ? 'border-slate-800 text-slate-800 font-semibold'
+                  ? 'border-indigo-600 text-slate-800 font-semibold'
                   : 'border-transparent text-slate-500 hover:text-slate-800'}`}
               onClick={() => { setTab(t.key); setPage(1); }}>
               {t.label}
               <span className={`text-[11px] px-1.5 leading-[18px] rounded-full font-semibold
-                ${tab === t.key ? 'bg-slate-800 text-panel' : 'bg-slate-100 text-slate-500'}`}>
+                ${tab === t.key ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
                 {tabCount(t.key)}
               </span>
             </button>

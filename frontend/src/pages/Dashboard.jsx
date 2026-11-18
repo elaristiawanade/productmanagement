@@ -308,7 +308,7 @@ export default function Dashboard() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 min-w-[100px]">
                           <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                            <div className="h-full bg-slate-800 rounded-full" style={{ width: `${pct}%` }} />
+                            <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${pct}%` }} />
                           </div>
                           <span className="text-xs text-slate-500 w-8 text-right">{pct}%</span>
                         </div>

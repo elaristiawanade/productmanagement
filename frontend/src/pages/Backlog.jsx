@@ -972,12 +972,19 @@ export default function Backlog() {
           {[{ k: 'list', l: 'List', Icon: List }, { k: 'board', l: 'Board', Icon: Columns3 }].map(({ k, l, Icon }) => (
             <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setView(k)}
               className={`inline-flex items-center gap-1.5 h-10 -mb-px border-b-2 text-[13.5px] transition-colors
-                ${view === k ? 'border-slate-800 text-slate-800 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
+                ${view === k ? 'border-indigo-600 text-slate-800 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
               <Icon className="w-3.5 h-3.5" />{l}
             </button>
           ))}
         </div>
         <div className="ml-auto flex items-center gap-2 pb-1.5">
+          {/* Lives here, not in the filter row: that row wraps and left it stranded on its own line */}
+          {view === 'list' && (
+            <button type="button" onClick={() => setGrouped(g => !g)} aria-pressed={grouped}
+              className={`chip ${grouped ? 'chip-on' : ''}`}>
+              <Layers className="w-3.5 h-3.5" />Group: Status
+            </button>
+          )}
           {can('import', 'run') && (
             <Link to="/import/jira" className="btn-ghost">
               <FileDown className="w-4 h-4" />
@@ -1035,12 +1042,6 @@ export default function Backlog() {
             </button>
           )}
         </div>
-        {view === 'list' && (
-          <button type="button" onClick={() => setGrouped(g => !g)} aria-pressed={grouped}
-            className={`chip sm:ml-auto ${grouped ? 'chip-on' : ''}`}>
-            <Layers className="w-3.5 h-3.5" />Group: Status
-          </button>
-        )}
       </div>
 
       {/* Shortcut filter chips */}
