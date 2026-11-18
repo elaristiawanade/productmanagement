@@ -434,3 +434,29 @@ Fitur baru (PRD 3.1, 3.2, 3.3, 3.9, C-Level, v3.24). Item `in_review` yang melew
 - ⚠️ Bugs: stage `ready_to_test` diperlakukan sebagai padanan In Review (perbaikan selesai, menunggu QA) sehingga tidak merah; ini keputusan pemilik dan mengubah perilaku yang sudah ada. QA Test Case tidak berubah (tidak punya status in review)
 - ⚠️ Story/Epic mengikuti status anak (maju saja): induk dengan satu anak `in_review` ikut `in_review` dan tidak merah, walau anak lain terlambat; anak yang terlambat tetap merah di barisnya sendiri
 - ⚠️ Tidak diubah: klik angka Delayed per produk di Dashboard membuka semua item aktif (tidak difilter tanggal); Backlog merah sejak hari H sedangkan Bugs/QA setelah hari H lewat
+
+## 36. Stage Bugs Incident bisa diatur + Buat Backlog dari tiket Improvement
+
+Fitur baru (PRD 3.9, v3.25). **Butuh `migration_v32.sql`** (tabel `bug_stages`, FK `bugs.stage`, Type `improvement` bawaan, kolom `bugs.converted_backlog_id`). Diuji di stack Docker lokal (:8500) lewat API dan Chrome headless; data uji dihapus kembali.
+
+- ✅ Migrasi pada DB lokal (backup dulu): 6 Stage bawaan tercatat dengan flag yang menjaga perilaku lama; Type `improvement` ditambahkan; semua tiket lama tetap valid
+- ✅ Stage baru ("Waiting Client") bisa dibuat, dipakai tiket, tampil di dropdown stage tabel, filter Stage, tabel Bugs, pie Distribusi Stage, dan sebagai kolom kartu **Bugs per Feature** di Bugs Dashboard **dan** QA Dashboard
+- ✅ Dashboard: kartu Open ikut menghitung Stage baru (10 → 13 saat ada 3 tiket tambahan), kembali ke angka semula setelah tiket uji dipulihkan
+- ✅ Stage ber-flag selesai mengisi Tanggal Closed dan dihitung di Done / resolution rate; pindah ke Stage lain mengosongkannya
+- ✅ Halaman **Admin → Bug Stages**: 6 Stage bawaan berlabel "bawaan" dengan tombol hapus nonaktif; tambah Stage lewat form (centang "Tidak dihitung terlambat") tersimpan dengan flag yang benar; QA tidak bisa membuat Stage (403)
+- ✅ Stage bawaan tidak bisa dihapus (409), flag-nya tidak berubah lewat PUT; Stage yang dipakai tiket tidak bisa dihapus (409)
+- ✅ Import CSV: kolom Stage berisi nama / code dikenali, nilai asing menjadi `open`
+- ✅ Tombol **Buat kartu Backlog** muncul hanya di baris Type Improvement; klik → konfirmasi → toast "Kartu Backlog HRS-107 dibuat dari HRS-055" → tombol berganti penanda hijau "Sudah dibuat di Backlog: HRS-107"
+- ✅ Penanda membuka dialog "Bug ini sudah dibuat di Backlog sebagai HRS-107" + tombol "Buka di Backlog" (`/backlog?item=ID`); form Edit Bug menampilkan banner yang sama
+- ✅ Kartu hasil: story / backlog / tanpa sprint; judul, prioritas, deadline, dan **kedua** assignee disalin; notes memuat kode bug, deskripsi, langkah reproduksi, dan Feature
+- ✅ Konversi kedua → 409; dua request serentak → satu kartu saja; Type bukan Improvement → 400; role tanpa `bugs.access` → 403
+- ✅ Type `improvement` tidak bisa dihapus (409)
+- 🧑 **Production:** jalankan `backend/db/migration_v32.sql` manual SEBELUM backend baru naik (lewat mentor); lalu rebuild backend + frontend
+- 🧑 Cek di data asli: Type "Improvement" yang sudah dibuat manual di database kantor harus berkode `improvement` agar tombol Buat Backlog muncul (cek di Admin → Bug Types, kolom Kode). Jika kodenya lain, beri tahu saya
+- ⚠️ Assignee yang disalin menerima notifikasi "Kamu di-assign ke PB-xxx" (dan pesan Teams) karena memakai alur create Backlog yang sama
+- ⚠️ Stage Awal di form Buat Bug tetap hanya `open`/`improvement`; form Lapor Bug Publik tidak berubah (tiketnya bertype `bug`, jadi tidak mendapat tombol Buat Backlog sampai Type-nya diganti)
+- ✅ Tombol **Buat Backlog** di header modal Edit Bug (kiri **Salin link**): ada untuk tiket Improvement (juga lewat link `/bugs?bug=ID`), tidak ada untuk Type `bug`
+- ✅ Form diubah tapi belum disimpan → klik tombol header memunculkan toast "Simpan perubahan bug terlebih dahulu…", tanpa konfirmasi dan tanpa konversi
+- ✅ Form bersih → konfirmasi (menyebut lampiran) → modal menutup, toast "Kartu Backlog … dibuat dari … (1 lampiran disalin)", baris tabel bertanda hijau; membuka ulang modal: header menampilkan "Di Backlog: PB-xxx" tanpa tombol Buat Backlog
+- ✅ Lampiran bug ikut ke kartu (file fisik terpisah); catatan kartu memuat baris "Dilaporkan oleh"
+- ⚠️ Feature bug (tabel `features`) tidak bisa ditautkan ke Impacted Features Backlog (roadmap); ditulis di notes kartu

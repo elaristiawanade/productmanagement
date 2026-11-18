@@ -23,6 +23,9 @@ public class BugTypeController {
     /** Type bawaan: dipakai form lapor publik dan tiket tanpa Type, jadi tidak boleh dihapus. */
     public static final String DEFAULT_CODE = "bug";
 
+    /** Type bawaan kedua: pemicu tombol "Buat Backlog" di Bugs Incident, jadi juga tidak boleh dihapus (nama boleh diubah). */
+    public static final String IMPROVEMENT_CODE = "improvement";
+
     @Autowired
     private JdbcTemplate jdbc;
 
@@ -93,6 +96,10 @@ public class BugTypeController {
         if (DEFAULT_CODE.equals(code)) {
             return ResponseEntity.status(409).body(Map.of("error",
                 "Type bawaan tidak bisa dihapus karena dipakai sebagai nilai default (namanya boleh diubah)."));
+        }
+        if (IMPROVEMENT_CODE.equals(code)) {
+            return ResponseEntity.status(409).body(Map.of("error",
+                "Type Improvement tidak bisa dihapus karena dipakai untuk tombol Buat Backlog (namanya boleh diubah)."));
         }
         Long used = jdbc.queryForObject("SELECT COUNT(*) FROM bugs WHERE type = ?", Long.class, code);
         if (used != null && used > 0) {

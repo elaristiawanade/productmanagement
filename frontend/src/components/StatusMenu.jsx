@@ -5,10 +5,11 @@ import FloatingMenu from './FloatingMenu';
 
 // Status shown as a pill (lists) or icon (cards). With canChange it opens a menu of `statuses`
 // and calls onChange(newStatus) — the page keeps its own update call (e.g. PATCH /backlog/:id/status).
-export default function StatusMenuButton({ status, statuses, canChange = true, onChange, variant = 'pill' }) {
+// `metaOf(code)` (optional) supplies { label, c, icon } for statuses that are not in STATUS_MAP (configurable bug stages).
+export default function StatusMenuButton({ status, statuses, canChange = true, onChange, variant = 'pill', metaOf }) {
   const ref = useRef(null);
   const [open, setOpen] = useState(false);
-  const face = variant === 'icon' ? <StatusIcon status={status} /> : <StatusBadge status={status} />;
+  const face = variant === 'icon' ? <StatusIcon status={status} meta={metaOf?.(status)} /> : <StatusBadge status={status} meta={metaOf?.(status)} />;
   if (!canChange) return face;
   return (
     <>
@@ -25,8 +26,8 @@ export default function StatusMenuButton({ status, statuses, canChange = true, o
           <button key={s} type="button" role="menuitemradio" aria-checked={s === status}
             onClick={() => { setOpen(false); if (s !== status) onChange(s); }}
             className="w-full flex items-center gap-2 h-8 px-2 rounded-md text-[13px] text-slate-800 hover:bg-slate-100">
-            <StatusIcon status={s} />
-            <span className="flex-1 text-left">{STATUS_MAP[s]?.label ?? s}</span>
+            <StatusIcon status={s} meta={metaOf?.(s)} />
+            <span className="flex-1 text-left">{metaOf?.(s)?.label ?? STATUS_MAP[s]?.label ?? s}</span>
             {s === status && <Check className="w-3.5 h-3.5 text-indigo-600" />}
           </button>
         ))}

@@ -333,7 +333,9 @@ public class QaController {
             "bySprint", bySprint,
             "recentFails", recentFails,
             "bugOverviewAllowed", bugOverviewAllowed,
-            "bugsByFeature", bugsByFeature
+            "bugsByFeature", bugsByFeature,
+            // The card's columns are the configurable bug stages (same payload shape as the Bugs Incident dashboard)
+            "bugStages", bugOverviewAllowed ? bugStats.stages() : List.of()
         ));
     }
 

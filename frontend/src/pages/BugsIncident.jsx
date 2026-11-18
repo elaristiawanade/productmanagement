@@ -1,10 +1,10 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
-import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Upload, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff, AlertTriangle, XCircle, Lightbulb, Tag, Settings2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Wrench, Bug as BugIcon, CheckCircle2, FlaskConical, AlertCircle, Upload, X, MessageSquare, Send, Search, ChevronDown, Check, Download, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, Eye, EyeOff, AlertTriangle, XCircle, Lightbulb, Tag, Settings2, ListPlus, ListChecks } from 'lucide-react';
 import client from '../api/client';
 import { useDeepLink } from '../utils/deepLink';
 import { toastCreated } from '../utils/createdToast';
@@ -22,6 +22,7 @@ import AssigneeStack from '../components/AssigneeStack';
 import AttachmentSection from '../components/AttachmentSection';
 import DeadlineDate from '../components/DeadlineDate';
 import { renderWithLinks } from '../utils/linkify';
+import { makeStageLookup } from '../utils/bugStages';
 import { buildBacklogTreeOptions } from '../utils/backlogHierarchy';
 import { buildFeatureOptions, featureText } from '../utils/featureOptions';import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -40,17 +41,16 @@ const STAGE_ICONS = {
   improvement:   { icon: Lightbulb,     cls: 'text-sky-500'    },
 };
 
-const STAGES     = ['open', 'in_progress', 'ready_to_test', 'reopen', 'done', 'improvement'];
-const STAGE_LABELS = {
-  open: 'Open', in_progress: 'In Progress', ready_to_test: 'Ready to Test', reopen: 'Re-Open', done: 'Done',
-  improvement: 'Improvement',
-};
-// A bug in one of these stages is never shown as late (red Deadline): `done` is finished, and `ready_to_test`
-// is the Bugs equivalent of Backlog's `in_review` (the fix is done and waits on QA), which is exempt as well.
-const NOT_LATE_STAGES = ['done', 'ready_to_test'];
+// Stages are configurable (Super Admin, /settings/bug-stages): the list, names and colours come from GET /bug-stages
+// and are turned into a lookup (utils/bugStages.js) held by the page — nothing about them is hard-coded here any more.
+// Behaviour follows the stage's flags: `is_closed` (Done: fills Tanggal Closed, hidden by "Closed/Done disembunyikan")
+// and `not_late` (never a red Deadline: Done, and Ready to Test = the Bugs equivalent of Backlog's `in_review`).
 
 // Stages a brand-new ticket can start in (the rest only make sense once work has started).
 const INITIAL_STAGES = ['open', 'improvement'];
+
+// "Buat Backlog" is offered for tickets of this Type (the built-in Improvement type, see BugTypeController)
+const CONVERTIBLE_TYPE = 'improvement';
 const SEVERITIES = ['critical', 'high', 'medium', 'low'];
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
 
@@ -71,21 +71,23 @@ function TypeBadge({ type, name, color }) {
 // Rank maps give these string columns a real ordering (alphabetical order of
 // 'critical'/'high'/'medium'/'low' or the stage names is meaningless).
 const PRIORITY_RANK = { critical: 0, high: 1, medium: 2, low: 3 };
-const STAGE_RANK    = STAGES.reduce((acc, s, i) => ({ ...acc, [s]: i }), {});
 
 const SORTABLE_COLUMNS = {
   severity:    { type: 'rank', rank: PRIORITY_RANK, defaultDir: 'asc' },  // asc = critical first
   priority:    { type: 'rank', rank: PRIORITY_RANK, defaultDir: 'asc' },  // asc = critical first
-  stage:       { type: 'rank', rank: STAGE_RANK,    defaultDir: 'asc' },  // asc = open -> done
+  stage:       { type: 'rank', rank: null,          defaultDir: 'asc' },  // rank = the configurable stage order (passed in)
   deadline:    { type: 'date', defaultDir: 'asc' },                      // asc = nearest deadline first
   created_at:  { type: 'date', defaultDir: 'desc' },                     // desc = newest first
   closed_at:   { type: 'date', defaultDir: 'desc' },
   last_update: { type: 'date', defaultDir: 'desc' },
 };
 
-function compareBugsBy(a, b, key) {
+function compareBugsBy(a, b, key, stageRank) {
   const col = SORTABLE_COLUMNS[key];
-  if (col.type === 'rank') return (col.rank[a[key]] ?? 99) - (col.rank[b[key]] ?? 99);
+  if (col.type === 'rank') {
+    const rank = key === 'stage' ? stageRank : col.rank;
+    return (rank[a[key]] ?? 99) - (rank[b[key]] ?? 99);
+  }
   return new Date(a[key]).getTime() - new Date(b[key]).getTime();
 }
 
@@ -345,7 +347,7 @@ function ActivitySection({ bugId, users = [] }) {
   );
 }
 
-function BugForm({ bug, products, backlogItems, features, users, bugTypes, onSave, onClose }) {
+function BugForm({ bug, products, backlogItems, features, users, bugTypes, stageLookup, onDirtyChange, onSave, onClose }) {
   const [form, setForm] = useState({
     product_id: bug?.product_id || '', backlog_item_id: bug?.backlog_item_id || '',
     feature_id: bug?.feature_id || '',
@@ -359,6 +361,10 @@ function BugForm({ bug, products, backlogItems, features, users, bugTypes, onSav
   });
   const [saving, setSaving] = useState(false);
   const attachRef = useRef(null);
+  // Tells the modal header whether there are unsaved edits ("Buat Backlog" there converts the SAVED bug, so it asks to save first)
+  const initialRef = useRef(null);
+  if (initialRef.current === null) initialRef.current = JSON.stringify(form);
+  useEffect(() => { onDirtyChange?.(JSON.stringify(form) !== initialRef.current); }, [form, onDirtyChange]);
   // Done items are hidden from new picks but the item currently linked stays visible
   // even if done, so editing an existing bug never silently unlinks it.
   const filteredItems = backlogItems.filter(b =>
@@ -389,6 +395,11 @@ function BugForm({ bug, products, backlogItems, features, users, bugTypes, onSav
 
   return (
     <form onSubmit={save} className="grid grid-cols-2 gap-4">
+      {bug?.converted_backlog_id && (
+        <div className="col-span-2">
+          <ConvertedNotice bug={bug} />
+        </div>
+      )}
       <div>
         <label className="label">Produk *</label>
         <select className="select" value={form.product_id} onChange={e => setForm(f => ({ ...f, product_id: e.target.value, backlog_item_id: '', feature_id: '' }))} required>
@@ -443,7 +454,7 @@ function BugForm({ bug, products, backlogItems, features, users, bugTypes, onSav
         <div>
           <label className="label">Stage Awal</label>
           <select className="select" value={form.stage} onChange={e => setForm(f => ({ ...f, stage: e.target.value }))}>
-            {INITIAL_STAGES.map(s => <option key={s} value={s}>{STAGE_LABELS[s]}</option>)}
+            {INITIAL_STAGES.map(s => <option key={s} value={s}>{stageLookup.label(s)}</option>)}
           </select>
         </div>
       )}
@@ -491,7 +502,21 @@ function BugForm({ bug, products, backlogItems, features, users, bugTypes, onSav
   );
 }
 
-function BugProgressForm({ bug, onSave, onClose }) {
+// "Bug ini sudah dibuat di Backlog" — shown in the bug form and in the dialog behind the table's converted marker.
+function ConvertedNotice({ bug }) {
+  return (
+    <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs text-emerald-800">
+      <ListChecks className="w-4 h-4 shrink-0 mt-px" />
+      <p>
+        Bug ini sudah dibuat di Backlog sebagai{' '}
+        <Link to={`/backlog?item=${bug.converted_backlog_id}`} className="font-mono font-semibold underline">{bug.converted_backlog_code}</Link>
+        {bug.converted_backlog_title ? <> — {bug.converted_backlog_title}</> : null}.
+      </p>
+    </div>
+  );
+}
+
+function BugProgressForm({ bug, stageLookup, onSave, onClose }) {
   const [form, setForm] = useState({ bug_id: bug.id, stage: bug.stage || 'open', note: '' });
   const [saving, setSaving] = useState(false);
   const [history, setHistory] = useState([]);
@@ -523,11 +548,11 @@ function BugProgressForm({ bug, onSave, onClose }) {
       <div>
         <label className="label">Stage *</label>
         <div className="grid grid-cols-3 gap-2">
-          {STAGES.map(s => (
+          {stageLookup.codes.map(s => (
             <button type="button" key={s} onClick={() => setForm(f => ({ ...f, stage: s }))}
-              className={`py-2 rounded-lg text-xs font-medium border transition-all
+              className={`py-2 px-1 rounded-lg text-xs font-medium border transition-all
                 ${form.stage === s ? 'ring-1 ring-slate-800 border-slate-800 text-slate-800' : 'border-slate-200 hover:bg-slate-50'}`}>
-              {STAGE_LABELS[s] || s}
+              {stageLookup.label(s)}
             </button>
           ))}
         </div>
@@ -544,7 +569,7 @@ function BugProgressForm({ bug, onSave, onClose }) {
             {history.map(h => (
               <div key={h.id} className="text-xs">
                 <div className="flex items-center gap-1.5 mb-0.5">
-                  <StatusBadge status={h.stage} size="xs" />
+                  <StatusBadge status={h.stage} meta={stageLookup.metaOf(h.stage)} size="xs" />
                   <span className="text-slate-400">
                     {h.created_at ? formatDistanceToNow(parseISO(h.created_at), { addSuffix: true, locale: localeId }) : ''}
                   </span>
@@ -635,6 +660,9 @@ export default function BugsIncident() {
   const [features,     setFeatures]    = useState([]);
   const [users,        setUsers]       = useState([]);
   const [bugTypes,     setBugTypes]    = useState([]);
+  const [bugStages,    setBugStages]   = useState([]);
+  const [converting,   setConverting]  = useState(null);   // id of the bug being turned into a Backlog card
+  const [bugFormDirty, setBugFormDirty] = useState(false);  // unsaved edits in the open Edit Bug form
   const [dashboard,    setDashboard]   = useState(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const productParam = searchParams.get('product') || '';
@@ -655,6 +683,7 @@ export default function BugsIncident() {
   const [sortDir,      setSortDir]     = useState('desc');
   const [trendPeriod,  setTrendPeriod] = useState('month');
   const ct = useChartTheme();
+  const stageLookup = useMemo(() => makeStageLookup(bugStages), [bugStages]);
   const [modal,        setModal]       = useState({ open: false, type: '', data: null });
   const [loading,      setLoading]     = useState(true);
   const [importing,    setImporting]   = useState(false);
@@ -668,7 +697,7 @@ export default function BugsIncident() {
     setLoading(true);
     try {
       const params = filters.product_id ? { product_id: filters.product_id } : {};
-      const [pr, bg, pg, bl, ft, us, db, bt] = await Promise.all([
+      const [pr, bg, pg, bl, ft, us, db, bt, bsg] = await Promise.all([
         products.length ? null : client.get('/products'),
         client.get('/bugs',          { params }),
         client.get('/bugs/progress', { params }),
@@ -677,8 +706,10 @@ export default function BugsIncident() {
         users.length ? null : client.get('/users'),
         client.get('/bugs/dashboard', { params }),
         client.get('/bug-types'),   // refetched on every load so an edit in Bug Types shows up right away
+        client.get('/bug-stages'),  // same for Bug Stages
       ]);
       setBugTypes(bt.data);
+      setBugStages(bsg.data);
       if (pr) setProducts(pr.data);
       setBugs(bg.data);
       setProgress(pg.data);
@@ -756,9 +787,31 @@ export default function BugsIncident() {
     if (stage === bug.stage) return;
     try {
       await client.post('/bugs/progress', { bug_id: bug.id, stage, note: '' });
-      toast.success(`Stage diubah ke ${STAGE_LABELS[stage] || stage}`);
+      toast.success(`Stage diubah ke ${stageLookup.label(stage)}`);
       load();
     } catch { /* error toast shown by the axios interceptor; the select snaps back to bug.stage */ }
+  };
+
+  // "Buat Backlog" (Improvement tickets only): the server builds the Backlog card and remembers it on the bug,
+  // so a ticket can be converted once; the bug itself (stage included) stays as it is.
+  const canConvert = canAccess && can('backlog', 'create');
+  // `fromModal`: pressed in the Edit Bug header — the form shows the saved bug, so unsaved edits must be saved first,
+  // and the modal closes afterwards (the table then shows the green "already in Backlog" marker).
+  const convertToBacklog = async (bug, { fromModal = false } = {}) => {
+    if (converting) return;
+    if (fromModal && bugFormDirty) { toast.error('Simpan perubahan bug terlebih dahulu, baru buat kartu Backlog.'); return; }
+    if (!confirm(`Buat kartu Backlog dari bug ${bug.code}?
+
+Judul, prioritas, assignee, deadline, dan lampiran disalin ke kartu Backlog (status Backlog); pelapor dan deskripsi masuk ke Catatan. Bug ini tetap ada.`)) return;
+    setConverting(bug.id);
+    try {
+      const { data } = await client.post(`/bugs/${bug.id}/convert-to-backlog`);
+      const n = data.attachments_copied;
+      toast.success(`Kartu Backlog ${data.backlog_item.code} dibuat dari ${bug.code}${n ? ` (${n} lampiran disalin)` : ''}`);
+      if (fromModal) setModal(m => ({ ...m, open: false }));
+      load();
+    } catch { /* error toast shown by the axios interceptor (403 without backlog.create, 409 already converted) */ }
+    finally { setConverting(null); }
   };
 
   const csvEscape = (val) => {
@@ -812,12 +865,10 @@ export default function BugsIncident() {
     }
   };
 
-  // Same hues as the stage pills (StatusBadge)
-  const STAGE_COLORS = { open: '#E5484D', in_progress: '#3E63DD', ready_to_test: '#D9891A', reopen: '#9B51E0', done: '#1F9D55', improvement: '#0B8FCB' };
   const summary = dashboard?.summary || {};
 
   const filteredBugs = bugs.filter(b => {
-    if (hideClosed && b.stage === 'done') return false;
+    if (hideClosed && stageLookup.isClosed(b.stage)) return false;
     if (bugFilters.search) {
       const q = bugFilters.search.toLowerCase();
       if (!(b.code?.toLowerCase().includes(q) || b.title?.toLowerCase().includes(q))) return false;
@@ -836,7 +887,7 @@ export default function BugsIncident() {
         const aMissing = a[sortKey] === null || a[sortKey] === undefined || a[sortKey] === '';
         const bMissing = b[sortKey] === null || b[sortKey] === undefined || b[sortKey] === '';
         if (aMissing || bMissing) return aMissing === bMissing ? 0 : (aMissing ? 1 : -1); // rows with no value always sort last
-        const result = compareBugsBy(a, b, sortKey);
+        const result = compareBugsBy(a, b, sortKey, stageLookup.rank);
         return sortDir === 'asc' ? result : -result;
       })
     : filteredBugs;
@@ -854,7 +905,7 @@ export default function BugsIncident() {
   const handlePerPageProgress = (v) => { setPerPageProgress(v); setPageProgress(1); };
 
   const stagePieData = (dashboard?.byStage || [])
-    .map(s => ({ name: s.stage, value: +s.count || 0, color: STAGE_COLORS[s.stage] || '#94a3b8' }))
+    .map(s => ({ name: stageLookup.label(s.stage), value: +s.count || 0, color: stageLookup.color(s.stage) }))
     .filter(d => d.value > 0);
 
   const trendData = buildTrendData(bugs, trendPeriod);
@@ -904,7 +955,7 @@ export default function BugsIncident() {
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                 {/* Bugs per product feature (replaced the "Bugs per Produk" chart) — same card as the QA dashboard */}
-                <BugsPerFeatureCard rows={dashboard?.byFeature || []} className="min-w-0 lg:col-span-2" />
+                <BugsPerFeatureCard rows={dashboard?.byFeature || []} stages={dashboard?.bugStages || []} className="min-w-0 lg:col-span-2" />
 
                 {/* Stage Distribution */}
                 <div className="card p-5">
@@ -962,7 +1013,7 @@ export default function BugsIncident() {
                         <BugIcon className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-slate-700">{a.bug_title}</p>
-                          <p className="text-xs text-slate-400 mt-0.5">[{a.bug_code}] · {a.product} · oleh {a.updated_by_name || '—'} → <StatusBadge status={a.stage} size="xs" /></p>
+                          <p className="text-xs text-slate-400 mt-0.5">[{a.bug_code}] · {a.product} · oleh {a.updated_by_name || '—'} → <StatusBadge status={a.stage} meta={stageLookup.metaOf(a.stage)} size="xs" /></p>
                           {a.note && <p className="text-xs text-slate-600 mt-1 italic">{a.note}</p>}
                         </div>
                         <span className="text-xs text-slate-400 shrink-0">{a.created_at ? format(parseISO(a.created_at), 'dd MMM HH:mm') : '—'}</span>
@@ -1014,7 +1065,7 @@ export default function BugsIncident() {
                 </div>
                 {[
                   { key: 'type',     label: 'Type',      opts: bugTypes.map(t => ({ v: t.code, l: t.name })) },
-                  { key: 'stage',    label: 'Stage',    opts: STAGES.map(s => ({ v: s, l: STAGE_LABELS[s] || s })) },
+                  { key: 'stage',    label: 'Stage',    opts: stageLookup.codes.map(s => ({ v: s, l: stageLookup.label(s) })) },
                   { key: 'severity', label: 'Severity',  opts: SEVERITIES.map(s => ({ v: s, l: s })) },
                   { key: 'priority', label: 'Prioritas', opts: PRIORITIES.map(p => ({ v: p, l: p })) },
                 ].map(({ key, label, opts }) => (
@@ -1049,9 +1100,14 @@ export default function BugsIncident() {
                     <Download className="w-4 h-4" /> Export CSV
                   </button>
                   {can('settings', 'update') && (
-                    <Link to="/settings/bug-types" className="btn-secondary">
-                      <Settings2 className="w-4 h-4" /> Atur Type
-                    </Link>
+                    <>
+                      <Link to="/settings/bug-stages" className="btn-secondary">
+                        <Settings2 className="w-4 h-4" /> Atur Stage
+                      </Link>
+                      <Link to="/settings/bug-types" className="btn-secondary">
+                        <Settings2 className="w-4 h-4" /> Atur Type
+                      </Link>
+                    </>
                   )}
                   {canAccess && (
                     <button className="btn-primary" onClick={() => setModal({ open: true, type: 'bug', data: null })}>
@@ -1127,10 +1183,10 @@ export default function BugsIncident() {
                           <td className="px-3 py-3 text-center"><PriorityBadge priority={b.severity} /></td>
                           <td className="px-3 py-3 text-center"><PriorityBadge priority={b.priority} /></td>
                           <td className="px-3 py-3 text-center">
-                            <StatusMenu status={b.stage} statuses={STAGES} canChange={canAccess} onChange={s => quickStage(b, s)} />
+                            <StatusMenu status={b.stage} statuses={stageLookup.codes} metaOf={stageLookup.metaOf} canChange={canAccess} onChange={s => quickStage(b, s)} />
                           </td>
                           {/* Red once the deadline day is over, unless the bug is Done */}
-                          <td className="px-3 py-3 text-xs whitespace-nowrap"><DeadlineDate date={b.deadline} done={NOT_LATE_STAGES.includes(b.stage)} /></td>
+                          <td className="px-3 py-3 text-xs whitespace-nowrap"><DeadlineDate date={b.deadline} done={stageLookup.notLate(b.stage)} /></td>
                           <td className="px-3 py-3">
                             {b.assignees?.length > 0
                               ? <AssigneeStack assignees={b.assignees} />
@@ -1154,6 +1210,22 @@ export default function BugsIncident() {
                           </td>
                           <td className="px-3 py-3">
                             <div className="flex items-center gap-1 justify-center" onClick={e => e.stopPropagation()}>
+                              {b.converted_backlog_id && canAccess && (
+                                <button className="btn-ghost btn-sm p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50"
+                                  title={`Sudah dibuat di Backlog: ${b.converted_backlog_code}`}
+                                  onClick={() => setModal({ open: true, type: 'converted', data: b })}>
+                                  <ListChecks className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {b.type === CONVERTIBLE_TYPE && !b.converted_backlog_id && canConvert && (
+                                <button className="btn-ghost btn-sm p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 disabled:opacity-40"
+                                  title="Buat kartu Backlog dari bug ini" disabled={converting === b.id}
+                                  onClick={() => convertToBacklog(b)}>
+                                  {converting === b.id
+                                    ? <span className="w-3.5 h-3.5 block border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                                    : <ListPlus className="w-3.5 h-3.5" />}
+                                </button>
+                              )}
                               {canAccess && (
                                 <button className="btn-ghost btn-sm p-1.5 rounded-lg" title="Update Progress"
                                   onClick={() => setModal({ open: true, type: 'progress', data: b })}>
@@ -1221,7 +1293,8 @@ export default function BugsIncident() {
                   <tbody>
                     {pagedProgress.length === 0 && <tr><td colSpan={6} className="text-center py-10 text-slate-400">Belum ada update progress</td></tr>}
                     {pagedProgress.map(p => {
-                      const si = STAGE_ICONS[p.stage] || STAGE_ICONS.open;
+                      // a stage someone added has no icon of its own: closed ones get the Done check, the rest the in-progress wrench
+                      const si = STAGE_ICONS[p.stage] || (stageLookup.isClosed(p.stage) ? STAGE_ICONS.done : STAGE_ICONS.in_progress);
                       const Icon = si.icon;
                       return (
                         <tr key={p.id} className="table-row">
@@ -1242,7 +1315,7 @@ export default function BugsIncident() {
                           <td className="px-3 py-3 text-center">
                             <div className="flex items-center gap-1.5 justify-center">
                               <Icon className={`w-4 h-4 ${si.cls}`} />
-                              <StatusBadge status={p.stage} />
+                              <StatusBadge status={p.stage} meta={stageLookup.metaOf(p.stage)} />
                             </div>
                           </td>
                           <td className="px-3 py-3 text-xs text-slate-600">{p.updated_by_name || '—'}</td>
@@ -1275,17 +1348,50 @@ export default function BugsIncident() {
       {/* Modals */}
       <Modal open={modal.open && modal.type === 'bug'} onClose={() => setModal({ ...modal, open: false })}
         title={modal.data ? 'Edit Bug' : 'Buat Bug'} size="lg"
-        shareLink={modal.data ? `/bugs?bug=${modal.data.id}` : undefined}>
-        <BugForm bug={modal.data} products={products} backlogItems={backlogItems} features={features} users={users} bugTypes={bugTypes}
+        shareLink={modal.data ? `/bugs?bug=${modal.data.id}` : undefined}
+        headerActions={modal.type === 'bug' && modal.data?.id && modal.data.type === CONVERTIBLE_TYPE && (
+          modal.data.converted_backlog_id
+            ? (
+              <Link to={`/backlog?item=${modal.data.converted_backlog_id}`} title={`Sudah dibuat di Backlog: ${modal.data.converted_backlog_code}`}
+                className="btn-secondary btn-sm shrink-0 text-emerald-700">
+                <ListChecks className="w-3.5 h-3.5" /> <span>Di Backlog: {modal.data.converted_backlog_code}</span>
+              </Link>
+            )
+            : canConvert && (
+              <button type="button" className="btn-secondary btn-sm shrink-0" disabled={converting === modal.data.id}
+                title="Buat kartu Backlog dari bug ini" onClick={() => convertToBacklog(modal.data, { fromModal: true })}>
+                {converting === modal.data.id
+                  ? <span className="w-3.5 h-3.5 block border-2 border-slate-500 border-t-transparent rounded-full animate-spin" />
+                  : <ListPlus className="w-3.5 h-3.5" />}
+                <span>Buat Backlog</span>
+              </button>
+            )
+        )}>
+        <BugForm bug={modal.data} products={products} backlogItems={backlogItems} features={features} users={users} bugTypes={bugTypes} stageLookup={stageLookup} onDirtyChange={setBugFormDirty}
           onSave={() => { setModal({ ...modal, open: false }); load(); }}
           onClose={() => setModal({ ...modal, open: false })} />
       </Modal>
 
       <Modal open={modal.open && modal.type === 'progress'} onClose={() => setModal({ ...modal, open: false })}
         title="Update Progress" size="sm">
-        {modal.data && <BugProgressForm bug={modal.data}
+        {modal.data && <BugProgressForm bug={modal.data} stageLookup={stageLookup}
           onSave={() => { setModal({ ...modal, open: false }); load(); }}
           onClose={() => setModal({ ...modal, open: false })} />}
+      </Modal>
+
+      {/* Opened by the "already in Backlog" marker in the Aksi column */}
+      <Modal open={modal.open && modal.type === 'converted'} onClose={() => setModal({ ...modal, open: false })}
+        title="Sudah dibuat di Backlog" size="sm">
+        {modal.data && (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-500">Bug: <strong className="text-slate-700">{modal.data.code} · {modal.data.title}</strong></p>
+            <ConvertedNotice bug={modal.data} />
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button className="btn-secondary" onClick={() => setModal({ ...modal, open: false })}>Tutup</button>
+              <Link to={`/backlog?item=${modal.data.converted_backlog_id}`} className="btn-primary">Buka di Backlog</Link>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <Modal open={modal.open && modal.type === 'import-result'} onClose={() => setModal({ ...modal, open: false })}

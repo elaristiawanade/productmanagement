@@ -41,7 +41,6 @@ public class ImportController {
     private AssigneeSupport assigneeSupport;
 
     private static final Set<String> SEVERITY_VALUES = Set.of("critical", "high", "medium", "low");
-    private static final Set<String> STAGE_VALUES    = Set.of("open", "in_progress", "ready_to_test", "reopen", "done", "improvement");
     private static final Set<String> TC_STATUS_VALUES = Set.of("draft", "active", "deprecated");
 
     @PostMapping("/jira")
@@ -245,7 +244,7 @@ public class ImportController {
                     String steps        = col(rec, "Langkah Reproduksi", "Steps to Reproduce");
                     String severity     = normalizeEnum(col(rec, "Severity"), SEVERITY_VALUES, "medium");
                     String priority     = normalizeEnum(col(rec, "Prioritas", "Priority"), SEVERITY_VALUES, "medium");
-                    String stage        = normalizeEnum(col(rec, "Stage"), STAGE_VALUES, "open");
+                    String stage        = normalizeBugStage(col(rec, "Stage"));
                     String type         = normalizeBugType(col(rec, "Type", "Tipe"));
 
                     Long backlogItemId = null;
@@ -435,6 +434,18 @@ public class ImportController {
         if (value == null || value.isBlank()) return fallback;
         String v = value.trim().toLowerCase().replace(" ", "_");
         return allowed.contains(v) ? v : fallback;
+    }
+
+    // Optional "Stage" column: the code the Export CSV writes ("in_progress", ...) or a Stage's display name
+    // ("In Progress"), matched case-insensitively against the configurable bug_stages table.
+    // Empty or anything unrecognised imports as "open".
+    private String normalizeBugStage(String value) {
+        if (value == null || value.isBlank()) return "open";
+        String v = value.trim();
+        String slug = v.toLowerCase().replace(" ", "_");
+        List<Map<String, Object>> rows = jdbc.queryForList(
+            "SELECT code FROM bug_stages WHERE LOWER(code) = LOWER(?) OR LOWER(name) = LOWER(?) OR code = ? LIMIT 1", v, v, slug);
+        return rows.isEmpty() ? "open" : (String) rows.get(0).get("code");
     }
 
     // Optional "Type" column: the code the Export CSV writes ("bug", "inquiry", ...) or a Type's display name,

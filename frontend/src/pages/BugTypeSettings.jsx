@@ -121,6 +121,7 @@ export default function BugTypeSettings() {
         <h1 className="text-xl font-bold text-slate-800">Type Bug</h1>
         <p className="text-sm text-slate-500 mt-0.5">
           Atur daftar Type tiket di Bugs Incident (mis. Bug, Inquiry / Clarification, Change Request) — hanya Super Admin.
+          Tiket bertype <b>Improvement</b> mendapat tombol untuk dibuat menjadi kartu Backlog.
         </p>
       </div>
 
@@ -152,6 +153,7 @@ export default function BugTypeSettings() {
             )}
             {types.map(t => {
               const isDefault = t.code === 'bug';
+              const isImprovement = t.code === 'improvement';
               return (
                 <tr key={t.id} className="table-row">
                   <td className="px-4 py-3 text-center text-slate-500">{t.sort_order}</td>
@@ -159,6 +161,7 @@ export default function BugTypeSettings() {
                     <div className="flex items-center gap-2">
                       <TypePill name={t.name} color={t.color} />
                       {isDefault && <span className="text-[10px] uppercase tracking-wide text-slate-400">default</span>}
+                      {isImprovement && <span className="text-[10px] uppercase tracking-wide text-slate-400">bisa dibuat Backlog</span>}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-xs font-mono text-slate-400">{t.code}</td>
@@ -171,6 +174,7 @@ export default function BugTypeSettings() {
                       </button>
                       <button className="btn-ghost btn-sm p-1.5 rounded-lg text-red-500 hover:bg-red-50"
                         title={isDefault ? 'Type default tidak bisa dihapus'
+                          : isImprovement ? 'Type Improvement tidak bisa dihapus (dipakai tombol Buat Backlog)'
                           : Number(t.bug_count) > 0 ? 'Masih dipakai tiket — pindahkan tiket dulu' : 'Hapus'}
                         onClick={() => remove(t)}>
                         <Trash2 className="w-3.5 h-3.5" />

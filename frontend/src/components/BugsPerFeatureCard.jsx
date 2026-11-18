@@ -3,18 +3,20 @@
 // feature that has bugs, most bugs first, plus a last row with feature_id = null for bugs without a feature.
 // Numbers only (no chart), one column per bug stage.
 
-// Same stages, order, labels and hues as the Bugs Incident module (BugsIncident.jsx STAGES /
-// STAGE_LABELS / STAGE_COLORS) — keep them in sync.
-// `lines` is how the header label breaks: at most 2 lines, split on purpose (not by the browser),
-// so every header ends on the same baseline.
-const STAGE_COLUMNS = [
-  { key: 'open',          lines: ['Open'],             color: '#E5484D' },
-  { key: 'in_progress',   lines: ['In', 'Progress'],   color: '#3E63DD' },
-  { key: 'ready_to_test', lines: ['Ready', 'to Test'], color: '#D9891A' },
-  { key: 'reopen',        lines: ['Re-Open'],          color: '#9B51E0' },
-  { key: 'done',          lines: ['Done'],             color: '#1F9D55' },
-  { key: 'improvement',   lines: ['Improvement'],      color: '#0B8FCB' },
-];
+// Columns are the configurable bug stages (Super Admin, /settings/bug-stages), passed in as `stages` — the same list,
+// order, labels and hues as the Bugs Incident module. Each row carries `counts` (stage code -> number of bugs).
+// `lines` is how a header label breaks: at most 2 lines, split on purpose (not by the browser),
+// so every header ends on the same baseline ("Ready to Test" -> "Ready" / "to Test").
+function splitLabel(name) {
+  const words = String(name).trim().split(/\s+/);
+  if (words.length < 2) return [words[0] || ""];
+  let best = 1, bestMax = Infinity;
+  for (let i = 1; i < words.length; i++) {
+    const m = Math.max(words.slice(0, i).join(" ").length, words.slice(i).join(" ").length);
+    if (m < bestMax) { bestMax = m; best = i; }
+  }
+  return [words.slice(0, best).join(" "), words.slice(best).join(" ")];
+}
 
 function Count({ value, color }) {
   const n = +value || 0;
@@ -24,10 +26,11 @@ function Count({ value, color }) {
     : <span className="font-semibold text-slate-700 tabular-nums">{n}</span>;
 }
 
-export default function BugsPerFeatureCard({ rows = [], className = '' }) {
+export default function BugsPerFeatureCard({ rows = [], stages = [], className = '' }) {
+  const STAGE_COLUMNS = stages.map(s => ({ key: s.code, name: s.name, lines: splitLabel(s.name), color: s.color }));
   // Product code only helps when the list mixes products ("Semua Produk")
   const multiProduct = new Set(rows.filter(r => r.feature_id != null).map(r => r.product_code)).size > 1;
-  const totals = STAGE_COLUMNS.reduce((acc, s) => ({ ...acc, [s.key]: rows.reduce((sum, r) => sum + (+r[s.key] || 0), 0) }), {});
+  const totals = STAGE_COLUMNS.reduce((acc, s) => ({ ...acc, [s.key]: rows.reduce((sum, r) => sum + (+r.counts?.[s.key] || 0), 0) }), {});
   const grandTotal = rows.reduce((sum, r) => sum + (+r.total || 0), 0);
 
   return (
@@ -52,8 +55,8 @@ export default function BugsPerFeatureCard({ rows = [], className = '' }) {
                   <i className="block mt-1.5 h-0.5" />
                 </th>
                 {STAGE_COLUMNS.map(s => (
-                  <th key={s.key} className="text-center font-medium px-1 pt-3 pb-2 w-[52px] whitespace-nowrap">
-                    {s.lines.map(l => <span key={l} className="block">{l}</span>)}
+                  <th key={s.key} title={s.name} className="text-center font-medium px-1 pt-3 pb-2 w-[52px] whitespace-nowrap">
+                    {s.lines.map((l, i) => <span key={i} className="block">{l}</span>)}
                     <i className="block mt-1.5 h-0.5 rounded-full mx-auto w-full max-w-[40px]" style={{ background: s.color }} />
                   </th>
                 ))}
@@ -84,7 +87,7 @@ export default function BugsPerFeatureCard({ rows = [], className = '' }) {
                         )}
                     </td>
                     {STAGE_COLUMNS.map(s => (
-                      <td key={s.key} className="text-center px-1 py-2"><Count value={r[s.key]} color={s.color} /></td>
+                      <td key={s.key} className="text-center px-1 py-2"><Count value={r.counts?.[s.key]} color={s.color} /></td>
                     ))}
                     <td className="text-center px-3 py-2"><Count value={r.total} /></td>
                   </tr>
