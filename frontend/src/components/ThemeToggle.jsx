@@ -7,6 +7,9 @@ const readTheme = () => {
   try { return localStorage.getItem('pt_theme') === 'dark' ? 'dark' : 'light'; } catch { return 'light'; }
 };
 
+// The top bar is black in both themes, so a dark track disappeared into it. The track is a bright
+// colour instead (amber in light mode, blue in dark mode) and both icons stay visible, so it
+// reads as a two-way switch at a glance. Hard-coded hex on purpose: the bar never changes with the theme.
 export default function ThemeToggle() {
   const [theme, setTheme] = useState(readTheme);
   const dark = theme === 'dark';
@@ -24,13 +27,21 @@ export default function ThemeToggle() {
       role="switch"
       aria-checked={dark}
       aria-label="Mode gelap"
-      title={dark ? 'Mode gelap' : 'Mode terang'}
+      title={dark ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'}
       onClick={toggle}
-      className="relative w-[46px] h-6 rounded-full bg-frame-2 border border-frame-3 hover:border-[#3d3d44] shrink-0 mr-1.5 transition-colors">
-      <span className={`absolute top-0.5 left-0.5 w-[18px] h-[18px] rounded-full grid place-items-center transition-all duration-200
-        ${dark ? 'translate-x-[22px] bg-frame-ink text-[#18181B]' : 'bg-[#fff] text-[#D9891A]'}`}>
-        {dark ? <Moon className="w-3 h-3" /> : <Sun className="w-3 h-3" />}
+      className={`relative w-[60px] h-[30px] rounded-full shrink-0 mr-1.5 transition-colors duration-200
+        focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#fff]
+        ${dark ? 'bg-[#3B82F6] hover:bg-[#60A5FA]' : 'bg-[#F5B83D] hover:bg-[#F8C85F]'}`}>
+      <span className={`absolute left-0 inset-y-0 w-7 grid place-items-center z-10 transition-colors duration-200
+        ${dark ? 'text-[#0A2247]' : 'text-[#FBBF24]'}`}>
+        <Sun className="w-3.5 h-3.5" />
       </span>
+      <span className={`absolute right-0 inset-y-0 w-7 grid place-items-center z-10 transition-colors duration-200
+        ${dark ? 'text-[#fff]' : 'text-[#5B3E08]'}`}>
+        <Moon className="w-3.5 h-3.5" />
+      </span>
+      <span className={`absolute top-[3px] left-[3px] w-6 h-6 rounded-full bg-[#18181B] transition-transform duration-200
+        ${dark ? 'translate-x-[30px]' : ''}`} />
     </button>
   );
 }
