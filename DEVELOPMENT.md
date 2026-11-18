@@ -163,6 +163,7 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v29.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v30.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v31.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v32.sql"
 ```
 
 > **Penting:** `migration_v10.sql` menambahkan kolom `users.department`, yang di-query
@@ -277,6 +278,15 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 > ```
 > Idempotent; Type `bug` dan `inquiry` di-seed lebih dulu sehingga semua tiket lama tetap valid dan tidak berubah.
 
+> **Penting juga:** `migration_v32.sql` membuat tabel `bug_stages` (daftar **Stage** tiket Bugs Incident; Super Admin bisa menambah Stage di **Admin → Bug Stages**, 6 Stage lama di-seed sebagai
+> Stage bawaan), menambah FOREIGN KEY `bugs.stage` → `bug_stages(code)`, menjamin Type `improvement` ada, dan menambah kolom `bugs.converted_backlog_id` (hasil tombol **Buat Backlog**).
+> **Jalankan SEBELUM backend baru naik** — list bug, dashboard, ubah stage, dan halaman Bug Stages membaca tabel/kolom ini, jadi tanpa migrasi Bugs Incident gagal `500`. Pada database yang sudah ada
+> jalankan manual (**backup dulu**):
+> ```bash
+> docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v32.sql
+> ```
+> Idempotent; perilaku semua stage lama tetap identik (flag selesai / tidak terlambat / dihitung open di-seed sesuai aturan lama), dan tiket lama tidak berubah.
+
 ---
 
 ## 8. Notifikasi Email (Testing Lokal)
@@ -346,7 +356,8 @@ product-tracker/
 │       ├── migration_v28.sql
 │       ├── migration_v29.sql
 │       ├── migration_v30.sql
-│       └── migration_v31.sql
+│       ├── migration_v31.sql
+│       └── migration_v32.sql
 ├── backend-java/          # Spring Boot API (port 4000)
 │   ├── src/
 │   ├── pom.xml
