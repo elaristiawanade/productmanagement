@@ -2,6 +2,7 @@ package com.producttracker.controller;
 
 import com.producttracker.config.BugHelper;
 import com.producttracker.service.AssigneeSupport;
+import com.producttracker.service.AttachmentCopier;
 import com.producttracker.service.BugStats;
 import com.producttracker.service.EmailService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +37,15 @@ public class BugController {
 
     @Autowired
     private AssigneeSupport assigneeSupport;
+
+    // Reused as-is by "Buat Backlog" so the card gets the same code numbering, assignee sync, activity log,
+    // notifications and permission check (backlog.create) as one made from the Backlog page.
+    @Autowired
+    private BacklogController backlogController;
+
+    // "Buat Backlog" also copies the bug's attachments (each gets its own file on disk)
+    @Autowired
+    private AttachmentCopier attachmentCopier;
 
     private static final Pattern MENTION_PATTERN = Pattern.compile("@\\[([^\\]]+)\\]");
 
@@ -77,6 +87,8 @@ public class BugController {
             "  f.code AS feature_code, f.name AS feature_name, " +
             "  ru.name AS reported_by_name, au.name AS assigned_to_name, " +
             "  bt.name AS type_name, bt.color AS type_color, " +
+            "  bs.name AS stage_name, bs.color AS stage_color, bs.is_closed AS stage_is_closed, bs.not_late AS stage_not_late, " +
+            "  cbi.code AS converted_backlog_code, cbi.title AS converted_backlog_title, " +
             "  COUNT(bp.id)          AS update_count, " +
             "  MAX(bp.created_at)    AS last_update, " +
             "  (SELECT u3.name FROM bug_progress_updates bp3 " +
@@ -90,9 +102,12 @@ public class BugController {
             "LEFT JOIN users         ru ON ru.id = b.reported_by " +
             "LEFT JOIN users         au ON au.id = b.assigned_to " +
             "LEFT JOIN bug_types     bt ON bt.code = b.type " +
+            "LEFT JOIN bug_stages    bs ON bs.code = b.stage " +
+            "LEFT JOIN backlog_items cbi ON cbi.id = b.converted_backlog_id " +
             "LEFT JOIN bug_progress_updates bp ON bp.bug_id = b.id " +
             where +
-            "GROUP BY b.id, bi.code, bi.title, p.name, p.code, f.code, f.name, ru.name, au.name, bt.name, bt.color " +
+            "GROUP BY b.id, bi.code, bi.title, p.name, p.code, f.code, f.name, ru.name, au.name, bt.name, bt.color, " +
+            "  bs.name, bs.color, bs.is_closed, bs.not_late, cbi.code, cbi.title " +
             "ORDER BY b.product_id, b.code",
             params.toArray());
         assigneeSupport.enrich(rows);
@@ -283,11 +298,20 @@ public class BugController {
             return ResponseEntity.badRequest().body(Map.of("error", "bug_id dan stage wajib"));
         }
         Long bugId = toLong(body.get("bug_id"));
-        String stage = (String) body.get("stage");
+        String stage = body.get("stage").toString().trim();
+        // Stages are configurable (bug_stages table, managed by Super Admin); bugs.stage stores the stage's code
+        List<Map<String, Object>> stageRows = jdbc.queryForList(
+            "SELECT name, is_closed FROM bug_stages WHERE code = ?", stage);
+        if (stageRows.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Stage tidak dikenal. Pilih salah satu Stage yang tersedia."));
+        }
+        boolean stageClosed = Boolean.TRUE.equals(stageRows.get(0).get("is_closed"));
         String note = body.get("note") != null ? body.get("note").toString().trim() : "";
         Map<String, Object> user = toMap(principal);
         Map<String, Object> beforeBug = bugDetail(bugId);
-        String oldStage = beforeBug != null ? str(beforeBug.get("stage")) : null;
+        // Messages show the stage's display name; fall back to the raw code for a stage that no longer exists
+        String oldStage = beforeBug != null ? stageName(str(beforeBug.get("stage"))) : null;
+        String newStageName = str(stageRows.get(0).get("name"));
         Long actorId = user != null ? toLong(user.get("id")) : null;
         String actorName = user != null ? str(user.get("name")) : "System";
         try {
@@ -295,9 +319,10 @@ public class BugController {
                 "INSERT INTO bug_progress_updates (bug_id, stage, note, updated_by) VALUES (?,?,?,?) RETURNING *",
                 bugId, stage, body.get("note"), actorId
             );
+            // A "closed" stage (Done, or a custom stage flagged is_closed) stamps closed_at; any other stage clears it
             jdbc.update(
-                "UPDATE bugs SET stage=?, closed_at = CASE WHEN ?='done' THEN NOW() ELSE NULL END WHERE id=?",
-                stage, stage, bugId
+                "UPDATE bugs SET stage=?, closed_at = CASE WHEN ?::boolean THEN NOW() ELSE NULL END WHERE id=?",
+                stage, stageClosed, bugId
             );
 
             // Surface the stage change (and, if written, the closing note) in the bug's own
@@ -306,7 +331,7 @@ public class BugController {
             jdbc.update(
                 "INSERT INTO bug_activities (bug_id, user_id, type, content) VALUES (?,?,'change_log',?)",
                 bugId, actorId,
-                "Stage diubah dari \"" + oldStage + "\" menjadi \"" + stage + "\" — oleh " + actorName
+                "Stage diubah dari \"" + oldStage + "\" menjadi \"" + newStageName + "\" — oleh " + actorName
             );
             if (!note.isEmpty()) {
                 jdbc.update(
@@ -326,12 +351,12 @@ public class BugController {
                         createNotification(uid, "status_change",
                             "Status bug " + beforeBug.get("code") + " berubah",
                             "Bug \"" + beforeBug.get("title") + "\" berubah stage dari \"" + oldStage +
-                                "\" menjadi \"" + stage + "\" — oleh " + actorName,
+                                "\" menjadi \"" + newStageName + "\" — oleh " + actorName,
                             "/bugs?bug=" + bugId);
                         String em = a.get("email") != null ? a.get("email").toString() : "";
                         if (!em.isBlank()) {
                             email.notifyStatusChange(em, "Bug Incident",
-                                str(beforeBug.get("code")), str(beforeBug.get("title")), oldStage, stage, actorName,
+                                str(beforeBug.get("code")), str(beforeBug.get("title")), oldStage, newStageName, actorName,
                                 "/bugs?bug=" + bugId);
                         }
                     }
@@ -344,6 +369,104 @@ public class BugController {
         }
     }
 
+    // ── CONVERT TO BACKLOG ───────────────────────────────────────────────────
+
+    /**
+     * "Buat Backlog": turns an Improvement ticket into a Backlog card (story, status backlog, no sprint) that copies
+     * the title, priority, every assignee and the deadline; description, steps and the bug's Feature go into the
+     * card's notes. The bug itself stays untouched (stage included) and remembers the card in
+     * bugs.converted_backlog_id, so it can be converted only once. The card is made by BacklogController.create
+     * itself, which also enforces `backlog.create` (403 otherwise) and sends the usual assignee notifications.
+     */
+    @PostMapping("/{id}/convert-to-backlog")
+    public ResponseEntity<?> convertToBacklog(@AuthenticationPrincipal Object principal, @PathVariable Long id) {
+        if (!bugHelper.canAccess(principal)) return forbidden();
+        Map<String, Object> bug = bugDetail(id);
+        if (bug == null) return ResponseEntity.status(404).body(Map.of("error", "Bug tidak ditemukan"));
+        if (!BugTypeController.IMPROVEMENT_CODE.equals(str(bug.get("type")))) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Hanya tiket bertype Improvement yang bisa dibuat menjadi Backlog"));
+        }
+        if (bug.get("converted_backlog_id") != null) {
+            return ResponseEntity.status(409).body(Map.of("error",
+                "Bug ini sudah dibuat di Backlog: " + str(bug.get("converted_backlog_code"))));
+        }
+
+        // Notes: everything that has no column of its own on a Backlog card
+        StringBuilder notes = new StringBuilder("Dibuat dari bug " + str(bug.get("code")) + " (Improvement) di Bugs Incident.");
+        // The card's own Author is whoever pressed the button, so the original reporter is written down here
+        String reporter = reporterLabel(bug);
+        if (!reporter.isEmpty()) notes.append("\nDilaporkan oleh: ").append(reporter);
+        String description = str(bug.get("description")).trim();
+        String steps = str(bug.get("steps_to_reproduce")).trim();
+        if (!description.isEmpty()) notes.append("\n\nDeskripsi:\n").append(description);
+        if (!steps.isEmpty()) notes.append("\n\nLangkah reproduksi:\n").append(steps);
+        Long featureId = toLong(bug.get("feature_id"));
+        if (featureId != null) {
+            // bugs.feature_id points at `features`, not at the product_roadmap features a Backlog card links to,
+            // so it cannot be copied as a link — it is written out instead
+            List<Map<String, Object>> f = jdbc.queryForList("SELECT code, name FROM features WHERE id = ?", featureId);
+            if (!f.isEmpty()) notes.append("\n\nFeature: [").append(str(f.get(0).get("code"))).append("] ").append(str(f.get(0).get("name")));
+        }
+        Long relatedItemId = toLong(bug.get("backlog_item_id"));
+        if (relatedItemId != null) {
+            List<Map<String, Object>> r = jdbc.queryForList("SELECT code, title FROM backlog_items WHERE id = ?", relatedItemId);
+            if (!r.isEmpty()) notes.append("\nBacklog item terkait: [").append(str(r.get(0).get("code"))).append("] ").append(str(r.get(0).get("title")));
+        }
+
+        // Primary assignee first, the rest as additional assignees (same shape BacklogController.create reads)
+        Long primary = toLong(bug.get("assigned_to"));
+        List<Long> additional = new ArrayList<>();
+        for (Long uid : assigneeSupport.extractIds(bug)) {
+            if (!uid.equals(primary)) additional.add(uid);
+        }
+        if (primary == null && !additional.isEmpty()) primary = additional.remove(0);
+
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("product_id", bug.get("product_id"));
+        body.put("title", bug.get("title"));
+        body.put("type", "story");
+        body.put("status", "backlog");
+        body.put("priority", orDefault(bug.get("priority"), "medium"));
+        body.put("assignee_id", primary);
+        body.put("additional_assignee_ids", additional);
+        body.put("deadline", bug.get("deadline") != null ? bug.get("deadline").toString() : null);
+        body.put("notes", notes.toString());
+
+        ResponseEntity<?> created = backlogController.create(principal, body);
+        if (created.getStatusCode().value() != 201 || !(created.getBody() instanceof Map)) return created;  // 403 / 400 as-is
+        @SuppressWarnings("unchecked")
+        Map<String, Object> item = (Map<String, Object>) created.getBody();
+        Long itemId = toLong(item.get("id"));
+        String itemCode = str(item.get("code"));
+
+        // Claim the bug only if nobody converted it in the meantime (double click / two users); the loser's card is removed
+        int linked = jdbc.update("UPDATE bugs SET converted_backlog_id = ? WHERE id = ? AND converted_backlog_id IS NULL", itemId, id);
+        if (linked == 0) {
+            jdbc.update("DELETE FROM backlog_items WHERE id = ?", itemId);
+            return ResponseEntity.status(409).body(Map.of("error", "Bug ini baru saja dibuat di Backlog oleh pengguna lain"));
+        }
+
+        Map<String, Object> user = toMap(principal);
+        Long actorId = user != null ? toLong(user.get("id")) : null;
+        String actorName = user != null ? str(user.get("name")) : "System";
+        // Attachments (screenshots, mockups, ...): copied only after the bug is claimed, so a lost race copies nothing.
+        // A failure here must not undo the conversion, so it is swallowed and shows up as a lower count.
+        int attachmentsCopied = 0;
+        try { attachmentsCopied = attachmentCopier.copyBugToBacklog(id, itemId); } catch (Exception ignored) { /* best effort */ }
+        String attachmentNote = attachmentsCopied > 0 ? " (" + attachmentsCopied + " lampiran disalin)" : "";
+
+        jdbc.update("INSERT INTO bug_activities (bug_id, user_id, type, content) VALUES (?,?,'change_log',?)",
+            id, actorId, "Dibuat menjadi kartu Backlog " + itemCode + attachmentNote + " — oleh " + actorName);
+        jdbc.update("INSERT INTO item_activities (backlog_item_id, user_id, type, content) VALUES (?,?,'change_log',?)",
+            itemId, actorId, "Dibuat dari bug " + str(bug.get("code")) + " (Improvement) di Bugs Incident" + attachmentNote + " — oleh " + actorName);
+
+        return ResponseEntity.status(201).body(Map.of(
+            "bug", bugDetail(id),
+            "backlog_item", Map.of("id", itemId, "code", itemCode, "title", str(bug.get("title"))),
+            "attachments_copied", attachmentsCopied
+        ));
+    }
+
     // ── DASHBOARD ────────────────────────────────────────────────────────────
 
     @GetMapping("/dashboard")
@@ -354,14 +477,16 @@ public class BugController {
         String productFilter = product_id != null ? "AND b.product_id = ?" : "";
         Object[] params = product_id != null ? new Object[]{product_id} : new Object[]{};
 
+        // open_count / done_count follow the stage flags (counts_open / is_closed) instead of fixed stage names, so a
+        // custom stage lands in the right card; the built-in stages are seeded with flags that keep the old numbers.
         Map<String, Object> summary = jdbc.queryForMap(
             "SELECT " +
             "  COUNT(*)                                                        AS total_bugs, " +
-            "  COUNT(CASE WHEN stage IN ('open','in_progress','reopen') THEN 1 END) AS open_count, " +
-            "  COUNT(CASE WHEN stage = 'ready_to_test' THEN 1 END)             AS ready_to_test_count, " +
-            "  COUNT(CASE WHEN stage = 'done'          THEN 1 END)             AS done_count, " +
-            "  ROUND(100.0 * COUNT(CASE WHEN stage = 'done' THEN 1 END) / NULLIF(COUNT(*), 0), 1) AS resolution_rate " +
-            "FROM bugs b WHERE 1=1 " + productFilter,
+            "  COUNT(CASE WHEN s.counts_open THEN 1 END)                       AS open_count, " +
+            "  COUNT(CASE WHEN b.stage = 'ready_to_test' THEN 1 END)           AS ready_to_test_count, " +
+            "  COUNT(CASE WHEN s.is_closed   THEN 1 END)                       AS done_count, " +
+            "  ROUND(100.0 * COUNT(CASE WHEN s.is_closed THEN 1 END) / NULLIF(COUNT(*), 0), 1) AS resolution_rate " +
+            "FROM bugs b LEFT JOIN bug_stages s ON s.code = b.stage WHERE 1=1 " + productFilter,
             params
         );
 
@@ -400,6 +525,7 @@ public class BugController {
             "summary", summary,
             "byFeature", byFeature,
             "byStage", byStage,
+            "bugStages", bugStats.stages(),
             "recentActivity", recentActivity,
             "recentComments", recentComments
         ));
@@ -534,14 +660,37 @@ public class BugController {
         List<Map<String, Object>> rows = jdbc.queryForList(
             "SELECT b.*, au.name AS assigned_to_name, au.email AS assigned_to_email, " +
             "  bt.name AS type_name, bt.color AS type_color, " +
+            "  bs.name AS stage_name, bs.color AS stage_color, bs.is_closed AS stage_is_closed, bs.not_late AS stage_not_late, " +
+            "  cbi.code AS converted_backlog_code, cbi.title AS converted_backlog_title, " +
             "  " + assigneeSupport.assigneesJsonSelect("bug_assignees", "bug_id", "b") + " " +
             "FROM bugs b LEFT JOIN users au ON au.id = b.assigned_to " +
-            "LEFT JOIN bug_types bt ON bt.code = b.type WHERE b.id = ?",
+            "LEFT JOIN bug_types bt ON bt.code = b.type " +
+            "LEFT JOIN bug_stages bs ON bs.code = b.stage " +
+            "LEFT JOIN backlog_items cbi ON cbi.id = b.converted_backlog_id WHERE b.id = ?",
             bugId
         );
         if (rows.isEmpty()) return null;
         assigneeSupport.enrich(rows);
         return rows.get(0);
+    }
+
+    /** Who reported the bug: the logged-in author, else the name/email an outside reporter typed on the public form. */
+    private String reporterLabel(Map<String, Object> bug) {
+        Long reporterId = toLong(bug.get("reported_by"));
+        if (reporterId != null) {
+            List<Map<String, Object>> u = jdbc.queryForList("SELECT name FROM users WHERE id = ?", reporterId);
+            if (!u.isEmpty() && !str(u.get(0).get("name")).isBlank()) return str(u.get(0).get("name"));
+        }
+        String name = str(bug.get("reporter_name")).trim();
+        String mail = str(bug.get("reporter_email")).trim();
+        if (!name.isEmpty() && !mail.isEmpty()) return name + " (" + mail + ")";
+        return !name.isEmpty() ? name : mail;
+    }
+
+    /** Display name of a stage code; the raw code if the stage no longer exists. */
+    private String stageName(String code) {
+        List<Map<String, Object>> rows = jdbc.queryForList("SELECT name FROM bug_stages WHERE code = ?", code);
+        return rows.isEmpty() ? code : str(rows.get(0).get("name"));
     }
 
     /** A feature is optional; when given it must belong to the same product as the bug. */

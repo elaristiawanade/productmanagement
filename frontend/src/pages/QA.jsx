@@ -478,7 +478,7 @@ export default function QA() {
                   </div>
 
                   {/* Bugs per product feature (only for roles the API returns it to) */}
-                  {bugOverviewAllowed && <BugsPerFeatureCard rows={dashboard?.bugsByFeature || []} className="min-w-0 lg:self-start" />}
+                  {bugOverviewAllowed && <BugsPerFeatureCard rows={dashboard?.bugsByFeature || []} stages={dashboard?.bugStages || []} className="min-w-0 lg:self-start" />}
                 </div>
 
               {/* Recent Failures: right column; full width only when one product is shown and there is no bug card */}

@@ -34,8 +34,10 @@ export const STATUS_MAP = {
 
 const FALLBACK = { c: '#9A9CA4', icon: 'dashed', n: true };
 
-export function StatusIcon({ status, size = 14, onSolid = false }) {
-  const s = STATUS_MAP[status] ?? FALLBACK;
+// `meta` ({ label, c, icon, n? }) overrides the STATUS_MAP lookup: Bugs Incident stages are configurable, so their
+// label / colour / icon come from the database instead of this static map.
+export function StatusIcon({ status, size = 14, onSolid = false, meta }) {
+  const s = meta ?? STATUS_MAP[status] ?? FALLBACK;
   const c = onSolid ? '#fff' : s.c;
   const ring = <circle cx="8" cy="8" r="6.2" fill="none" stroke={c} strokeWidth="1.6" />;
   const props = { width: size, height: size, viewBox: '0 0 16 16', className: 'shrink-0', 'aria-hidden': true };
@@ -49,14 +51,14 @@ export function StatusIcon({ status, size = 14, onSolid = false }) {
 }
 
 // variant 'soft' (default, in rows) or 'solid' (group headers / board columns); neutral statuses never go solid.
-export default function StatusBadge({ status, size = 'sm', variant = 'soft' }) {
-  const s = STATUS_MAP[status] ?? { label: status, ...FALLBACK };
+export default function StatusBadge({ status, size = 'sm', variant = 'soft', meta }) {
+  const s = meta ?? STATUS_MAP[status] ?? { label: status, ...FALLBACK };
   const solid = variant === 'solid' && !s.n;
   const sz = size === 'xs' ? 'h-5 px-1.5 gap-1 text-[10px]' : 'h-6 px-2 gap-1.5 text-[11px]';
   const cls = s.n ? 'status-pill neutral' : solid ? 'status-pill solid' : 'status-pill';
   return (
     <span className={`${cls} ${sz}`} style={{ '--c': s.c }}>
-      <StatusIcon status={status} size={size === 'xs' ? 11 : 13} onSolid={solid} />
+      <StatusIcon status={status} meta={meta} size={size === 'xs' ? 11 : 13} onSolid={solid} />
       {s.label}
     </span>
   );

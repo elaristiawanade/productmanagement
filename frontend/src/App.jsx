@@ -20,6 +20,7 @@ import NotificationSettings from './pages/NotificationSettings';
 import Clients    from './pages/Clients';
 import ClientSettings from './pages/ClientSettings';
 import BugTypeSettings from './pages/BugTypeSettings';
+import BugStageSettings from './pages/BugStageSettings';
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -74,6 +75,7 @@ function AppRoutes() {
         <Route path="settings/notifications" element={<RequirePermission module="settings" action="update"><NotificationSettings /></RequirePermission>} />
         <Route path="settings/clients" element={<RequirePermission module="settings" action="update"><ClientSettings /></RequirePermission>} />
         <Route path="settings/bug-types" element={<RequirePermission module="settings" action="update"><BugTypeSettings /></RequirePermission>} />
+        <Route path="settings/bug-stages" element={<RequirePermission module="settings" action="update"><BugStageSettings /></RequirePermission>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

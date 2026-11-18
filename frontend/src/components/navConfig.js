@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, ListTodo, Zap, Package, Users, TestTube2, FileDown, ClipboardList, Layers, CheckSquare,
-  Settings, Crown, Bug, Home, CalendarRange, User, Landmark, Building2, Tags, Tag,
+  Settings, Crown, Bug, Home, CalendarRange, User, Landmark, Building2, Tags, Tag, ListOrdered,
 } from 'lucide-react';
 
 // Navigation grouped into icon-rail sections. `title` (when set) is the page title from the old header,
@@ -35,6 +35,7 @@ export const SECTIONS = [
     { to: '/settings/notifications', label: 'Notification Settings', icon: Settings, gate: ['settings', 'update'] },
     { to: '/settings/clients',       label: 'Client Statuses',       icon: Tags,     gate: ['settings', 'update'], title: 'Pengaturan Status Client' },
     { to: '/settings/bug-types',     label: 'Bug Types',             icon: Tag,      gate: ['settings', 'update'], title: 'Pengaturan Type Bug' },
+    { to: '/settings/bug-stages',    label: 'Bug Stages',            icon: ListOrdered, gate: ['settings', 'update'], title: 'Pengaturan Stage Bug' },
   ] },
 ];
 
