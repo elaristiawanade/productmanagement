@@ -520,5 +520,19 @@ Fitur baru (PRD 3.2, 3.6, v3.27). **Tanpa migrasi.** Diuji 19 Nov 2026 di headle
 - ✅ Section lama (Tasks & Bugs, Aktivitas & Komentar) tetap tampil; Task Pribadi Terkait tidak berubah
 - ✅ Mode gelap: chip, badge Type/Stage, dan teks section terbaca
 - ✅ PO Budi (tanpa akses Bugs Incident): chip terlihat; di section, baris BUG-001 tampil tanpa link (tooltip "Butuh akses modul Bugs Incident…"), test case tetap bisa diklik
+- ✅ **Diuji user di lokal (19 Nov 2026): oke**
 - 🧑 **Production:** rebuild backend + frontend (lewat mentor); tidak ada migrasi
 - ⚠️ Chip hanya bisa diklik oleh user yang boleh membuka/mengedit item dari daftar Backlog (aturan lama); user lain melihat chip sebagai penanda dengan tooltip
+
+## 39. Bingkai terang ala ClickUp + toggle tema + aksen merah
+
+Perubahan tampilan saja (PRD 3.16, v3.28; dibuat 18 Nov 2026, sebelumnya PR #30 yang ditutup dan kini ikut PR bersama Management Dashboard). Tanpa perubahan backend/database.
+
+- ✅ Top bar + icon rail abu terang (#F0F0F3), rail setinggi layar dengan logo PTAP di atas; sidebar per section dan area kerja putih
+- ✅ Mode gelap: bingkai hampir hitam; warna bingkai diambil dari token `frame*`/`side` yang diganti tema
+- ✅ HP: rail ikut masuk ke drawer
+- ✅ Toggle tema: track amber (terang) / biru (gelap), ikon matahari dan bulan selalu terlihat, tooltip "Ganti ke mode …"
+- ✅ Aksen merah: garis bawah tab aktif (Backlog, Products, QA, Standup, Users, Bugs, C-Level, My Task), bar progress merah dan hijau saat 100%, menu aktif sidebar merah muda + batang merah
+- ✅ Tidak berubah: bar kapasitas Dashboard (hijau/kuning/merah), status/badge/prioritas, warna avatar
+- ✅ Backlog: **Group: Status** di baris tab, tidak lagi terdampar di baris filter
+- ✅ Dicek lewat screenshot headless Chrome (terang, gelap, HP) di Backlog, Products, Sprints, My Tasks
