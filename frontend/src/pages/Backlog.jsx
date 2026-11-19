@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Pencil, Trash2, AlertCircle, Link2, X, MessageSquare, Send, FileDown, ChevronDown, Check, List, Columns3, Layers, Zap } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, AlertCircle, Link2, X, MessageSquare, Send, FileDown, ChevronDown, Check, List, Columns3, Layers, Zap, Bug as BugIcon, TestTube2, Tag } from 'lucide-react';
 import client from '../api/client';
 import PresenceDot from '../components/PresenceDot';
 import Modal from '../components/Modal';
@@ -17,6 +17,7 @@ import AssigneeStack from '../components/AssigneeStack';
 import AuthorLine from '../components/AuthorLine';
 import { renderWithLinks } from '../utils/linkify';
 import { useDeepLink } from '../utils/deepLink';
+import { stageMeta } from '../utils/bugStages';
 import CopyLinkButton from '../components/CopyLinkButton';
 import { toastCreated } from '../utils/createdToast';
 import ProgressBar from '../components/ProgressBar';
@@ -384,7 +385,8 @@ function ChildrenSection({ item, onOpenItem }) {
 
 // readOnly: a user without backlog edit permission who opened an item through a shared link — fields are
 // disabled and the save button is hidden; comments, children and attachments' viewing still work.
-function ItemForm({ item, defaults, products, users, sprints, features, epics, onSave, onClose, onOpenItem, readOnly = false }) {
+// focusRelated: opened from a card's Related Card chip, so that section starts expanded and scrolled into view.
+function ItemForm({ item, defaults, products, users, sprints, features, epics, onSave, onClose, onOpenItem, readOnly = false, focusRelated = false }) {
   const [form, setForm] = useState({
     product_id: item?.product_id || '',
     code: item?.code || '',
@@ -715,6 +717,13 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
         </div>
       )}
 
+      {/* Related Card: Bugs Incident tickets and QA test cases linked to this item (info only, collapsible) */}
+      {item?.id && (
+        <div className="col-span-2">
+          <RelatedCards key={item.id} item={item} initiallyOpen={focusRelated} />
+        </div>
+      )}
+
       {/* Personal tasks that relate to this item (info only; hidden when there are none) */}
       {item?.id && (
         <div className="col-span-2 empty:hidden">
@@ -773,6 +782,170 @@ function RelatedPersonalTasks({ itemId }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ─── Related Card ─────────────────────────────────────────────────────────────
+// Cards from other modules that point at a backlog item: Bugs Incident tickets (their "Backlog Item" field, or the
+// ticket this card was made from with "Buat Backlog") and QA test cases. Info only: nothing here changes the item.
+// The list payload carries the counts (related_bug_count / related_bug_open_count / related_bug_codes /
+// related_tc_count); the rows come from GET /backlog/{id}/related when the section is opened.
+
+const relatedCounts = (item) => ({
+  bugs: +item.related_bug_count || 0,
+  openBugs: +item.related_bug_open_count || 0,
+  tcs: +item.related_tc_count || 0,
+});
+
+const hasRelated = (item) => { const c = relatedCounts(item); return c.bugs > 0 || c.tcs > 0; };
+
+function relatedSummary(item) {
+  const { bugs, openBugs, tcs } = relatedCounts(item);
+  const parts = [];
+  if (bugs) parts.push(`${bugs} tiket Bugs Incident ${openBugs ? `(${openBugs} masih open)` : '(semua closed)'}${item.related_bug_codes ? `: ${item.related_bug_codes}` : ''}`);
+  if (tcs) parts.push(`${tcs} QA test case`);
+  return `Related Card: ${parts.join(' · ')}`;
+}
+
+/** Small indicator on a list row / board card. Red bug chip while a related ticket is still open, grey when all are closed. */
+function RelatedChips({ item, onOpen }) {
+  const { bugs, openBugs, tcs } = relatedCounts(item);
+  if (!bugs && !tcs) return null;
+  const chip = 'inline-flex items-center gap-0.5 h-[18px] px-1.5 rounded border text-[11px] font-medium tabular-nums';
+  const label = relatedSummary(item);
+  const inner = (
+    <>
+      {bugs > 0 && (
+        <span className={`${chip} ${openBugs ? 'bg-red-50 text-red-700 border-red-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+          <BugIcon className="w-3 h-3" />{bugs}
+        </span>
+      )}
+      {tcs > 0 && (
+        <span className={`${chip} bg-slate-100 text-slate-600 border-slate-200`}>
+          <TestTube2 className="w-3 h-3" />{tcs}
+        </span>
+      )}
+    </>
+  );
+  return onOpen ? (
+    <button type="button" title={label} aria-label={label} onClick={e => { e.stopPropagation(); onOpen(); }}
+      className="shrink-0 inline-flex items-center gap-1 rounded hover:opacity-75 transition-opacity">
+      {inner}
+    </button>
+  ) : (
+    <span title={label} className="shrink-0 inline-flex items-center gap-1">{inner}</span>
+  );
+}
+
+function RelatedRow({ to, blockedTitle, children }) {
+  const cls = 'w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 text-left';
+  return to
+    ? <Link to={to} className={`${cls} hover:bg-slate-50 transition-colors group`}>{children}</Link>
+    : <div className={cls} title={blockedTitle}>{children}</div>;
+}
+
+function RelatedCards({ item, initiallyOpen = false }) {
+  const { can } = useAuth();
+  const [open, setOpen]     = useState(initiallyOpen);
+  const [data, setData]     = useState(null);     // null until the section is first opened
+  const [failed, setFailed] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open || data) return;
+    let alive = true;
+    setFailed(false);
+    client.get(`/backlog/${item.id}/related`, { silent: true })
+      .then(res => { if (alive) setData({ bugs: res.data?.bugs || [], test_cases: res.data?.test_cases || [] }); })
+      .catch(() => { if (alive) setFailed(true); });
+    return () => { alive = false; };
+  }, [open, data, item.id]);
+
+  // Opened from a card's chip: bring the section into view inside the modal
+  useEffect(() => {
+    if (!initiallyOpen) return;
+    const t = setTimeout(() => ref.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 80);
+    return () => clearTimeout(t);
+  }, [initiallyOpen]);
+
+  const fromList = relatedCounts(item);
+  const total    = data ? data.bugs.length + data.test_cases.length : fromList.bugs + fromList.tcs;
+  const openBugs = data ? data.bugs.filter(b => !b.stage_is_closed).length : fromList.openBugs;
+  const canOpenBugs = can('bugs', 'access');
+
+  return (
+    <div ref={ref} className="border-t border-slate-100 pt-4 scroll-mt-2">
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+        className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide hover:text-slate-800">
+        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? '' : '-rotate-90'}`} />
+        Related Card <span className="font-normal normal-case text-slate-400">({total})</span>
+        {openBugs > 0 && <span className="normal-case tracking-normal font-medium text-red-600">· {openBugs} tiket masih open</span>}
+      </button>
+
+      {open && (
+        <div className="mt-2 space-y-3">
+          <p className="text-xs text-slate-400">Kartu dari modul lain yang terhubung ke item ini. Hanya info, tidak mengubah status maupun progress item.</p>
+          {failed ? (
+            <p className="text-xs text-red-600 text-center py-3">Gagal memuat kartu terkait</p>
+          ) : !data ? (
+            <div className="flex justify-center py-4">
+              <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : total === 0 ? (
+            <p className="text-xs text-slate-400 text-center py-3">
+              Belum ada kartu terkait. Hubungkan lewat field <strong>Backlog Item</strong> di Bugs Incident, atau buat test case untuk item ini di QA Module.
+            </p>
+          ) : (
+            <>
+              {data.bugs.length > 0 && (
+                <div>
+                  <p className="flex items-center gap-1.5 text-[11.5px] font-medium text-slate-500 mb-1.5">
+                    <BugIcon className="w-3.5 h-3.5" />Bugs Incident <span className="text-slate-400 font-normal">({data.bugs.length})</span>
+                  </p>
+                  <div className="space-y-1.5">
+                    {data.bugs.map(b => (
+                      <RelatedRow key={b.id} to={canOpenBugs ? `/bugs?bug=${b.id}` : null}
+                        blockedTitle="Butuh akses modul Bugs Incident untuk membuka tiket ini">
+                        <span className="status-pill h-5 px-1.5 gap-1 text-[10px] shrink-0" style={{ '--c': b.type_color || '#64748B' }}>
+                          <Tag className="w-2.5 h-2.5 shrink-0" />{b.type_name || b.type}
+                        </span>
+                        <span className="font-mono text-xs text-slate-400 shrink-0">{b.code}</span>
+                        <span className="text-sm text-slate-800 truncate flex-1 min-w-0 group-hover:underline underline-offset-2" title={b.title}>{b.title}</span>
+                        {b.relation === 'source' && (
+                          <span className="shrink-0 text-[11px] px-1.5 leading-[18px] rounded bg-sky-50 text-sky-700 border border-sky-100"
+                            title="Kartu ini dibuat dari tiket ini lewat tombol Buat Backlog">Asal kartu ini</span>
+                        )}
+                        <StatusBadge size="xs" status={b.stage}
+                          meta={stageMeta({ code: b.stage, name: b.stage_name || b.stage, color: b.stage_color, is_closed: b.stage_is_closed, not_late: b.stage_not_late })} />
+                      </RelatedRow>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {data.test_cases.length > 0 && (
+                <div>
+                  <p className="flex items-center gap-1.5 text-[11.5px] font-medium text-slate-500 mb-1.5">
+                    <TestTube2 className="w-3.5 h-3.5" />QA Test Case <span className="text-slate-400 font-normal">({data.test_cases.length})</span>
+                  </p>
+                  <div className="space-y-1.5">
+                    {data.test_cases.map(tc => (
+                      <RelatedRow key={tc.id} to={`/qa?case=${tc.id}`}>
+                        <span className="font-mono text-xs text-slate-400 shrink-0">{tc.code}</span>
+                        <span className="text-sm text-slate-800 truncate flex-1 min-w-0 group-hover:underline underline-offset-2" title={tc.title}>{tc.title}</span>
+                        {tc.status === 'deprecated' && <span className="shrink-0 text-[11px] text-slate-400">deprecated</span>}
+                        {tc.last_result
+                          ? <StatusBadge size="xs" status={tc.last_result} />
+                          : <span className="shrink-0 text-[11px] text-slate-400">Belum di-run</span>}
+                      </RelatedRow>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -910,7 +1083,10 @@ export default function Backlog() {
 
   const setFilter = (key, vals) => { setFilters(f => ({ ...f, [key]: vals })); setPage(1); };
   // Same rule as the old pencil button: only users who may edit can open an item
-  const openItem = (item) => { if (canEdit && !isSelectingText()) setModal({ open: true, item, defaults: null }); };
+  // focusRelated: clicked the Related Card chip, so the modal opens with that section expanded
+  const openItem = (item, focusRelated = false) => { if (canEdit && !isSelectingText()) setModal({ open: true, item, defaults: null, focusRelated }); };
+  // Chip click handler; none (plain indicator with a tooltip) for users who may not open items from the list
+  const openRelated = (item) => (canEdit ? () => openItem(item, true) : undefined);
   const openNew  = (status) => setModal({ open: true, item: null, defaults: status ? { status } : null });
   const closeModal = () => setModal({ open: false, item: null, defaults: null });
   const toggleGroup = (s) => setCollapsedGroups(prev => {
@@ -975,6 +1151,7 @@ export default function Backlog() {
               <Link2 className="w-2.5 h-2.5" />{item.parent_code}
             </span>
           )}
+          <RelatedChips item={item} onOpen={openRelated(item)} />
           {item.features?.length > 0 ? (
             <span className="flex items-center gap-1 min-w-0 overflow-hidden" title={`Impacted Features: ${item.features.map(f => f.name).join(', ')}`}>
               <span className="min-w-0 max-w-[160px] truncate text-[11px] px-1.5 leading-[18px] rounded bg-slate-100 text-slate-600">{item.features[0].name}</span>
@@ -1208,10 +1385,16 @@ export default function Backlog() {
                       <CopyLinkButton path={`/backlog?item=${item.id}`} label={`Salin link ${item.code}`} className="-my-1 -mr-1.5 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity" />
                     </div>
                     <p className={`text-[13.5px] font-medium leading-snug ${item.type === 'epic' ? 'text-purple-700' : 'text-slate-800'}`}>{item.title}</p>
-                    {item.parent_code && (
-                      <span className="self-start inline-flex items-center gap-0.5 font-mono text-[11px] text-slate-600 bg-slate-100 rounded px-1.5 leading-[18px]">
-                        <Link2 className="w-2.5 h-2.5" />{item.parent_code}
-                      </span>
+                    {/* Links row: parent + Related Card chips (own line, so the meta row below keeps its old width) */}
+                    {(item.parent_code || hasRelated(item)) && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {item.parent_code && (
+                          <span className="inline-flex items-center gap-0.5 font-mono text-[11px] text-slate-600 bg-slate-100 rounded px-1.5 leading-[18px]">
+                            <Link2 className="w-2.5 h-2.5" />{item.parent_code}
+                          </span>
+                        )}
+                        <RelatedChips item={item} onOpen={openRelated(item)} />
+                      </div>
                     )}
                     <div className="flex items-center gap-2.5 text-xs text-slate-500 min-h-6">
                       <span title={`Prioritas ${item.priority}`}><PriorityFlag priority={item.priority} /></span>
@@ -1241,6 +1424,7 @@ export default function Backlog() {
         shareLink={modal.item ? `/backlog?item=${modal.item.id}` : undefined}>
         <ItemForm
           readOnly={!!modal.item && !canEdit}
+          focusRelated={!!modal.focusRelated}
           item={modal.item} defaults={modal.defaults} products={products} users={users}
           sprints={sprints} features={features} epics={epics}
           onSave={() => { closeModal(); load(); }}
