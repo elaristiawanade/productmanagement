@@ -3,8 +3,8 @@
 
 | | |
 |---|---|
-| **Versi** | 3.25 |
-| **Tanggal** | 18 November 2026 |
+| **Versi** | 3.26 |
+| **Tanggal** | 19 November 2026 |
 | **Status** | Live — Production |
 | **Pemilik** | Tim Internal |
 
@@ -137,7 +137,13 @@ Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus 
 - Penanda **terlambat** (tanggal merah, ikon, hitungan Overdue) mengikuti aturan 3.2: status **In Review** tidak dihitung terlambat
 - **Progress %** — tabel My Tasks punya kolom **Progress** (setelah *Status*) dan panel detail task menampilkan bar Progress baca-saja. Item yang sama dengan Backlog, jadi angkanya identik (aturan di 3.2). Setelah status diganti dari tabel atau panel, progress diambil ulang dari server tanpa memuat ulang halaman (progress Story juga ikut berubah bila task-nya berubah)
 
-**Catatan implementasi:** Bypass filter produk khusus untuk query ini — developer yang belum terdaftar di `user_products` tetap bisa melihat task yang di-assign ke mereka.
+- **Add Task (task pribadi)** — tombol **Add Task** di kanan atas halaman membuat task untuk diri sendiri: Judul (wajib), **Produk** (wajib; dropdown dengan pencarian, pilihan = produk yang bisa diakses user, sama dengan daftar produk sidebar Planning), **Item Backlog terkait** (opsional, dropdown dengan pencarian berisi item produk itu), Status (To Do / In Progress / In Review / Done / Blocked), Deadline, Catatan
+  - **Relasi, bukan konversi:** task pribadi **bukan item Backlog** — tidak punya kode, tidak masuk sprint, story points, velocity, maupun progress produk/fitur. Item Backlog terkait hanya dijadikan rujukan (ditampilkan "HRS-2 terkait") dan tidak berubah apa pun. Memilih item terkait otomatis mengunci produk ke produk item itu
+  - Tampil di tabel My Tasks bersama item yang di-assign, berlabel **Pribadi** (Kode) dan tipe `pribadi`; Prioritas dan Sprint "—". Status bisa diganti inline; klik baris membuka form edit (ada tombol **Hapus**); ikon tautan membuka item Backlog terkait. Progress dari status (aturan 3.2), terlambat jika deadline lewat kecuali Done/In Review
+  - Hanya **pemiliknya** (dan Super Admin) yang bisa mengubah atau menghapus. Orang lain melihatnya lewat Management Dashboard (3.18), sumber "My Task" dengan PIC = pemilik, dan lewat panel info **Task Pribadi Terkait** di detail item Backlog yang dirujuk (judul, pemilik, deadline, status; catatan pribadi tidak ditampilkan; hanya info, tidak mengubah assignee maupun progress item; panel tersembunyi bila tidak ada task terkait)
+  - Tidak ada permission khusus (My Tasks memang tanpa gate); produk tetap dicek ke `user_products` (Super Admin & Manager boleh semua produk)
+
+**Catatan implementasi:** Bypass filter produk khusus untuk query ini — developer yang belum terdaftar di `user_products` tetap bisa melihat task yang di-assign ke mereka. Task pribadi disimpan di tabel `personal_tasks` (`migration_v33.sql`), endpoint `/api/personal-tasks`.
 
 ---
 
@@ -176,6 +182,7 @@ Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus 
 - **Progress %** produk — kartu produk menampilkan bar dan angka **Progress N%** (menggantikan "% selesai" lama yang hanya menghitung jumlah item Done dibanding total, termasuk Epic/Story sebagai item). Kini = rata-rata progress seluruh **item kerja** produk (item tanpa anak, bukan Epic kosong), dibobot story point, dengan aturan status → persen yang sama seperti Backlog (3.2). Produk tanpa item kerja tampil 0%. Jumlah **Items** dan **Done** di kartu tetap ada. Contoh data lokal: HRS 30% → 37%, CRM 27% → 31%, FIN 38% → 54%. API `GET /api/products` mengembalikan field `progress` (null bila belum ada item). Bar persen di baris Product Features (berbasis poin selesai) dan di Sprints/Epic Board **tidak diubah**
 - Kelola epics per produk
 - Kelola features per produk
+  - **Target (tanggal)** — field tanggal opsional di form Feature (di samping *Target Release* yang tetap berupa teks versi, mis. `v1.2`), tampil di daftar feature dengan ikon target dan menjadi kolom **Target** di Management Dashboard (3.18). Disimpan di `features.target_date` (`migration_v33.sql`); request lama yang tidak mengirim field ini tidak menghapus tanggal yang tersimpan
 - Assign member ke produk (menentukan scope akses Developer/QA)
 - Roadmap produk (timeline feature) — status item: `planned`, `research`, `on_progress`, `testing` (sedang tahap testing), `active`, `offline`
 - **Export MD (untuk AI)** — tombol **Export MD** di setiap kartu produk mengunduh **satu file Markdown** berisi paket data lengkap produk itu, siap diunggah ke AI apa pun (Claude, ChatGPT, Gemini, dll.):
@@ -463,6 +470,59 @@ Role **bukan daftar tetap di kode** — role apa pun bisa dibuat/diubah/dihapus 
 
 ---
 
+### 3.18 Management Dashboard
+
+**Tujuan:** Satu halaman untuk manajemen melihat kondisi **satu produk** dari sprint, fitur, sampai pekerjaan terbuka minggu demi minggu, termasuk riwayat minggu-minggu sebelumnya yang tidak berubah lagi (permintaan mentor, sketsa papan tulis 19 Nov 2026). Menu **Home → Management** (`/management`), paling atas di Home.
+
+**Tata letak:** satu halaman yang di-scroll (bukan tab), dari atas ke bawah. Pilihan produk, sprint, dan minggu tersimpan di URL (`?product=&sprint=&week=`) sehingga tampilan bisa dibagikan sebagai link.
+- **Pilih produk** — daftar **Products** di sidebar kiri bagian Home (hanya saat halaman Management terbuka; pola sama dengan Planning → Backlog), atau pilihan **Produk** di header (dropdown + cari; tetap ada untuk sidebar tersembunyi/HP). Dashboard selalu per produk; produk yang tampil ikut tertulis di URL sehingga tersorot di sidebar
+- **Header** — pilihan Produk, keterangan "Data per …", tombol muat ulang
+- **Sprint Aktif** — pilihan sprint produk itu (nama + tanggal mulai–selesai); default sprint berstatus `active`, atau **"–"** kalau tidak ada. Menampilkan nama, status, rentang tanggal (plus "N hari lagi" / "Lewat N hari dari tanggal selesai"), goal, **Progress** sprint, dan "X dari Y item kerja selesai". Progress = rata-rata berbobot story point atas item kerja di bawah item sprint itu (aturan 3.2)
+- **Features** — dari **Products → Features** (3.6). Kolom: No, Feature (kode + nama, link ke Products; keterangan jumlah item Backlog terhubung), Status, **Target** (tanggal `target_date`, merah bila lewat dan fitur belum Done/Released), **Progress %**
+  - Progress fitur: status `done` / `released` = 100%. Selain itu rata-rata progress berbobot story point dari **item Backlog yang terhubung** lewat baris roadmap fitur (`product_roadmap.source_feature_id`), baik sebagai *Feature* item maupun salah satu *Impacted Features*. Story yang terhubung dihitung lewat task-task di bawahnya, dan satu task tidak dihitung dua kali. Tanpa item terhubung → "—" (fitur yang bukan roadmap item tidak bisa dihubungkan ke Backlog)
+  - Progress mengikuti pekerjaan, bukan status fitur, jadi fitur berstatus *Not Started* bisa sudah punya progress (diputuskan 19 Nov 2026)
+- **Open Item · Minggu Ini** — pekerjaan yang **terbuka** selama minggu berjalan **ditambah yang selesai** di minggu itu, dari empat sumber: **Backlog**, **My Task** (task pribadi, 3.3), **QA** (test case), **Bug** (Bugs Incident). Kolom: **Item** (label sumber, kode, judul; link ke modulnya), **PIC**, **Status**, **Deadline**, **Progress**, **PO Remarks**. Chip filter per sumber dengan jumlahnya, plus ringkasan "N terbuka · M selesai minggu ini · K lewat deadline · J lewat ekspektasi". Judul kartu menampilkan nomor minggu, mis. **W47** · 16 – 22 Nov 2026, dan label **Live**
+  - Status bisa diubah langsung (dropdown yang sama dengan modulnya) oleh yang memang berhak di modul itu: Backlog (`backlog.update`/`update_assigned`), Bug (`bugs.access`), My Task (pemilik/Super Admin). Status QA = hasil test run terakhir sehingga diubah dengan menjalankan test di QA Module, bukan di sini
+  - Di bawah tabel: **Catatan Product Owner** minggu ini (lihat di bawah)
+- **Minggu Lalu** — tabel yang sama untuk minggu yang sudah lewat, **baca-saja**, semua item langsung tampil (tanpa chip filter sumber). Default minggu lalu. Pilihan minggu:
+  - Chip **Minggu lalu · W46**, **2 minggu lalu · W45**, **3 minggu lalu · W44**, **4 minggu lalu · W43**; minggu yang tidak punya data tersimpan (mis. sebelum pencatatan dimulai) dinonaktifkan dengan keterangan
+  - Tombol kalender (gaya Google Calendar) untuk minggu yang lebih lama: grid bulan dengan **nomor minggu** di kiri, klik satu baris minggu. **Bulan dan tahun bisa dipilih langsung** (dropdown; tahun dari awal pencatatan sampai tahun ini) selain tombol panah. Minggu dihitung Senin–Minggu, jadi nomornya nomor minggu ISO (16–22 Nov 2026 = W47). Hanya minggu tersimpan yang bisa diklik; minggu berjalan dan minggu depan abu-abu; nomor minggu **Estimasi** berwarna kuning
+  - Minggu yang dibekukan terlambat ditandai **Estimasi** (lihat Pembekuan mingguan). Di bawah tabel: Catatan Product Owner minggu itu
+  - Selama belum ada minggu yang selesai sejak pencatatan dimulai, kartu ini kosong dengan keterangan "Pencatatan mingguan dimulai W47 (16 – 22 Nov 2026); minggu sebelumnya tidak dicatat". Chip minggu dan tombol kalender baru muncul setelah minggu pertama tersimpan (Senin berikutnya 00:00 WIB; untuk pemasangan 19 Nov 2026: Senin 23 Nov 2026, W47 menjadi "Minggu lalu")
+
+**PO Remarks** (kolom terakhir di kedua tabel): **ekspektasi tanggal selesai** dari Product Owner plus keterangan pendek opsional (maks 300 karakter), mis. "27 Nov 2026 · menunggu API vendor". Diisi **manual**, bukan dihitung.
+- Diisi dengan klik sel di tabel **Minggu Ini** (popover: tanggal, keterangan, Simpan/Hapus). Remark disimpan **per item per minggu**
+- Remark **ikut ke minggu berikutnya** selama belum diganti, ditandai "dari W46"; mengubahnya di minggu ini membuat remark baru untuk minggu ini, remark minggu sebelumnya tidak berubah. Jadi minggu lalu tetap menunjukkan ekspektasi saat itu (remark minggu lalu tidak bisa diubah)
+- Tanggal ekspektasi **merah + "lewat"** bila sudah lewat (minggu berjalan: sebelum hari ini; minggu lalu: sebelum Senin sesudahnya) dan item belum selesai; jumlahnya tampil di ringkasan sebagai "lewat ekspektasi"
+- Tooltip menunjukkan siapa yang mengisi dan kapan
+
+**Catatan Product Owner** (di bawah tabel, kedua kartu): satu catatan teks per produk per minggu untuk menjelaskan item yang lewat deadline atau tidak selesai sesuai ekspektasi, penyebabnya, dan langkah selanjutnya (maks 5000 karakter, link bisa diklik). Catatan **tersimpan bersama minggunya**: membuka minggu lama menampilkan catatan minggu itu. Catatan minggu yang sudah lewat **masih bisa diubah** (evaluasi sering ditulis hari Senin), dengan keterangan "Terakhir diubah oleh … · tanggal". Mengosongkan isi = menghapus catatan.
+
+**Siapa yang mengisi PO Remarks & catatan:** **Owner** produk itu (field Owner di Products), **Manager**, dan **Super Admin**. Yang lain (mis. Commissioner, PO produk lain) hanya melihat.
+
+**Aturan isi Open Item:**
+- **Minggu** = Senin 00:00 sampai Senin berikutnya 00:00 **WIB** (`app.management.week-zone`, default `Asia/Jakarta`); database berjalan di UTC
+- **Backlog:** semua tipe kecuali `epic`; status `backlog` (belum direncanakan) tidak ikut. Item Done hanya muncul di minggu ia menjadi Done (ditandai **Selesai**). Task diletakkan menjorok di bawah story-nya bila story itu juga tampil. PIC = assignee (primary lebih dulu). Progress aturan 3.2
+- **My Task:** semua task pribadi produk itu; Done hanya di minggu selesai. PIC = pemilik
+- **QA:** test case kecuali yang `deprecated`. Status = hasil run terakhir (`pass`/`fail`/`blocked`/`pending`/`skip`) atau **Belum Dijalankan**; selesai = Pass, dan hanya muncul di minggu Pass itu. PIC = tester run terakhir, atau pembuat test case bila belum pernah di-run. Progress aturan 3.8. Test case Draft diberi tanda `draft`
+- **Bug:** semua tiket kecuali yang sudah dijadikan item Backlog lewat **Buat Backlog** (item Backlog-nya yang tampil, supaya tidak dobel). Selesai = Stage ber-flag *selesai* (3.9), hanya muncul di minggu ditutup. PIC = assignee. Progress "—"
+- **Terlambat:** deadline lewat (minggu berjalan: sebelum hari ini; minggu lalu: sebelum akhir minggu itu), kecuali item sudah selesai, berstatus In Review (Backlog/My Task), atau Stage bug ber-flag *tidak terlambat*
+
+**Pembekuan mingguan:** begitu minggu berganti, isi minggu yang baru lewat **dibekukan** (disalin ke `weekly_snapshots` + `weekly_snapshot_items`) dan tidak berubah lagi walau item aslinya diubah/dihapus.
+- **Pencatatan dimulai minggu fitur ini dipasang** (diputuskan mentor 19 Nov 2026): saat backend pertama kali jalan, Senin minggu berjalan disimpan di `app_settings` (`management.tracking_start`). Minggu sebelum itu **tidak dibekukan dan tidak diestimasi** — dibiarkan kosong. Untuk memindahkannya, ubah baris `app_settings` tersebut
+- Backend mengecek **saat start dan setiap jam** (menit ke-5); minggu yang belum tersimpan di antara **4 minggu terakhir** (tidak sebelum awal pencatatan) langsung dibekukan
+- **Status & progress** dihitung **per akhir minggu itu** dari riwayat (`backlog_status_events`, `personal_task_status_events`, `qa_test_runs`, `bug_progress_updates`); **judul, PIC, dan deadline** diambil saat dibekukan (tidak punya riwayat)
+- Sumber minggu: `scheduled` (dibekukan ≤ 24 jam setelah minggu berakhir), `backfill` → tampil **Estimasi** (minggu yang baru dibekukan > 24 jam setelah berakhir, mis. server mati saat pergantian minggu: status & progress tetap per akhir minggu itu dari riwayat, tetapi judul/PIC/deadline saat dibekukan), `manual` (disiapkan untuk Super Admin, belum ada tombolnya)
+- Minggu sebelum produk dibuat dilewati
+
+**Akses:** permission `management_dashboard.view` (modul **Management Dashboard** di Roles & Permissions, 3.10). Default (`migration_v33.sql`): Super Admin, Manager, Commissioner, **Product Owner** (role `po`, karena PO yang mengisi PO Remarks dan catatan). Produk yang terlihat: **Super Admin, Manager, dan Commissioner melihat semua produk** di dashboard ini (lebih luas dari `GET /api/products`, yang tetap membatasi Commissioner ke produk yang di-assign di modul lain); role lain produk di `user_products` **ditambah produk yang ia jadi Owner-nya**.
+
+**Ditunda (akan diangkat lagi oleh user):** kartu KPI, insight otomatis berbasis aturan, grafik tren mingguan, dan panel status roadmap dari dokumen spesifikasi mentor, serta tombol bekukan manual (`POST snapshots/run`). Riwayat status (`backlog_status_events`, `roadmap_status_events`) sudah dicatat sejak `migration_v33.sql`, jadi grafik tren nanti tidak perlu backfill ulang.
+
+**Catatan implementasi:** riwayat status Backlog dan Roadmap dicatat oleh **trigger database** (semua jalur perubahan status ikut tercatat tanpa mengubah controller; siapa yang mengubah tidak disimpan). Kolom `backlog_items.completed_at` diisi trigger saat item masuk Done dan dikosongkan saat keluar dari Done. Riwayat sebelum v33 di-backfill dari log teks `item_activities` (perkiraan). PO Remarks (`open_item_remarks`) dan catatan (`weekly_notes`) disimpan terpisah dari salinan minggu beku dan digabung saat dibaca (remark yang berlaku untuk minggu W = baris terbaru dengan `week_start` ≤ W), jadi proses pembekuan tidak berubah. Lihat `WeeklySnapshotService` dan `ManagementDashboardController`.
+
+---
+
 ## 4. Alur Kerja Utama
 
 ### Alur Sprint Planning
@@ -565,7 +625,13 @@ Karyawan tanpa akun buka /report-bug (tanpa login)
 | `bug_types` | Type tiket Bugs Incident yang bisa diatur (`code` slug unik & permanen, `name`, `color`, `sort_order`); 2 Type awal (`bug`, `inquiry`) di-seed oleh `migration_v31.sql`. Dirujuk `bugs.type` (3.9) |
 | `client_products` | Produk yang dipakai client, many-to-many (PK `client_id`+`product_id`, keduanya `ON DELETE CASCADE`), mirror `user_products` |
 | `client_comments` | Riwayat catatan update per client (`client_id` `ON DELETE CASCADE`, `user_id` `ON DELETE SET NULL`, `content`) |
-| `app_settings` | Key-value store untuk setting yang bisa diubah lewat UI tanpa restart — saat ini dipakai untuk config SMTP (`mail.*`), lihat 3.14 |
+| `app_settings` | Key-value store untuk setting yang bisa diubah lewat UI tanpa restart — dipakai untuk config SMTP (`mail.*`, 3.14) dan awal pencatatan Management Dashboard (`management.tracking_start` = Senin minggu pertama yang dicatat, diisi backend saat pertama kali jalan, tidak tampil di UI; 3.18) |
+| `personal_tasks` | Task pribadi dari My Tasks → Add Task (`migration_v33.sql`, 3.3): `owner_id`, `product_id` (wajib), `backlog_item_id` (relasi opsional, `ON DELETE SET NULL`), `title`, `notes`, `status` (CHECK `todo`/`in_progress`/`in_review`/`done`/`blocked`), `deadline`, `completed_at` (diisi trigger) |
+| `backlog_status_events` / `roadmap_status_events` / `personal_task_status_events` | Riwayat status (satu baris per perubahan, item baru dicatat dengan `from_status` NULL), diisi **trigger** (`migration_v33.sql`, 3.18). Backlog dan Roadmap punya kolom `source` (`live`/`backfill`) |
+| `weekly_snapshots` | Satu baris per (minggu, produk) yang sudah dibekukan (`week_start` selalu Senin, `source` `scheduled`/`manual`/`backfill`), 3.18 |
+| `weekly_snapshot_items` | Isi Open Item minggu yang dibekukan: salinan item (`item_source` backlog/mytask/qa/bug, `item_id` tanpa FK, kode, judul, `pic` JSONB, status, deadline, `is_late`, progress, `done_in_week`, `parent_item_id`, `sort_order`), 3.18 |
+| `open_item_remarks` | PO Remarks per (minggu, item): `product_id`, `week_start` (Senin), `item_source`, `item_id` (tanpa FK), `expected_date`, `remark`, `updated_by`, `updated_at`; UNIQUE (`week_start`, `item_source`, `item_id`). Baris dengan tanggal dan teks kosong = remark dihapus mulai minggu itu, 3.18 |
+| `weekly_notes` | Catatan Product Owner per (produk, minggu): `content`, `updated_by`, `updated_at`; UNIQUE (`product_id`, `week_start`), 3.18 |
 
 ### Port
 
@@ -747,6 +813,44 @@ GET /api/dashboard/occupation  Okupasi per user dalam jam:
 GET /api/dashboard/delayed     Item yang melewati deadline (maks 20 item, urut dari paling lama; status done/backlog/in_review dikecualikan)
 ```
 
+### Management Dashboard (3.18)
+Semua butuh `management_dashboard.view` + akses produk (Super Admin/Manager/Commissioner semua produk, lainnya `user_products` + produk yang ia jadi Owner-nya). Produk tidak ada → 404, tanpa akses → 403. Menulis PO Remarks/catatan: Owner produk, Manager, Super Admin (lainnya 403).
+```
+GET /api/management/products                    Produk untuk sidebar dan pilihan di header
+GET /api/management/sprints?product_id=         { active_sprint_id, sprints: [..., progress, work_items, done_items] }
+GET /api/management/features?product_id=        Features + target_date, linked_items, progress (done/released = 100, tanpa item = null)
+GET /api/management/weeks?product_id=           { current_week_start, tracking_start, weeks: [minggu berjalan (source live),
+                                                minggu tersimpan terbaru dulu, tidak termasuk minggu sebelum tracking_start] }
+GET /api/management/open-items?product_id=&week=yyyy-MM-dd
+                                                Open Item satu minggu (tanggal mana pun di minggu itu; default minggu ini).
+                                                Minggu ini dihitung langsung (live: true), minggu lalu dari salinan beku.
+                                                Minggu belum mulai → 400, minggu sebelum awal pencatatan / tidak tersimpan → 404.
+                                                Response: week_start, week_end, source, captured_at, live, items[], bug_stages[],
+                                                note, can_edit_remarks (minggu ini + boleh menulis), can_edit_note.
+                                                Tiap item punya remark: { expected_date, text, week_start, carried,
+                                                updated_by_name, updated_at } atau null
+PUT /api/management/remarks                     { product_id, item_source (backlog|mytask|qa|bug), item_id, expected_date?, remark? }
+                                                Remark item untuk MINGGU BERJALAN; keduanya kosong = hapus (berhenti ikut ke
+                                                minggu berikutnya). Item bukan milik produk → 400, item tidak ada → 404,
+                                                remark > 300 karakter / tanggal salah format → 400. Response { remark }
+PUT /api/management/notes                       { product_id, week (tanggal mana pun di minggu itu), content }
+                                                Catatan minggu ini atau minggu lalu; minggu depan / sebelum awal pencatatan → 400;
+                                                > 5000 karakter → 400;
+                                                isi kosong = hapus. Response { note }
+```
+
+### Task Pribadi (3.3)
+Semua user yang login; ubah/hapus hanya pemilik atau Super Admin (lainnya 403).
+```
+GET    /api/personal-tasks              Task pribadi milik sendiri (+ product_name, related_code/title, progress, is_delayed)
+GET    /api/personal-tasks/by-item/:itemId  Task (milik siapa pun) yang terkait item Backlog: id, owner_id, owner_name, title, status, deadline, progress, is_delayed (tanpa notes)
+POST   /api/personal-tasks              { title*, product_id*, backlog_item_id?, status?, deadline?, notes? }
+                                        Item terkait menentukan produk; produk lain → 400; produk di luar akses → 403
+PUT    /api/personal-tasks/:id          Field sama dengan POST
+PATCH  /api/personal-tasks/:id/status   { status } — todo/in_progress/in_review/done/blocked
+DELETE /api/personal-tasks/:id
+```
+
 ### Notifications
 ```
 GET    /api/notifications              List notifikasi user yang login
@@ -914,6 +1018,7 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | `migration_v29.sql` | Kolom **Deadline** (3.8, 3.9): `bugs.deadline` dan `qa_test_cases.deadline` (`DATE`, nullable). Additive & idempotent (`ADD COLUMN IF NOT EXISTS`), data lama tidak berubah. Dipasang di initdb `docker-compose.yml`, tetapi initdb hanya jalan saat volume pertama dibuat — **database yang sudah ada wajib menjalankannya manual SEBELUM backend baru naik** (INSERT/UPDATE bug dan test case menyebut kolom ini, jadi tanpa migrasi Buat/Edit gagal `500`) |
 | `migration_v30.sql` | Kolom `standups.progress` (`SMALLINT`, nullable, CHECK 0–100) dan `standups.progress_detail` (`TEXT`) untuk snapshot **Progress Pekerjaan** (3.7). Additive & idempotent, data lama tidak berubah (`NULL`). Dipasang di initdb `docker-compose.yml`, tetapi initdb hanya jalan saat volume pertama dibuat — **database yang sudah ada wajib menjalankannya manual SEBELUM backend baru naik** (list/create/edit Standup menyebut kolom ini, jadi tanpa migrasi halaman Standup gagal `500`). Progress di Backlog, My Tasks, Products, dan QA **tidak butuh migrasi** (dihitung saat dibaca) |
 | `migration_v32.sql` | Stage Bugs Incident yang bisa diatur + Buat Backlog dari tiket Improvement (3.9): tabel `bug_stages` (+6 Stage bawaan dengan flag yang menjaga perilaku lama), `bugs.stage`/`bug_progress_updates.stage` diperlebar ke `VARCHAR(50)`, FK `bugs_stage_fkey` → `bug_stages(code)` `ON DELETE RESTRICT` (nilai stage asing di data lama didaftarkan dulu sebagai Stage biasa), Type `improvement` bawaan di `bug_types` bila belum ada, kolom `bugs.converted_backlog_id`. Idempotent; tiket lama tidak berubah. Dipasang di initdb `docker-compose.yml`, tetapi initdb hanya jalan saat volume pertama dibuat — **database yang sudah ada wajib menjalankannya manual SEBELUM backend baru naik** (backend baru membaca tabel dan kolom ini) |
+| `migration_v33.sql` | Management Dashboard + task pribadi (3.3, 3.6, 3.18): `backlog_items.completed_at`; tabel riwayat `backlog_status_events`, `roadmap_status_events`, `personal_task_status_events` beserta **trigger** pencatatnya; `features.target_date`; `personal_tasks`; `weekly_snapshots` + `weekly_snapshot_items`; `open_item_remarks` (PO Remarks) dan `weekly_notes` (catatan Product Owner); permission `management_dashboard.view` **digabung** (`||`) ke Super Admin, Manager, Commissioner, Product Owner (role yang sudah punya key tidak ditimpa). Backfill riwayat sekali jalan dari log teks `item_activities` (perkiraan; `updated_at` tidak berubah). Idempotent, satu transaksi. **Wajib dijalankan sebelum backend baru naik**: backend membaca tabel ini saat start (tanpa tabel, pembekuan mingguan hanya memberi peringatan di log, tetapi Management Dashboard, My Tasks → Add Task, dan simpan Feature gagal). Dipasang di initdb `docker-compose.yml` (`35_migration_v33.sql`), tetapi initdb hanya jalan untuk volume baru — database yang sudah ada harus manual
 | `migration_v31.sql` | Type tiket Bugs Incident yang bisa diatur (3.9): tabel `bug_types` (+2 Type awal `bug`, `inquiry`), `bugs.type` diperlebar ke `VARCHAR(50)`, CHECK `bugs_type_check` dihapus dan diganti FK `bugs_type_fkey` → `bug_types(code)` `ON DELETE RESTRICT`. Idempotent; semua tiket lama tetap valid dan tidak berubah. Dipasang di initdb `docker-compose.yml`, tetapi initdb hanya jalan saat volume pertama dibuat — **database yang sudah ada wajib menjalankannya manual SEBELUM backend baru naik** (list/create/edit bug dan import menyebut tabel ini, jadi tanpa migrasi Bugs Incident gagal `500`) |
 
 ---
@@ -992,3 +1097,4 @@ docker exec pt_postgres psql -U postgres -d product_tracker -f /path/to/migratio
 | 17 Nov 2026 | 3.23 | **Type tiket Bugs Incident bisa diatur** (3.9): daftar Type tidak lagi tetap `bug`/`inquiry` — Super Admin (`settings.update`) menambah, mengganti nama/warna/urutan, dan menghapus Type lewat **Admin → Bug Types** (`/settings/bug-types`) atau tombol **Atur Type** di tab Bugs; user lain hanya memilih. Dropdown Type di form, filter Type, badge Type di tabel, Export MD, dan Import CSV (cocok ke `code` atau nama Type) memakai daftar ini. Endpoint baru `/api/bug-types` (GET: `bugs.access` atau `settings.update`; tulis: `settings.update`); `GET /api/bugs` menambah `type_name`/`type_color`. Type yang dipakai tiket dan Type bawaan `bug` tidak bisa dihapus (`409`). `migration_v31.sql`: tabel `bug_types`, FK `bugs.type` → `bug_types(code)` menggantikan CHECK — **wajib dijalankan manual di database yang sudah ada sebelum backend baru naik** |
 | 17 Nov 2026 | 3.24 | **Status In Review tidak dihitung terlambat** (3.1, 3.2, 3.3, 3.9, dan C-Level Dashboard): item Backlog dan Leader Task berstatus `in_review` tidak lagi menandai tanggal merah/ikon peringatan dan tidak masuk hitungan Delayed (Dashboard stats + daftar Delayed Items, My Tasks, Epic Board, C-Level, tulisan TERLAMBAT di Export MD). Di Bugs Incident, stage `ready_to_test` (padanan In Review: perbaikan selesai, menunggu QA) ikut dikecualikan dari tanggal merah selain `done`. QA Test Case tidak berubah (tidak punya status in review). Tanpa migrasi database — cukup deploy backend dan frontend baru |
 | 18 Nov 2026 | 3.25 | **Stage Bugs Incident bisa diatur + Buat Backlog dari tiket Improvement** (3.9): Super Admin menambah Stage baru (nama/warna/urutan + flag selesai / tidak terlambat) lewat **Admin → Bug Stages** atau tombol **Atur Stage**; 6 Stage bawaan tidak bisa dihapus dan perilakunya terkunci. Dashboard, kartu Bugs per Feature (Bugs & QA Dashboard), filter, sort, dan Import CSV mengikuti daftar Stage; pesan log/notifikasi memakai nama Stage. Type `improvement` kini bawaan; tiket bertype itu mendapat tombol **Buat kartu Backlog** (story/backlog; judul, prioritas, assignee, deadline disalin; sekali per tiket, bug tetap ada, penanda + dialog + banner). Endpoint baru `/api/bug-stages`, `POST /api/bugs/:id/convert-to-backlog`; `GET /api/bugs` menambah `stage_name`/`stage_color`/`stage_is_closed`/`stage_not_late`/`converted_backlog_*`; `bugsByFeature` kini `counts` per kode Stage + `bugStages`. Buat Backlog juga menyalin lampiran, mencatat pelapor asli di Catatan kartu, dan tersedia di header modal Edit Bug (kiri Salin link). `migration_v32.sql` — **wajib dijalankan manual di database yang sudah ada sebelum backend baru naik** |
+| 19 Nov 2026 | 3.26 | **Management Dashboard + Add Task di My Tasks** (3.3, 3.6, 3.18): menu baru **Home → Management** (`/management`, permission `management_dashboard.view`, default Super Admin/Manager/Commissioner; ketiganya melihat semua produk di dashboard ini). Satu halaman per produk: **Sprint Aktif** (pilih sprint atau "–", progress), **Features** (Status, **Target** tanggal, Progress % dari item Backlog terhubung), **Open Item · Minggu Ini** (Backlog, My Task, QA, Bug: terbuka + selesai minggu ini, status bisa diubah langsung), dan **Minggu Lalu** (minggu yang dibekukan otomatis tiap Senin 00:00 WIB, baca-saja, pencatatan dimulai minggu fitur dipasang — minggu sebelumnya dibiarkan kosong tanpa estimasi; chip 1–4 minggu lalu + kalender bernomor minggu ala Google Calendar dengan pilihan bulan & tahun). Kolom **PO Remarks** (ekspektasi selesai, diisi manual, ikut ke minggu berikutnya sampai diganti) dan **Catatan Product Owner** per minggu di bawah kedua tabel; yang mengisi Owner produk, Manager, Super Admin. Produk dipilih dari daftar **Products** di sidebar Home (atau header). Role PO mendapat akses dashboard. Detail Backlog menampilkan **Task Pribadi Terkait** (info saja). **My Tasks → Add Task**: task pribadi dengan produk wajib (dropdown + cari) dan relasi opsional ke item Backlog (rujukan, bukan konversi; tidak masuk sprint/progress). Form Feature dapat field **Target (tanggal)**. KPI, insight, grafik tren, dan panel roadmap dari spesifikasi mentor ditunda. `migration_v33.sql` wajib dijalankan sebelum backend baru |

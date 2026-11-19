@@ -460,3 +460,40 @@ Fitur baru (PRD 3.9, v3.25). **Butuh `migration_v32.sql`** (tabel `bug_stages`, 
 - ✅ Form bersih → konfirmasi (menyebut lampiran) → modal menutup, toast "Kartu Backlog … dibuat dari … (1 lampiran disalin)", baris tabel bertanda hijau; membuka ulang modal: header menampilkan "Di Backlog: PB-xxx" tanpa tombol Buat Backlog
 - ✅ Lampiran bug ikut ke kartu (file fisik terpisah); catatan kartu memuat baris "Dilaporkan oleh"
 - ⚠️ Feature bug (tabel `features`) tidak bisa ditautkan ke Impacted Features Backlog (roadmap); ditulis di notes kartu
+
+## 37. Management Dashboard + Add Task di My Tasks
+
+Fitur baru (PRD 3.3, 3.6, 3.18, v3.26). **Butuh `migration_v33.sql`** (riwayat status + trigger, `features.target_date`, `personal_tasks`, `weekly_snapshots`/`weekly_snapshot_items`, `open_item_remarks`, `weekly_notes`, permission `management_dashboard.view` termasuk role PO). Diuji di stack Docker lokal (:8500) lewat Chrome headless (CDP) sebagai Super Admin, Product Owner (Budi) dan Commissioner (Sarah), 19 Nov 2026.
+
+- ✅ Migrasi pada DB lokal (backup dulu): dijalankan dua kali di DB percobaan tanpa duplikat; trigger task pribadi (completed_at terisi saat Done, kosong lagi saat dibuka ulang, riwayat status tercatat, hapus → riwayat ikut terhapus)
+- ✅ Menu **Management** paling atas di Home; tidak tampil untuk Developer
+- ✅ Header: pilihan Produk (Super Admin & Commissioner: Finance Dashboard, HRIS Portal, Sales CRM), "Data per …", tombol muat ulang
+- ✅ **Sprint Aktif**: default sprint aktif ("HRS Sprint 2 · 14 Okt – 27 Okt 2026 (aktif)"), progress 59%, "1 dari 7 item kerja selesai", keterangan merah "Lewat 23 hari dari tanggal selesai"; pilihan "–" tersedia
+- ✅ **Features**: kolom No / Feature / Status / Target / Progress; fitur Done = 100%; jumlah item Backlog terhubung tampil di bawah nama
+- ✅ **Open Item · Minggu Ini** (label Live): 20 baris HRIS dari 4 sumber, chip filter per sumber dengan jumlah, ringkasan "20 terbuka · 0 selesai minggu ini · 7 lewat deadline"; task HRS-2-S2 menjorok di bawah HRS-2; Bug progress "—"; QA "Belum Dijalankan" + tanda draft
+- ✅ Status bisa diubah di minggu ini (Backlog, Bug, My Task) untuk Super Admin; Commissioner hanya melihat (0 dropdown aktif) karena tidak punya izin ubah di modul asalnya; QA selalu baca-saja
+- ✅ **Minggu Lalu** (versi awal, saat 4 minggu terakhir masih diestimasi): default "Minggu lalu · 9 – 15 Nov 2026 (estimasi)", badge **Estimasi**, tanpa dropdown status; memilih minggu tertua mengubah URL `?week=2026-10-26` dan isi tabel
+- ✅ **My Tasks → Add Task**: tombol merah kanan atas; form Judul / Produk / Item Backlog terkait (26 opsi, bisa dicari) / Status / Deadline / Catatan + keterangan "bukan Backlog"; simpan → toast "Task ditambahkan", baris berlabel **Pribadi**, "HRS-2 terkait", tipe pribadi, prioritas & sprint "—"
+- ✅ Task pribadi baru langsung muncul di Management Dashboard (sumber My Task, PIC Admin)
+- ✅ **Detail Backlog → Task Pribadi Terkait**: item yang dirujuk task pribadi menampilkan panel info (judul, pemilik atau "Anda", deadline, status) di atas Aktivitas; item tanpa task terkait tidak menampilkan panel; catatan pribadi tidak ikut tampil; assignee dan progress item tidak berubah
+- ✅ **Products → Features**: form Feature punya field **Target (tanggal)**; tanggal tampil di daftar feature dengan ikon target
+- ✅ **Pilih produk dari sidebar:** saat di Management, sidebar Home menampilkan **Products** (Finance Dashboard, HRIS Portal, Sales CRM); klik Sales CRM → `?product=8` dan header ikut berganti; produk default juga tersorot. Dashboard dan My Tasks tidak menampilkan daftar produk; daftar Products di Planning/Quality tetap sama
+- ✅ Pilihan Produk di header dan di **Add Task** sekarang dropdown + cari ("hris" → HRIS Portal, "sales" → Sales CRM); setelah memilih produk, Item Backlog terkait aktif
+- ✅ Kartu **Minggu Ini**: judul "W47 · 16 – 22 Nov 2026 · Live"; kolom baru **PO Remarks**; ringkasan menambah "1 lewat ekspektasi"
+- ✅ **PO Remarks** (Budi, Owner HRIS): klik "+ Isi remark" → popover Ekspektasi selesai + Keterangan (penghitung 0/300) → Simpan → sel menampilkan "27 Nov 2026" + keterangan, popover tertutup. Remark dari minggu lalu tampil dengan "dari W46"; tanggal lewat dan item belum selesai berwarna merah dengan "· lewat"
+- ✅ **Catatan Product Owner** di bawah kedua tabel: "Tulis catatan" → isi → Simpan → teks + "Terakhir diubah oleh Budi Santoso · tanggal"; catatan minggu lalu tetap tampil saat minggu itu dibuka dan masih bisa diubah
+- ✅ Kartu **Minggu Lalu**: chip filter sumber hilang, semua item tampil; chip **Minggu lalu W46 / 2 minggu lalu W45 / 3 minggu lalu W44 / 4 minggu lalu W43** (W43 nonaktif di data lokal karena produk dibuat 28 Okt); klik "2 minggu lalu" → `?week=2026-11-02`
+- ✅ **Pencatatan mulai minggu ini** (keputusan mentor): data estimasi lama dihapus; kartu Minggu Lalu kosong dengan keterangan "Pencatatan mingguan dimulai W47 (16 – 22 Nov 2026); minggu sebelumnya tidak dicatat. Belum ada minggu yang selesai…", tanpa kalender/chip
+- ✅ Simulasi awal pencatatan W46: chip "Minggu lalu W46" aktif, W45/W44/W43 nonaktif dengan keterangan "Sebelum pencatatan mingguan dimulai (W46)"; di kalender baris W44–W45 abu-abu dengan keterangan yang sama, legenda "Pencatatan dimulai W46 · 9 – 15 Nov 2026"
+- ✅ **Pilih bulan & tahun** di kalender: dropdown Bulan (Januari–Desember) dan Tahun; pilih Februari → baris W5–W10 tanpa menutup kalender; kembali ke November, klik W46 → `?week=2026-11-09`
+- ✅ **Kalender minggu** (tombol "W45 · 2 – 8 Nov 2026", diuji saat data estimasi masih ada): November 2026, baris W44–W49 dengan nomor minggu di kolom abu-abu kiri, W45 tersorot, W47 (minggu ini) dan sesudahnya abu-abu, hari ini dilingkari merah, nomor minggu Estimasi kuning; panah ke Oktober 2026 (W40–W45); klik baris W46 → `?week=2026-11-09`; Escape menutup
+- ✅ Ganti minggu tidak membuat halaman melompat (tabel lama tampil pudar sampai data baru datang)
+- ✅ Commissioner (Sarah): remark dan catatan terlihat, tetapi tidak ada tombol "Isi remark" maupun "Tulis/Ubah catatan"
+- ✅ Tabel muat di layar 1440 px tanpa geser ke samping (judul item panjang dipotong, judul lengkap saat hover)
+- ✅ Tidak ada error JavaScript di console selama uji
+- 🧑 Cek dengan Owner produk di kantor: isi remark minggu ini, lalu Senin depan pastikan remark ikut ("dari W…") dan minggu lalu tetap menunjukkan remark lama
+- 🧑 **Production:** jalankan `backend/db/migration_v33.sql` manual SEBELUM backend baru naik (lewat mentor); lalu rebuild backend + frontend. Saat backend pertama kali naik, minggu itu dicatat sebagai awal pencatatan; minggu sebelumnya kosong (tanpa estimasi)
+- 🧑 Cek Senin berikutnya (23 Nov 2026): minggu yang baru lewat (W47) tersimpan otomatis tanpa label Estimasi dan muncul sebagai "Minggu lalu"; chip minggu dan tombol kalender muncul (2/3/4 minggu lalu nonaktif "Sebelum pencatatan mingguan dimulai"), dropdown Bulan & Tahun bisa dipakai, PO Remarks dan catatan W47 ikut tampil
+- ⚠️ Riwayat status sebelum v33 adalah perkiraan dari log teks; perubahan status lewat jalur yang tidak menulis log (mis. import) hanya terlihat sebagai satu perubahan di `updated_at`
+- ⚠️ Minggu beku menyimpan judul, PIC, dan deadline seperti saat dibekukan (tidak punya riwayat); status dan progress per akhir minggu
+- ⚠️ Ditunda: kartu KPI, insight otomatis, grafik tren, panel roadmap, tombol bekukan manual
