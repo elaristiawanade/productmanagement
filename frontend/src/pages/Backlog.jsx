@@ -715,6 +715,13 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
         </div>
       )}
 
+      {/* Personal tasks that relate to this item (info only; hidden when there are none) */}
+      {item?.id && (
+        <div className="col-span-2 empty:hidden">
+          <RelatedPersonalTasks itemId={item.id} />
+        </div>
+      )}
+
       {/* Activity + Comments — only when editing */}
       {item?.id && (
         <div className="col-span-2">
@@ -731,6 +738,42 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
         )}
       </div>
     </form>
+  );
+}
+
+/** Info only: personal tasks (from My Task → Add Task) that point at this item. Changes nothing on the item. */
+function RelatedPersonalTasks({ itemId }) {
+  const { user } = useAuth();
+  const [tasks, setTasks] = useState([]);
+
+  useEffect(() => {
+    let alive = true;
+    client.get(`/personal-tasks/by-item/${itemId}`, { silent: true })
+      .then(res => { if (alive) setTasks(res.data || []); })
+      .catch(() => { if (alive) setTasks([]); });
+    return () => { alive = false; };
+  }, [itemId]);
+
+  if (tasks.length === 0) return null;
+  return (
+    <div className="border-t border-slate-100 pt-4">
+      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+        Task Pribadi Terkait <span className="font-normal normal-case text-slate-400">({tasks.length})</span>
+      </p>
+      <p className="text-xs text-slate-400 mb-3">Catatan kerja pribadi yang menunjuk ke item ini. Tidak mengubah assignee maupun progress item.</p>
+      <div className="space-y-1.5">
+        {tasks.map(t => (
+          <div key={t.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200">
+            <span className="text-sm text-slate-800 truncate flex-1" title={t.title}>{t.title}</span>
+            <span className="text-xs text-slate-500 shrink-0">{t.owner_id === user?.id ? 'Anda' : t.owner_name}</span>
+            {t.deadline && <span className={`text-xs shrink-0 ${t.is_delayed ? 'text-red-600 font-medium' : 'text-slate-400'}`}>
+              {format(parseISO(String(t.deadline).slice(0, 10)), 'd MMM', { locale: localeId })}
+            </span>}
+            <StatusBadge status={t.status} />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

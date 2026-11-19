@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Pencil, Trash2, Package, ExternalLink, ChevronDown, ChevronUp, Map } from 'lucide-react';
+import { Plus, Pencil, Trash2, Package, ExternalLink, ChevronDown, ChevronUp, Map, Target } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import client from '../api/client';
 import { useDeepLink } from '../utils/deepLink';
@@ -444,6 +444,9 @@ export default function Products() {
                                   <StatusBadge status={f.status} size="xs" />
                                   <PriorityBadge priority={f.priority} />
                                   <span className="text-xs text-slate-400">{f.target_release || '—'}</span>
+                                  <span className="inline-flex items-center gap-1 text-xs text-slate-500 tabular-nums w-24 shrink-0" title="Target (tanggal), tampil di Management Dashboard">
+                                    {f.target_date && <><Target className="w-3 h-3 shrink-0" />{format(parseISO(String(f.target_date).slice(0, 10)), 'dd MMM yyyy')}</>}
+                                  </span>
                                   <div className="flex items-center gap-1.5 w-24 shrink-0">
                                     <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                                       <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${pct2}%` }} />
@@ -661,7 +664,7 @@ function EpicForm({ epic, productId, onSave, onClose }) {
 
 // ─── FeatureForm ──────────────────────────────────────────────────────────────
 function FeatureForm({ feature, productId, users, epics, onSave, onClose }) {
-  const [form, setForm] = useState({ product_id: feature?.product_id || productId, epic_id: feature?.epic_id || '', code: feature?.code || '', name: feature?.name || '', owner_id: feature?.owner_id || '', status: feature?.status || 'not_started', priority: feature?.priority || 'medium', target_release: feature?.target_release || '', is_roadmap_item: feature?.is_roadmap_item || false });
+  const [form, setForm] = useState({ product_id: feature?.product_id || productId, epic_id: feature?.epic_id || '', code: feature?.code || '', name: feature?.name || '', owner_id: feature?.owner_id || '', status: feature?.status || 'not_started', priority: feature?.priority || 'medium', target_release: feature?.target_release || '', target_date: feature?.target_date ? String(feature.target_date).slice(0, 10) : '', is_roadmap_item: feature?.is_roadmap_item || false });
   const [saving, setSaving] = useState(false);
   const save = async (e) => {
     e.preventDefault(); setSaving(true);
@@ -680,6 +683,7 @@ function FeatureForm({ feature, productId, users, epics, onSave, onClose }) {
       <div><label className="label">Status</label><select className="select" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>{['not_started','in_development','testing','released','on_hold'].map(s => <option key={s} value={s}>{s.replace('_',' ')}</option>)}</select></div>
       <div><label className="label">Prioritas</label><select className="select" value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>{['critical','high','medium','low'].map(p => <option key={p} value={p}>{p}</option>)}</select></div>
       <div><label className="label">Target Release</label><input className="input" value={form.target_release} onChange={e => setForm(f => ({ ...f, target_release: e.target.value }))} placeholder="v1.0" /></div>
+      <div><label className="label">Target (tanggal)</label><input type="date" className="input" value={form.target_date} onChange={e => setForm(f => ({ ...f, target_date: e.target.value }))} /><p className="text-[11px] text-slate-400 mt-1">Tampil sebagai kolom Target di Management Dashboard</p></div>
       <div className="col-span-2 flex items-center gap-2 pt-1">
         <input id="is_roadmap_item" type="checkbox" className="w-4 h-4 rounded accent-indigo-600" checked={form.is_roadmap_item}
           onChange={e => setForm(f => ({ ...f, is_roadmap_item: e.target.checked }))} />

@@ -60,11 +60,14 @@ public class FeatureController {
         if (body.get("product_id") == null || body.get("code") == null || body.get("name") == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "product_id, code, name wajib"));
         }
+        java.sql.Date targetDate;
+        try { targetDate = toSqlDate(body.get("target_date")); }
+        catch (IllegalArgumentException e) { return invalidTargetDate(); }
         try {
             boolean isRoadmapItem = Boolean.TRUE.equals(body.get("is_roadmap_item"));
             Map<String, Object> row = jdbc.queryForMap(
-                "INSERT INTO features (product_id, epic_id, code, name, owner_id, status, priority, target_release, is_roadmap_item) " +
-                "VALUES (?,?,?,?,?,?,?,?,?) RETURNING *",
+                "INSERT INTO features (product_id, epic_id, code, name, owner_id, status, priority, target_release, is_roadmap_item, target_date) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?) RETURNING *",
                 toLong(body.get("product_id")),
                 toLong(body.get("epic_id")),
                 body.get("code"),
@@ -73,7 +76,8 @@ public class FeatureController {
                 orDefault(body.get("status"), "not_started"),
                 orDefault(body.get("priority"), "medium"),
                 body.get("target_release"),
-                isRoadmapItem
+                isRoadmapItem,
+                targetDate
             );
             if (isRoadmapItem) syncRoadmapFromFeature(row);
             return ResponseEntity.status(201).body(row);
@@ -93,10 +97,18 @@ public class FeatureController {
             return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk mengubah feature"));
         }
         boolean isRoadmapItem = Boolean.TRUE.equals(body.get("is_roadmap_item"));
+        // target_date (the Management Dashboard's "Target") is only touched when the body carries it, so a caller
+        // that does not know the field (an old browser tab still on the previous frontend) keeps the stored date.
+        boolean targetSent = body.containsKey("target_date");
+        java.sql.Date targetDate;
+        try { targetDate = toSqlDate(body.get("target_date")); }
+        catch (IllegalArgumentException e) { return invalidTargetDate(); }
         int updated = jdbc.update(
-            "UPDATE features SET name=?, epic_id=?, owner_id=?, status=?, priority=?, target_release=?, is_roadmap_item=? WHERE id=?",
+            "UPDATE features SET name=?, epic_id=?, owner_id=?, status=?, priority=?, target_release=?, is_roadmap_item=?, " +
+            "target_date = CASE WHEN ?::boolean THEN ?::date ELSE target_date END WHERE id=?",
             body.get("name"), toLong(body.get("epic_id")), toLong(body.get("owner_id")),
-            body.get("status"), body.get("priority"), body.get("target_release"), isRoadmapItem, id
+            body.get("status"), body.get("priority"), body.get("target_release"), isRoadmapItem,
+            targetSent, targetDate, id
         );
         if (updated == 0) return ResponseEntity.status(404).body(Map.of("error", "Feature tidak ditemukan"));
         Map<String, Object> row = jdbc.queryForMap("SELECT * FROM features WHERE id=?", id);
@@ -154,6 +166,18 @@ public class FeatureController {
     @SuppressWarnings("unchecked")
     private Map<String, Object> toMap(Object o) {
         return o instanceof Map ? (Map<String, Object>) o : null;
+    }
+
+    /** Optional date from the form's date input ("yyyy-MM-dd"); blank = none; anything else is rejected (400). */
+    private java.sql.Date toSqlDate(Object v) {
+        if (v == null) return null;
+        String s = v.toString().trim();
+        if (s.isEmpty()) return null;
+        return java.sql.Date.valueOf(s.length() > 10 ? s.substring(0, 10) : s);
+    }
+
+    private ResponseEntity<?> invalidTargetDate() {
+        return ResponseEntity.badRequest().body(Map.of("error", "Format Target tidak valid (YYYY-MM-DD)"));
     }
 
     private Object orDefault(Object v, Object d) {

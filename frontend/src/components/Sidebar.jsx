@@ -35,18 +35,24 @@ export function IconRail({ activeKey }) {
 export default function Sidebar({ section, onCollapse }) {
   const { can } = useAuth();
   const location = useLocation();
-  const [products, setProducts] = useState([]);
-  // Products shortcut list (Planning + Quality): each opens the page filtered to that product —
-  // Backlog in Planning; QA Module or Bugs Incident (whichever is open, QA by default) in Quality
+  // Products shortcut list: each opens the page filtered to that product — Backlog in Planning; QA Module or
+  // Bugs Incident (whichever is open, QA by default) in Quality; the Management Dashboard in Home (only while it is open)
   const productBase = section.key === 'plan' ? '/backlog'
     : section.key === 'quality' ? (location.pathname === '/bugs' ? '/bugs' : '/qa')
+    : section.key === 'home' && location.pathname === '/management' ? '/management'
     : null;
   const activeProduct = productBase && location.pathname === productBase ? new URLSearchParams(location.search).get('product') : null;
+  // The dashboard has its own product list (Commissioner sees every product there), so lists are kept per source.
+  const productSource = productBase === '/management' ? '/management/products' : '/products';
+  const [productLists, setProductLists] = useState({});
+  const products = productLists[productSource] || [];
 
   useEffect(() => {
-    if (!productBase || products.length) return;
-    client.get('/products').then(r => setProducts(r.data || [])).catch(() => {});
-  }, [productBase, products.length]);
+    if (!productBase || productLists[productSource]) return;   // fetched once per source (an empty list counts)
+    client.get(productSource, { silent: true })
+      .then(r => setProductLists(m => ({ ...m, [productSource]: r.data || [] })))
+      .catch(() => {});
+  }, [productBase, productSource, productLists]);
 
   // Active page: red tint + thin red bar on the left (brand accent, same red as the primary buttons)
   const navCls = (on) => `relative flex items-center gap-2.5 h-8 px-2.5 rounded-lg text-[13.5px] whitespace-nowrap transition-colors

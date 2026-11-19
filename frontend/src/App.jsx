@@ -16,6 +16,7 @@ import EpicBoard  from './pages/EpicBoard';
 import MyTask     from './pages/MyTask';
 import Profile    from './pages/Profile';
 import CLevel     from './pages/CLevel';
+import ManagementDashboard from './pages/ManagementDashboard';
 import NotificationSettings from './pages/NotificationSettings';
 import Clients    from './pages/Clients';
 import ClientSettings from './pages/ClientSettings';
@@ -37,7 +38,7 @@ function PrivateRoute({ children }) {
   return user ? children : <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
 }
 
-// Route-level gate for fully-private modules (Users, Bugs, C-Level, Settings, Import Jira).
+// Route-level gate for fully-private modules (Users, Bugs, C-Level, Management, Settings, Import Jira).
 // Other modules stay open-read for any logged-in user — see plan §2/§6.
 function RequirePermission({ module, action, children }) {
   const { can } = useAuth();
@@ -70,6 +71,7 @@ function AppRoutes() {
         <Route path="my-tasks"      element={<MyTask />} />
         <Route path="clients"      element={<RequirePermission module="clients" action="access"><Clients /></RequirePermission>} />
         <Route path="c-level"      element={<RequirePermission module="c_level" action="access"><CLevel /></RequirePermission>} />
+        <Route path="management"   element={<RequirePermission module="management_dashboard" action="view"><ManagementDashboard /></RequirePermission>} />
         <Route path="import/jira"  element={<RequirePermission module="import" action="run"><JiraImport /></RequirePermission>} />
         <Route path="profile"      element={<Profile />} />
         <Route path="settings/notifications" element={<RequirePermission module="settings" action="update"><NotificationSettings /></RequirePermission>} />
