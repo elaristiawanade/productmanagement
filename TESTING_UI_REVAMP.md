@@ -497,3 +497,28 @@ Fitur baru (PRD 3.3, 3.6, 3.18, v3.26). **Butuh `migration_v33.sql`** (riwayat s
 - ⚠️ Riwayat status sebelum v33 adalah perkiraan dari log teks; perubahan status lewat jalur yang tidak menulis log (mis. import) hanya terlihat sebagai satu perubahan di `updated_at`
 - ⚠️ Minggu beku menyimpan judul, PIC, dan deadline seperti saat dibekukan (tidak punya riwayat); status dan progress per akhir minggu
 - ⚠️ Ditunda: kartu KPI, insight otomatis, grafik tren, panel roadmap, tombol bekukan manual
+
+## 38. Sort & scroll tabel Roadmap + Related Card di Backlog
+
+Fitur baru (PRD 3.2, 3.6, v3.27). **Tanpa migrasi.** Diuji 19 Nov 2026 di headless Chrome (Super Admin dan PO Budi) + API.
+
+**Products → Roadmap**
+- ✅ Lebar 1100 px dengan sidebar terbuka: tabel tidak lagi terjepit (sebelumnya "Absensi GPS" dan badge "On Progress" terlipat 2 baris, kolom Aksi terpotong); badge status satu baris dan tabel bisa digeser ke kanan sampai Aksi
+- ✅ Lebar 390 px (HP): tabel digeser di dalam kartunya, halaman sendiri tidak melebar
+- ✅ Klik **Fitur**: A–Z (panah naik, `aria-sort`), klik lagi Z–A, klik ketiga kembali ke urutan awal
+- ✅ **Status** urut alur Planned → On Progress → Testing → Active (bukan abjad); **Versi** natural v1.0 → v1.3, kosong di bawah; **Target Rilis** turun Februari 2027 → …, kosong tetap di bawah; **Produk** A–Z
+- ✅ Filter Produk "Sales CRM" + sort Fitur bekerja bersamaan; kartu ringkasan status tidak berubah
+- ✅ Deskripsi dipotong satu baris, teks lengkap saat hover
+
+**Backlog → Related Card**
+- ✅ List: HRS-3 menampilkan chip merah 🐞1 + chip test case 1 di samping chip parent; tooltip "Related Card: 1 tiket Bugs Incident (1 masih open): BUG-001 · 1 QA test case"
+- ✅ Item yang semua tiketnya closed (CRM-1, filter Selesai): chip bug abu-abu, tooltip "(semua closed)"
+- ✅ Item tanpa relasi tidak punya chip; di detail section **Related Card (0)** tertutup, saat dibuka "Belum ada kartu terkait…"
+- ✅ Klik chip → modal item terbuka dengan **Related Card (2) · 1 tiket masih open** sudah terbuka dan di-scroll ke tampilan: grup Bugs Incident (Type BUG, BUG-001, judul, Stage In Progress) dan QA Test Case (TC-002, hasil run terakhir Fail)
+- ✅ Klik baris BUG-001 → `/bugs` dengan form tiket itu terbuka; baris test case menaut ke `/qa?case=2`
+- ✅ Board: chip ada di baris di bawah judul (bersama chip parent); baris info kartu (prioritas · pt · deadline · avatar) tetap satu baris di 14 kartu yang punya chip
+- ✅ Section lama (Tasks & Bugs, Aktivitas & Komentar) tetap tampil; Task Pribadi Terkait tidak berubah
+- ✅ Mode gelap: chip, badge Type/Stage, dan teks section terbaca
+- ✅ PO Budi (tanpa akses Bugs Incident): chip terlihat; di section, baris BUG-001 tampil tanpa link (tooltip "Butuh akses modul Bugs Incident…"), test case tetap bisa diklik
+- 🧑 **Production:** rebuild backend + frontend (lewat mentor); tidak ada migrasi
+- ⚠️ Chip hanya bisa diklik oleh user yang boleh membuka/mengedit item dari daftar Backlog (aturan lama); user lain melihat chip sebagai penanda dengan tooltip
