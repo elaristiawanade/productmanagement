@@ -2,7 +2,7 @@
 
 Tujuan: memastikan semua fitur & fungsi versi **original** (commit `1ee9fbf`, sebelum revamp) masih ada dan bekerja di UI **baru** (branch `ui-revamp`, http://localhost:8500).
 
-Legenda: ✅ sudah diuji otomatis & lulus · 🧑 perlu dites manual · ⚠️ catatan
+Legenda: ✅ sudah diuji otomatis & lulus · 🧑 perlu dites manual · ⬜ belum · ⚠️ catatan
 
 ## Cara pengujian otomatis (2 lapis)
 
@@ -18,6 +18,24 @@ Legenda: ✅ sudah diuji otomatis & lulus · 🧑 perlu dites manual · ⚠️ c
   1. **Test run tanpa memilih Sprint → gagal 500 "Internal server error"** (`sprint_id` dikirim `''`, backend `Long.parseLong("")`). Dengan Sprint dipilih berhasil.
   2. **Menghapus komentar di modal Backlog menutup modal** (perilaku sama di original).
   3. PRD 3.5 menulis kartu Kanban Sprint punya dropdown status inline — di kedua versi **tidak ada**; PRD yang usang.
+
+## Status merge ke `main` (dicek 20 Nov 2026)
+
+"Sudah di main" = kodenya sudah di-merge mentor ke branch `main`. **Belum tentu sudah di production**: deploy dan migrasi tetap lewat mentor (lihat butir 🧑 **Production** di tiap bagian).
+
+| Bagian | Isi | PR | Status |
+|---|---|---|---|
+| §1–§17 | Paritas UI revamp + status presence | #18 (2 Nov 2026) | ✅ sudah di main |
+| §18–§25 | Pagination & shortcut produk, Feature, Ctrl K menyeluruh, Type & Author tiket, lampiran Bugs/QA, status Epic/Story otomatis, toast kode baru | #21 (3 Nov 2026) | ✅ sudah di main |
+| §26–§29 | Roadmap Testing, tempel Ctrl+V, Client Management, Impacted Features & Share link | #24 (12 Nov 2026) | ✅ sudah di main |
+| §30 | Bugs per Feature | #26 (16 Nov 2026) | ✅ sudah di main |
+| §31–§33 | Export MD, Deadline Bugs/QA, Progress % | #27 (17 Nov 2026) | ✅ sudah di main |
+| §34–§35 | Bug Types, In Review tidak terlambat | #28 (17 Nov 2026) | ✅ sudah di main |
+| §36 | Bug Stages + Buat Backlog dari Improvement | #29 (18 Nov 2026) | ✅ sudah di main |
+| §37–§41 | Management Dashboard + Add Task, sort Roadmap + Related Card, bingkai terang + toggle tema, badge notifikasi tab, aksen merah dirapikan (PRD v3.26–v3.30) | #33 (20 Nov 2026) | ✅ sudah di main |
+| §42 | Link antar kartu, bar progress selalu hijau, perbaikan form basi (PRD v3.31) | — | ⬜ belum di-commit, belum di main |
+| §43 | Feature = master Roadmap, progress manual lewat status, progress produk = rata-rata Feature, `migration_v34.sql` (PRD v3.32) | — | ⬜ belum di-commit, belum di main (diuji user di lokal: oke) |
+| §44 | Open Item hanya pekerjaan yang masih dikerjakan + diperbarui otomatis 30 detik (PRD v3.33) | — | ⬜ belum di-commit, belum di main (diuji user di lokal: oke) |
 
 ---
 
@@ -526,7 +544,7 @@ Fitur baru (PRD 3.2, 3.6, v3.27). **Tanpa migrasi.** Diuji 19 Nov 2026 di headle
 
 ## 39. Bingkai terang ala ClickUp + toggle tema + aksen merah
 
-Perubahan tampilan saja (PRD 3.16, v3.28; dibuat 18 Nov 2026, sebelumnya PR #30 yang ditutup dan kini ikut PR bersama Management Dashboard). Tanpa perubahan backend/database.
+Perubahan tampilan saja (PRD 3.16, v3.28; dibuat 18 Nov 2026, sebelumnya PR #30 yang ditutup, lalu ikut PR #33 bersama Management Dashboard). Tanpa perubahan backend/database.
 
 - ✅ Top bar + icon rail abu terang (#F0F0F3), rail setinggi layar dengan logo PTAP di atas; sidebar per section dan area kerja putih
 - ✅ Mode gelap: bingkai hampir hitam; warna bingkai diambil dari token `frame*`/`side` yang diganti tema
@@ -571,3 +589,137 @@ Perubahan tampilan (PRD 3.16, v3.30). Frontend saja, **tanpa migrasi** dan tanpa
 - ✅ `vite build` lolos; tidak ada error di console di 11 halaman (Dashboard, Backlog, My Tasks, Products, Sprints, QA, Standup, C-Level, Management, Bugs, Bug Stages) maupun saat membuka detail Backlog dan panel item My Tasks di build Docker :8500; tidak ada data yang diubah (form Tambah Stage tidak disimpan)
 - ✅ **Diuji user di lokal (20 Nov 2026): oke** — progress abu-abu/hijau, hover merah, checkbox, dan highlight teks di mode terang dan gelap
 - 🧑 **Production:** rebuild frontend saja (lewat mentor); tidak ada migrasi
+- ⚠️ Warna bar progress diganti lagi di §42 (v3.31): kini **selalu hijau**, berapa pun persentasenya. Aksen merah lain di bagian ini tidak berubah
+
+## 42. Link antar kartu yang berelasi + bar progress selalu hijau + perbaikan form basi
+
+Fitur baru (PRD 3.2, 3.3, 3.5, 3.8, 3.9, 3.16, 3.18, v3.31). **Tanpa migrasi.** Backend hanya menambah kolom di SELECT dashboard (`recentFails` QA: `test_case_id`, `backlog_item_id`; `recentActivity`/`recentComments` Bugs: `bug_id`). Diuji 20 Nov 2026 di headless Chrome (CDP) di build Docker :8500 (sebagian juga di Vite dev) sebagai Admin, Manager, Developer (andi), dan user tanpa izin edit Backlog: **115 pengecekan, semua lulus** (kegagalan di tengah proses semuanya salah skrip tes, bukan bug aplikasi, dan sudah diulang sampai lulus). Setiap link diklik sampai kartu tujuannya benar-benar terbuka, bukan hanya dicek alamatnya.
+
+**Backlog — parent ↔ anak**
+- ✅ Epic HRS-100 terbuka dengan datanya sendiri, tanpa tombol parent, daftar Story-nya tampil
+- ✅ Klik Story anak → modal menampilkan judul dan tipe **Story itu sendiri** (sebelumnya data Epic tertinggal, lihat "Form basi" di bawah); di samping Parent Epic ada tombol **↗ Buka HRS-100**
+- ✅ Tombol Buka parent → Epic terbuka dengan datanya sendiri; `?product=7` tetap di URL; tanpa dialog bila form belum diubah
+- ✅ Task → tombol ke Story HRS-101 → Story terbuka dengan datanya sendiri; Task tidak punya section anak
+- ✅ Form diubah → konfirmasi sebelum pindah ke parent **maupun** anak; **Batal** tetap di kartu dengan isian yang diketik; isian dikembalikan ke nilai tersimpan → tanpa dialog; **OK** → pindah dan kartu tujuan menampilkan datanya sendiri
+- ✅ Modal ditutup saat data parent masih dimuat → modal tetap tertutup (tidak muncul lagi)
+- ✅ Tipe diganti sehingga Parent kosong (belum disimpan) → tombol parent hilang
+- ✅ Chip parent di **List**: link dengan judul parent di tooltip; klik membuka HRS-100 (bukan HRS-104 di baris itu), `?product=7` tetap. Chip di **Board** juga membuka parent. Klik baris di luar chip tetap membuka HRS-104
+- ✅ Modal **Detail Item** baca-saja (user tanpa izin edit): field nonaktif, tombol parent tetap bisa diklik, tanpa dialog; chip di daftar tampil sebagai penanda (bukan link)
+- ✅ **Task Pribadi Terkait** milik sendiri → My Tasks membuka task itu; dengan form Backlog yang sudah diubah → konfirmasi dulu, Batal tetap di kartu
+
+**My Tasks**
+- ✅ Baris tabel: "HRS-9 terkait" → Backlog HRS-9 (bukan form task); kode parent "HRS-100" → Backlog HRS-100; klik judul tetap membuka panel detail
+- ✅ Panel detail: kotak **Parent** membuka parent di Backlog
+- ✅ Form Edit Task pribadi: tombol **Buka KODE** di samping Item Backlog terkait; form diubah → konfirmasi (Batal tetap di My Tasks dengan isian); tanpa perubahan → langsung ke item di Backlog
+- ✅ `/my-tasks?ptask=ID` membuka form task pribadi itu; ID task orang lain / tidak ada → toast "Task pribadi tidak ditemukan — hanya pemiliknya yang bisa membukanya"
+
+**Sprints**
+- ✅ Kartu Kanban: judul adalah link ke item; klik badan kartu membuka item itu di Backlog
+- ✅ Epic Overview: item di bawah Epic membuka item itu di Backlog
+
+**QA Module**
+- ✅ Form TC-001: **Buka HRS-2** → `/backlog?item=54`; Backlog Item diganti (belum disimpan) → tombol hilang; form diubah → konfirmasi, Batal tetap di QA dengan isian; OK → Backlog HRS-2 dengan datanya sendiri; form tanpa perubahan → langsung tanpa dialog
+- ✅ Tombol **Buka** di samping Feature → Products membuka Edit Feature itu (diuji dengan test case sementara yang punya Feature, sudah dihapus; jumlah test case kembali 11)
+- ✅ Tabel Test Cases: sel **Item** → Backlog HRS-2; sel **Features** → Products Edit Feature; baris test case tidak ikut terbuka
+- ✅ Tabel Test Runs: setiap baris punya link Item yang membuka item yang cocok; judul test case membuka Edit Test Case
+- ✅ QA Dashboard → Recent Failures: judul test case membuka Edit Test Case, kode item → Backlog
+- ✅ Developer tanpa `qa.update` (andi): test case di Recent Failures dan Test Runs tampil sebagai teks biasa, link Item tetap ada dan membuka item di Backlog
+
+**Bugs Incident**
+- ✅ Form Bug: **Buka HRS-3** di samping Backlog Item → Backlog HRS-3 tanpa dialog bila belum diubah; form diubah → konfirmasi, Batal tetap; **Buka** di samping Feature → Products Edit Feature
+- ✅ Tabel Bugs: sel Item / Features menaut ke tujuannya, bug di baris itu tidak ikut terbuka; klik Item membuka item Backlog
+- ✅ Tab Progress: bug membuka Edit Bug; sel Item → Backlog item yang benar
+- ✅ Bugs Dashboard: baris Recent Activity dan Recent Comments membuka bugnya (komentar uji sementara sudah dihapus)
+
+**Management Dashboard**
+- ✅ Open Item: task pribadi milik sendiri → My Tasks membuka task itu
+- ✅ Manager melihat task pribadi Admin di Open Item **tanpa** link (hanya pemilik yang bisa membukanya)
+
+**Tab baru**
+- ✅ Ctrl+klik **Buka HRS-100** → kartu terbuka di tab baru, modal di tab asal tetap di HRS-101
+- ✅ Ctrl+klik link Item di tabel QA → tab baru, halaman QA tetap
+
+**Bar progress selalu hijau**
+- ✅ Semua bar progress hijau (`emerald-500`) berapa pun persentasenya: Backlog list, My Tasks, QA Test Cases (fail/blocked dulu merah/kuning), Dashboard (progress produk), Products (produk + feature), Sprints (sprint + Epic yang dulu ungu), Management, Standup (tab Riwayat)
+- ⚠️ Sengaja tidak diubah di kode karena bukan bar progress: kapasitas Dashboard (Team Workload / User Occupation), kepatuhan Standup, bar jumlah di C-Level, badge hasil run QA
+
+**Form basi (perbaikan bug lama)**
+- ✅ Masalahnya: membuka record lain saat modal masih terbuka (Ctrl K, link notifikasi, link antar kartu) membuat form tetap berisi record lama; bila disimpan, data lama menimpa record yang baru dibuka. Dibuktikan dulu (repro), lalu diperbaiki dengan `key` per record di 10 form
+- ✅ Backlog Item, Test Case (TC-001 → TC-002 lewat `?case=`), dan Bug (pindah lewat `?bug=`): form menampilkan record yang baru dibuka
+- ✅ Products: edit Feature, tutup, lalu **+ Feature** → form kosong; **+ Epic** → form kosong
+- ✅ Users: `?new=user` / `?new=role` → form kosong; Edit User menampilkan user yang benar
+- ✅ Repro pindah record A → B lewat deep link saat modal terbuka, 9 form: Produk, Epic, Feature, Roadmap, User, Role, Departemen, serta Client dan Leader Task (dua terakhir memang sudah benar) — semuanya menampilkan B
+
+**Umum**
+- ✅ Build frontend lolos; tidak ada error di console (hanya peringatan "future flag" React Router yang sudah ada sebelumnya)
+- ✅ Data uji tidak berubah: tombol Simpan tidak diklik di form mana pun; test case dan komentar sementara sudah dihapus; tidak ada proses uji yang tertinggal
+- ⬜ **Uji user di lokal** — klik tombol/link antar kartu di Backlog, My Tasks, Sprints, QA, Bugs, Management; cek bar progress hijau
+- ⬜ Simpan sekali di salah satu form (mis. Edit Bug atau Edit Item) — perbaikan `key` tidak menyentuh kode simpan, tapi saat uji otomatis tombol Simpan sengaja tidak diklik
+- 🧑 Tampilan HP (layar sempit) belum diuji untuk perubahan ini
+- 🧑 **Production:** rebuild backend + frontend (lewat mentor); tidak ada migrasi. Urutan bebas: frontend baru dengan backend lama tetap jalan (Recent Failures / Recent Activity / Recent Comments tampil sebagai teks biasa sampai backend baru naik)
+- ⚠️ Task pribadi hanya bisa dibuka pemiliknya (API `/api/personal-tasks` hanya mengembalikan task sendiri), jadi Super Admin pun tidak mendapat link ke task pribadi orang lain
+- ⚠️ Sengaja tanpa link: Impacted Features di Backlog (feature roadmap; untuk viewer deep link-nya hanya pindah tab), field Sprint, produk di Client Management, parent Leader Task (tidak tampil di UI)
+- ⚠️ User tanpa akses ke produk item melihat daftar anak kosong di detail item — aturan akses produk yang sudah ada, tidak diubah
+
+---
+
+## 43. Feature = master Roadmap + progress manual lewat status
+
+Perubahan (PRD 3.6, 3.18, v3.32), sesuai arahan mentor: Backlog **tidak** menjadi sumber persen Products/Features/Roadmap (Impacted Features hanya label relasi), persen diatur manual lewat status (+20% per tahap), Roadmap mengikuti Products & Features. **Butuh `migration_v34.sql`** (lebar `features.target_release`, pemasangan data lama, indeks unik). Diuji 20 Nov 2026 di stack Docker lokal (:8500): migrasi di database salinan (data tiruan B-Mata dari screenshot) dan di DB lokal, 29 pemeriksaan API, uji kemandirian dari Backlog, dan Chrome headless.
+
+**Migrasi — database salinan (11 item Roadmap B-Mata seperti screenshot + 4 Feature `v1.0`, plus kasus On Hold dan Offline)**
+- ✅ Pratinjau (`migration_v34_preview.sql`, read-only) menampilkan: 4 pasangan baru (Fixed Income, Foreign Exchange, Money Market, Repo), 7 Feature baru `BMTFT-5`…`BMTFT-11`, status lama `in_progress`/`done` yang dirapikan, dan progress produk sesudah migrasi (**B-Mata 56%**)
+- ✅ Hasil migrasi sama persis dengan pratinjau (BMT 56 · CRM 63 · FIN 47 · HRS 88)
+- ✅ **Versi Roadmap dipertahankan:** BMTFT-1…4 kini `Q4-26` di Feature dan Roadmap; bulan rilis dan deskripsi Roadmap tidak hilang
+- ✅ Roadmap Research → Feature Research (BMTFT-7, 9, 10, 11); Feature Not Started + Roadmap Offline → Feature Offline; Feature On Hold + Roadmap Testing → Roadmap tetap Testing (80%)
+- ✅ Dijalankan dua kali: kali kedua 0 perubahan (idempotent)
+- ✅ DB lokal: 20 Feature = 20 baris Roadmap, semua terhubung; ID baris Roadmap tidak berubah, kaitan Backlog tetap
+
+**API (29 pemeriksaan, lulus semua; data uji dihapus kembali)**
+- ✅ Feature tanpa kode → `HRSFT-n`, baris Roadmap Planned 20%; `GET /features` tidak lagi punya kolom poin Backlog
+- ✅ Tiap tahap: Research 40 → In Development/On Progress 60 → Testing 80 → Released/Active 100 → Offline 100 → Not Started/Planned 20
+- ✅ **On Hold** setelah Testing: Roadmap tetap Testing, progress tetap 80%, juga setelah edit lain; `GET /roadmap` membawa `feature_status` = on_hold
+- ✅ Nama/versi/target tanggal mengikuti; edit Feature tanpa mengubah tanggal tidak menghapus bulan Roadmap
+- ✅ Baris Roadmap terhubung: nama/status/versi/bulan dari request diabaikan, deskripsi tersimpan; DELETE → 409
+- ✅ Tambah Item Roadmap (Research, `Q4-26`) → Feature Research 40%, versi `Q4-26`, tanpa target tanggal; Roadmap Offline → Feature Offline 100%
+- ✅ **Progress produk = rata-rata Feature** (11 Feature HRS saat uji → 78%); Management Dashboard menampilkan progress yang sama per Feature, jumlah item Backlog tetap sebagai label
+- ✅ Kode otomatis berurutan berbeda; kode kembar → 409; produk tidak dikenal → gagal bersih; hapus Feature → baris Roadmap ikut terhapus
+
+**Kemandirian dari Backlog**
+- ✅ Dua item Backlog yang mengaitkan HRS-F4 dijadikan `done` langsung di DB: Done 7 → 9, tetapi progress HRS-F4 (100%) dan produk HRS (88%) **tidak berubah**. Status item dan riwayat statusnya dikembalikan (hanya `updated_at` dua item dummy itu yang tersentuh trigger)
+
+**Tampilan (Chrome headless)**
+- ✅ Kartu produk: "Item Backlog: 25 · Done: 7 · Progress 88%" (label "Items:" lama hilang), tooltip menjelaskan rata-rata Feature
+- ✅ Baris Feature: persen sesuai status, tooltip "Progress dari status … Tidak dihitung dari Backlog"; On Hold: "progress tetap di tahap terakhir"
+- ✅ Form Feature: 7 status dengan keterangan persen (Research dan Offline baru), checkbox roadmap lama hilang, kode boleh kosong
+- ✅ Roadmap: kolom **Progress** (bisa di-sort), kode Feature di bawah nama, penanda **ON HOLD** di samping status, banner menjelaskan aturan; tema gelap memakai palet oranye yang sudah dipetakan
+- ✅ Management Dashboard: hint "Progress diatur lewat status fitur … tidak dari Backlog", "N item Backlog terkait (label, tidak memengaruhi progress)"
+- ✅ **Uji user di lokal** (20 Nov 2026) — user menguji ubah status Feature, persen Feature/Roadmap/kartu produk, On Hold, dan Tambah Item Roadmap: oke
+- 🧑 Tampilan HP belum diuji
+- 🧑 **Production (lewat mentor):** (1) backup, (2) `migration_v34_preview.sql` → periksa bagian A–E, (3) `migration_v34.sql`, (4) rebuild backend + frontend. Migrasi harus SEBELUM backend baru naik
+- ⚠️ Angka progress produk berubah karena sumbernya ganti (B-Mata 95% dari Backlog → 56% dari Feature); beri tahu PO
+- ⚠️ Status Feature lama `in_progress`/`done` (seed/impor) diubah migrasi menjadi `in_development`/`released`
+
+---
+
+## 44. Open Item hanya pekerjaan yang masih dikerjakan + diperbarui otomatis
+
+Perubahan (PRD 3.18, v3.33). **Tanpa migrasi** (backend + frontend). Diuji 20 Nov 2026 di stack Docker lokal (:8500): 21 pemeriksaan end-to-end (API + data sementara di DB, dibersihkan lagi) dan Chrome headless.
+
+**Aturan yang tampil**
+- ✅ Tiga produk (HRS 19, CRM 9, FIN 6 item): tidak ada satu pun item In Review / Done / Pass / Skip / Ready to Test / Stage tertutup, dan tidak ada baris "selesai minggu ini"
+- ✅ Backlog: In Progress → **In Review hilang** → kembali In Progress **muncul lagi**; Done hilang; Blocked tampil
+- ✅ Story In Review disembunyikan, task di bawahnya yang masih In Progress tetap tampil **tanpa menjorok**
+- ✅ Bug: Ready to Test hilang → **Re-Open muncul lagi**; **Improvement tampil**; Done hilang
+- ✅ QA: Skip hilang, Fail tampil, Pass hilang
+- ✅ **Minggu Lalu** (minggu beku buatan, 12 baris campuran): hanya 6 yang masih dikerjakan tampil; task yang story-nya disembunyikan tanpa menjorok; **12 baris beku tetap utuh di database**
+- ✅ Data uji dikembalikan: status asli, riwayat status sementara, run QA, progress bug, dan snapshot uji dihapus; `tracking_start` kembali
+
+**Tampilan + real time (Chrome headless)**
+- ✅ Ringkasan "19 terbuka · 7 lewat deadline" (tanpa "selesai minggu ini"); tidak ada label **Selesai**; hint kartu menjelaskan aturan dan pembaruan otomatis
+- ✅ **Tanpa klik:** HRS-2 diubah ke In Review di luar halaman → hilang sendiri dari tabel setelah 24 detik (ringkasan 19 → 18); dikembalikan ke In Progress → muncul lagi setelah 30 detik
+- ✅ **Uji user di lokal** (20 Nov 2026) — user menguji Open Item (item In Review/Done hilang, muncul lagi saat dibuka kembali, pembaruan otomatis): oke
+- 🧑 Tampilan HP belum diuji
+- 🧑 **Production (lewat mentor):** rebuild backend + frontend; tidak ada migrasi. Bila Stage "Closed" di kantor ditandai *dihitung open* oleh Super Admin, ia akan tampil — saat ini tidak, jadi tersembunyi
+- ⚠️ Pembaruan otomatis paling lambat ±30 detik (polling, bukan push); hanya saat tab dibuka
+- ⚠️ Bila baris yang sedang diisi PO Remarks-nya hilang karena statusnya diubah orang lain, editornya ikut hilang (remark yang sudah disimpan tetap ada dan muncul lagi bila item dibuka kembali)
