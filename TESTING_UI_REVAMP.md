@@ -33,9 +33,10 @@ Legenda: ✅ sudah diuji otomatis & lulus · 🧑 perlu dites manual · ⬜ belu
 | §34–§35 | Bug Types, In Review tidak terlambat | #28 (17 Nov 2026) | ✅ sudah di main |
 | §36 | Bug Stages + Buat Backlog dari Improvement | #29 (18 Nov 2026) | ✅ sudah di main |
 | §37–§41 | Management Dashboard + Add Task, sort Roadmap + Related Card, bingkai terang + toggle tema, badge notifikasi tab, aksen merah dirapikan (PRD v3.26–v3.30) | #33 (20 Nov 2026) | ✅ sudah di main |
-| §42 | Link antar kartu, bar progress selalu hijau, perbaikan form basi (PRD v3.31) | — | ⬜ belum di-commit, belum di main |
-| §43 | Feature = master Roadmap, progress manual lewat status, progress produk = rata-rata Feature, `migration_v34.sql` (PRD v3.32) | — | ⬜ belum di-commit, belum di main (diuji user di lokal: oke) |
-| §44 | Open Item hanya pekerjaan yang masih dikerjakan + diperbarui otomatis 30 detik (PRD v3.33) | — | ⬜ belum di-commit, belum di main (diuji user di lokal: oke) |
+| §42 | Link antar kartu, bar progress selalu hijau, perbaikan form basi (PRD v3.31) | — | ⬜ PR ke main dari branch `feat/card-links-roadmap-sync-open-item-qa-assignee` (20 Nov 2026), belum di-merge |
+| §43 | Feature = master Roadmap, progress manual lewat status, progress produk = rata-rata Feature, `migration_v34.sql` (PRD v3.32) | — | ⬜ PR ke main dari branch `feat/card-links-roadmap-sync-open-item-qa-assignee` (20 Nov 2026), belum di-merge (diuji user di lokal: oke) |
+| §44 | Open Item hanya pekerjaan yang masih dikerjakan + diperbarui otomatis 30 detik (PRD v3.33) | — | ⬜ PR ke main dari branch `feat/card-links-roadmap-sync-open-item-qa-assignee` (20 Nov 2026), belum di-merge (diuji user di lokal: oke) |
+| §45 | QA Test Case: assignee lebih dari satu + status Draft/To Do/In Progress/In Review/Finish, `migration_v35.sql` (PRD v3.34) | — | ⬜ PR ke main dari branch `feat/card-links-roadmap-sync-open-item-qa-assignee` (20 Nov 2026), belum di-merge (diuji user di lokal: oke, termasuk ganti status di tabel) |
 
 ---
 
@@ -723,3 +724,45 @@ Perubahan (PRD 3.18, v3.33). **Tanpa migrasi** (backend + frontend). Diuji 20 No
 - 🧑 **Production (lewat mentor):** rebuild backend + frontend; tidak ada migrasi. Bila Stage "Closed" di kantor ditandai *dihitung open* oleh Super Admin, ia akan tampil — saat ini tidak, jadi tersembunyi
 - ⚠️ Pembaruan otomatis paling lambat ±30 detik (polling, bukan push); hanya saat tab dibuka
 - ⚠️ Bila baris yang sedang diisi PO Remarks-nya hilang karena statusnya diubah orang lain, editornya ikut hilang (remark yang sudah disimpan tetap ada dan muncul lagi bila item dibuka kembali)
+
+## 45. QA Test Case: Assignee lebih dari satu + status seperti Backlog
+
+Perubahan (PRD 3.8, 3.18, v3.34; catatan senior). **Butuh `migration_v35.sql`** (tabel `qa_test_case_assignees` + pemetaan status) sebelum backend baru. Diuji 20 Nov 2026 di stack Docker lokal (:8500): 49 pemeriksaan API end-to-end + 27 pemeriksaan Chrome headless (data uji dibuat lalu dihapus lagi; DB lokal di-backup sebelum migrasi).
+
+**Migrasi**
+- ✅ Pratinjau read-only sama dengan hasil migrasi: 3 `active`+Pass → **Finish**, 2 `active`+Fail dan 1 `active`+Blocked → **In Progress**, 1 `deprecated` → **Finish**, 4 `draft` tetap
+- ✅ Dijalankan dua kali, hasil sama (idempotent); progress test case tidak berubah (mis. CRM TC-005 Finish, tetap 100% dari run Pass)
+
+**Status**
+- ✅ Dropdown Status di form: **Draft, To Do, In Progress, In Review, Finish** (urutan itu, default Draft)
+- ✅ Tabel menampilkan pill FINISH / IN PROGRESS / DRAFT dengan warna & ikon seperti Backlog; tidak ada lagi label ACTIVE / DEPRECATED
+- ✅ Deadline lewat: **In Review tidak merah**, To Do merah; setelah diubah ke To Do lewat form, tanggalnya jadi merah
+- ✅ Backend menerima label dan status lama (`active` → To Do, `deprecated` → Finish), menolak status asing (400, tidak ada yang berubah); Edit tanpa status mempertahankan status
+- ✅ Related Card di Backlog menampilkan status test case (pengganti tanda `deprecated`) di samping hasil run terakhir
+- ✅ **Ganti status langsung di tabel** (permintaan tambahan user, 17 pemeriksaan Chrome headless): pill Status jadi tombol "Ubah status" → menu Draft, To Do, In Progress, In Review, Finish (status aktif dicentang) → pilih To Do: pill langsung berubah, toast "Status TC-xxx: To Do", DB `todo`, tanggal Deadline lewat langsung merah, **modal baris tidak terbuka**; form yang dibuka sesudahnya menampilkan To Do; pilih Finish → deadline tidak merah lagi
+- ✅ Developer (tanpa `qa.update`): pill biasa tanpa menu; API `PATCH` → 403. PO (punya `qa.update`) → bisa
+- ✅ `PATCH /api/qa/test-cases/{id}/status` tidak menyentuh judul, deskripsi, langkah, prioritas, deadline, maupun assignee; tidak mengirim notifikasi; regresi 49 pemeriksaan API tetap lulus
+
+**Assignee**
+- ✅ Field **Assigned To** (multi-pilih + cari) di samping Deadline; test case dengan 2 assignee tampil "assignee (2)"
+- ✅ Kolom **Assigned To** setelah Deadline: avatar + nama assignee pertama + **+1**; klik +1 membuka daftar kedua nama, **tidak** membuka modal baris
+- ✅ **Simpan sungguhan lewat form** (data uji): status In Review → To Do dan satu assignee dilepas → API: status todo, hanya Eka; judul & deadline tidak berubah; tabel langsung ter-refresh
+- ✅ Filter **Assignee** (kiri toolbar): pilih Fina → "N test case (dari M)", test case tanpa assignee hilang; Bersihkan pilihan → jumlah kembali
+- ✅ Notifikasi lonceng ke setiap assignee (bukan ke yang membuat/mengubah); susunan sama → tidak ada notifikasi baru; susunan berubah → semua assignee saat itu; email "QA Test Case TC-xxx di-assign ke kamu" sampai di Mailpit
+- ✅ Edit dari frontend lama (tanpa field assignee) tidak menghapus assignee; user tidak ada → 400 dan test case tidak dibuat (satu transaksi)
+- ✅ Hapus test case ikut menghapus baris assignee-nya
+- ✅ Export CSV punya kolom **Assigned To** (ikut filter); Import CSV membaca nama/email dipisah koma, yang pertama jadi primary, nama tak dikenal dilewati, tanpa notifikasi
+
+**Management Dashboard**
+- ✅ PIC baris QA = assignee (primary dulu); test case tanpa assignee tetap memakai tester terakhir / pembuat
+- ✅ Test case **In Review** dan **Finish** tidak tampil di Open Item; To Do / In Progress tampil
+
+**Regresi**
+- ✅ `/qa/test-runs`, `/qa/dashboard`, `/bugs`, `/bugs/dashboard`, `/backlog`, `/dashboard/stats`, `/management/open-items` (3 produk), `/management/features`, `/products`, `/features`, `/roadmap` → 200; tidak ada error di log backend
+- ✅ **Uji user di lokal** (20 Nov 2026) — assignee + status baru: oke
+- ✅ Ganti status langsung di tabel (permintaan tambahan) diuji user di lokal: oke
+- 🧑 Tampilan HP belum diuji
+- 🧑 **Production (lewat mentor):** backup → `migration_v35_preview.sql` (cek bagian C kosong) → `migration_v35.sql` → rebuild backend + frontend. Urutan wajib: migrasi **sebelum** backend baru (tanpa tabel assignee, daftar test case 500)
+- ⚠️ Status dan Progress bisa tampak berbeda (mis. Finish tetapi 50% karena run terakhir Fail): progress sengaja tetap dari hasil run (keputusan user)
+- ⚠️ Daftar nama di popover "+N" bisa terpotong tepi kanan tabel di layar sempit (geser tabel); perilaku komponen `AssigneeStack` yang sama dengan kolom Assigned To di Bugs Incident
+- ⚠️ Link notifikasi `/qa?case=ID` membuka form hanya untuk role dengan `qa.update` (aturan lama); assignee tanpa izin itu mendarat di tab Test Cases
