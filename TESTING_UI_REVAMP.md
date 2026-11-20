@@ -556,3 +556,18 @@ Fitur baru (PRD 3.13, v3.29). Frontend saja, **tanpa migrasi** dan tanpa perubah
   - data uji (item HRS-109, komentar, notifikasi) sudah dihapus
 - ⚠️ Browser hanya mengizinkan web mengubah judul dan ikon tab (tidak bisa menaruh angka di kanan tab). Chrome memperlambat timer tab latar, jadi angka bisa muncul sampai ±1 menit setelah notif masuk; tab yang "ditidurkan" browser (Memory Saver Chrome / Sleeping Tabs Edge) baru diperbarui saat dibuka lagi
 - 🧑 **Production:** rebuild frontend saja (lewat mentor); tidak ada migrasi
+
+## 41. Aksen merah dirapikan: progress abu-abu, link merah saat hover, checkbox + highlight merah
+
+Perubahan tampilan (PRD 3.16, v3.30). Frontend saja, **tanpa migrasi** dan tanpa perubahan backend. Aturannya: merah brand untuk identitas, navigasi, dan aksi; tidak untuk kondisi data, karena di sana merah berarti masalah. Diuji 20 Nov 2026 di headless Chrome sebagai Admin di Vite dev, mode terang dan gelap (warna dicek lewat `getComputedStyle`, bukan hanya screenshot).
+
+- ✅ **Bar progress abu-abu, hijau saat 100%** — Board Backlog, Management (Sprint Aktif + Features), Products, Dashboard (kolom Progress), Sprints: isi bar `#6E7079` di mode terang, `#8E8F98` di mode gelap; fitur 100% (FIN-F1) hijau. My Tasks memakai komponen `ProgressBar` yang sama (data uji Admin hanya punya item 0%)
+- ✅ Bar yang **tidak diubah** di kode dan tetap berwarna menurut artinya: hasil run QA (Pass hijau / Fail merah / Blocked oranye), kapasitas Dashboard (overload merah), kepatuhan Standup, bar Epic di Sprints (ungu, terlihat), bar status/departemen C-Level (terlihat)
+- ✅ **Judul yang bisa diklik merah saat hover** (teks + garis bawah) — dicek dengan hover: judul fitur di Management, judul di My Tasks, label bar status di C-Level → `rgb(215,31,43)` terang, `rgb(234,63,71)` gelap. Kelas yang sama dipasang di Open Item (Management), item/task/nama penulis catatan C-Level, sub-item dan Related Card di detail Backlog, tautan "Edit lengkap di Backlog"
+- ✅ **Link merah saat hover**: link Repo di Products (dicek dengan hover, terang + gelap); URL dan link markdown di deskripsi/komentar (linkify) memakai kelas yang sama
+- ✅ Angka di tabel Cross-Project Overview Dashboard tetap berwarna status, hover hanya garis bawah (sisa hover biru di kolom To Do sudah disamakan)
+- ✅ **Checkbox merah** bawaan browser: form Tambah Stage (Admin → Bug Stages) yang sebelumnya biru; `accent-color` root = merah brand di kedua tema
+- ✅ **Highlight teks** saat diblok merah muda tipis (terang) / merah gelap (gelap), teks tetap terbaca
+- ✅ `vite build` lolos; tidak ada error di console di 11 halaman (Dashboard, Backlog, My Tasks, Products, Sprints, QA, Standup, C-Level, Management, Bugs, Bug Stages); tidak ada data yang diubah (form Tambah Stage tidak disimpan)
+- ⬜ **Uji user di lokal** — cek Board, Management, Products dalam mode terang dan gelap; arahkan kursor ke judul/link; blok teks
+- 🧑 **Production:** rebuild frontend saja (lewat mentor); tidak ada migrasi
