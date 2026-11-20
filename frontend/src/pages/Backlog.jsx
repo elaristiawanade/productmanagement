@@ -372,7 +372,7 @@ function ChildrenSection({ item, onOpenItem }) {
               <div className="flex items-center gap-2">
                 <span className={`text-xs font-medium px-1.5 py-0.5 rounded shrink-0 ${TYPE_COLORS_LOCAL[c.type] || ''}`}>{c.type}</span>
                 <span className="font-mono text-xs text-slate-400 shrink-0">{c.code}</span>
-                <span className="text-sm text-slate-800 truncate flex-1 group-hover:underline underline-offset-2">{c.title}</span>
+                <span className="text-sm text-slate-800 truncate flex-1 group-hover:underline group-hover:text-indigo-600 underline-offset-2">{c.title}</span>
                 <StatusBadge status={c.status} />
               </div>
             </button>
@@ -911,7 +911,7 @@ function RelatedCards({ item, initiallyOpen = false }) {
                           <Tag className="w-2.5 h-2.5 shrink-0" />{b.type_name || b.type}
                         </span>
                         <span className="font-mono text-xs text-slate-400 shrink-0">{b.code}</span>
-                        <span className="text-sm text-slate-800 truncate flex-1 min-w-0 group-hover:underline underline-offset-2" title={b.title}>{b.title}</span>
+                        <span className="text-sm text-slate-800 truncate flex-1 min-w-0 group-hover:underline group-hover:text-indigo-600 underline-offset-2" title={b.title}>{b.title}</span>
                         {b.relation === 'source' && (
                           <span className="shrink-0 text-[11px] px-1.5 leading-[18px] rounded bg-sky-50 text-sky-700 border border-sky-100"
                             title="Kartu ini dibuat dari tiket ini lewat tombol Buat Backlog">Asal kartu ini</span>
@@ -932,7 +932,7 @@ function RelatedCards({ item, initiallyOpen = false }) {
                     {data.test_cases.map(tc => (
                       <RelatedRow key={tc.id} to={`/qa?case=${tc.id}`}>
                         <span className="font-mono text-xs text-slate-400 shrink-0">{tc.code}</span>
-                        <span className="text-sm text-slate-800 truncate flex-1 min-w-0 group-hover:underline underline-offset-2" title={tc.title}>{tc.title}</span>
+                        <span className="text-sm text-slate-800 truncate flex-1 min-w-0 group-hover:underline group-hover:text-indigo-600 underline-offset-2" title={tc.title}>{tc.title}</span>
                         {tc.status === 'deprecated' && <span className="shrink-0 text-[11px] text-slate-400">deprecated</span>}
                         {tc.last_result
                           ? <StatusBadge size="xs" status={tc.last_result} />

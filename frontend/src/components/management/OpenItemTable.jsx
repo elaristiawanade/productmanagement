@@ -141,7 +141,7 @@ export default function OpenItemTable({
                 const href = hrefOf(item, can);
                 const child = !!item.parent_id && !filter;   // indent only while the story is shown too
                 const title = (
-                  <span className={`font-medium truncate ${item.done_in_week ? 'text-slate-500' : 'text-slate-700'} ${href ? 'group-hover:underline underline-offset-2' : ''}`}
+                  <span className={`font-medium truncate ${item.done_in_week ? 'text-slate-500' : 'text-slate-700'} ${href ? 'group-hover:underline group-hover:text-indigo-600 underline-offset-2' : ''}`}
                     title={item.title}>{item.title}</span>
                 );
                 return (

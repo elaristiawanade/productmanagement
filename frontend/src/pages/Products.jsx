@@ -7,6 +7,7 @@ import Modal from '../components/Modal';
 import ExportMdButton from '../components/ExportMdButton';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
+import { progressFill } from '../components/ProgressBar';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
@@ -396,7 +397,7 @@ export default function Products() {
                       <span>Done: <strong className="text-emerald-600">{product.done_items}</strong></span>
                       <span>Active Sprints: <strong className="text-blue-600">{product.active_sprints}</strong></span>
                       {product.repository_url && (
-                        <a href={product.repository_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-slate-600 hover:text-slate-800 underline underline-offset-2 decoration-slate-300">
+                        <a href={product.repository_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-slate-600 hover:text-indigo-600 underline underline-offset-2 decoration-slate-300 hover:decoration-indigo-600 transition-colors">
                           <ExternalLink className="w-3 h-3" /> Repo
                         </a>
                       )}
@@ -404,7 +405,7 @@ export default function Products() {
                     <div className="mt-3 flex items-center gap-2"
                       title="Progress dihitung otomatis dari item Backlog produk ini: In Progress 50%, In Review 80%, Done 100%, dibobot story point">
                       <div className="flex-1 max-w-[200px] h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${pct}%` }} />
+                        <div className={`h-full rounded-full ${progressFill(pct)}`} style={{ width: `${pct}%` }} />
                       </div>
                       <span className="text-xs text-slate-400">Progress {pct}%</span>
                     </div>
@@ -495,7 +496,7 @@ export default function Products() {
                                   </span>
                                   <div className="flex items-center gap-1.5 w-24 shrink-0">
                                     <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                      <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${pct2}%` }} />
+                                      <div className={`h-full rounded-full ${progressFill(pct2)}`} style={{ width: `${pct2}%` }} />
                                     </div>
                                     <span className="text-xs text-slate-400">{pct2}%</span>
                                   </div>

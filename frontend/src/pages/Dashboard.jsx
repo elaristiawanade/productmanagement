@@ -11,6 +11,7 @@ import PresenceDot from '../components/PresenceDot';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import { useChartTheme, STATUS_COLORS } from '../utils/chartTheme';
+import { progressFill } from '../components/ProgressBar';
 
 const TYPE_CLS = {
   story: 'text-blue-600 bg-blue-50',
@@ -279,7 +280,7 @@ export default function Dashboard() {
                       <td className="text-center px-4 py-3 font-semibold">{p.total_items}</td>
                       <td className="text-center px-4 py-3 text-slate-500"
                         onClick={e => { e.stopPropagation(); openDrill(`${p.name} — To Do`, { product_id: p.id, status: 'todo' }); }}>
-                        <span className="hover:text-blue-600 hover:underline cursor-pointer">{p.todo}</span>
+                        <span className="hover:underline cursor-pointer">{p.todo}</span>
                       </td>
                       <td className="text-center px-4 py-3 text-blue-600"
                         onClick={e => { e.stopPropagation(); openDrill(`${p.name} — In Progress`, { product_id: p.id, status: 'in_progress' }); }}>
@@ -308,7 +309,7 @@ export default function Dashboard() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 min-w-[100px]">
                           <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                            <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${pct}%` }} />
+                            <div className={`h-full rounded-full ${progressFill(pct)}`} style={{ width: `${pct}%` }} />
                           </div>
                           <span className="text-xs text-slate-500 w-8 text-right">{pct}%</span>
                         </div>

@@ -192,7 +192,7 @@ function TaskPanel({ item, onClose, onStatusChange, onMarkDone }) {
 
         <div className="px-5 py-3 border-t border-slate-100 shrink-0">
           <Link to={`/backlog?item=${item.id}`} onClick={onClose}
-            className="flex items-center justify-center gap-1.5 text-sm text-slate-800 font-medium hover:underline underline-offset-2">
+            className="flex items-center justify-center gap-1.5 text-sm text-slate-800 font-medium hover:text-indigo-600 hover:underline underline-offset-2 transition-colors">
             <ExternalLink className="w-3.5 h-3.5" /> Edit lengkap di Backlog
           </Link>
         </div>
@@ -542,7 +542,7 @@ export default function MyTask() {
                               <span className="text-slate-400">terkait</span>
                             </p>
                           )}
-                          <p className={`font-medium truncate group-hover:underline underline-offset-2 transition-colors
+                          <p className={`font-medium truncate group-hover:underline group-hover:text-indigo-600 underline-offset-2 transition-colors
                             ${item.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700'}`}
                             title={item.title}>
                             {item.title}

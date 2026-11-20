@@ -34,7 +34,7 @@ export default function FeaturesSection({ features }) {
                     <td className="px-3 py-2.5 min-w-0">
                       <Link to={`/products?feature=${f.id}`} className="group flex items-baseline gap-2 min-w-0" title="Buka di Products">
                         <span className="font-mono text-xs text-slate-400 shrink-0">{f.code}</span>
-                        <span className="font-medium text-slate-700 truncate group-hover:underline underline-offset-2">{f.name}</span>
+                        <span className="font-medium text-slate-700 truncate group-hover:underline group-hover:text-indigo-600 underline-offset-2">{f.name}</span>
                       </Link>
                       <p className="text-[11px] text-slate-400 mt-0.5">
                         {f.linked_items > 0 ? `${f.linked_items} item Backlog terhubung` : f.is_roadmap_item ? 'Belum ada item Backlog terhubung' : 'Bukan roadmap item, jadi tidak bisa dihubungkan ke Backlog'}

@@ -794,7 +794,7 @@ function TasksTab({ user, canWrite, departments, detailId, setDetailId, filterRe
                       <td className="px-4 py-3 font-mono text-xs text-slate-500 font-medium">{item.code}</td>
                       <td className="px-4 py-3 max-w-[240px]">
                         <button className="text-left group w-full" onClick={e => { e.stopPropagation(); setDetailId(item.id); }}>
-                          <p className="font-medium text-slate-700 truncate group-hover:underline underline-offset-2 transition-colors" title={item.title}>
+                          <p className="font-medium text-slate-700 truncate group-hover:underline group-hover:text-indigo-600 underline-offset-2 transition-colors" title={item.title}>
                             {item.title}
                           </p>
                         </button>
@@ -965,7 +965,7 @@ function MineTab({ user, detailId, setDetailId }) {
                   <td className="px-4 py-3 font-mono text-xs text-slate-500 font-medium">{item.code}</td>
                   <td className="px-4 py-3 max-w-[240px]">
                     <button className="text-left group w-full" onClick={e => { e.stopPropagation(); setDetailId(item.id); }}>
-                      <p className={`font-medium truncate group-hover:underline underline-offset-2 transition-colors ${item.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700'}`} title={item.title}>
+                      <p className={`font-medium truncate group-hover:underline group-hover:text-indigo-600 underline-offset-2 transition-colors ${item.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700'}`} title={item.title}>
                         {item.title}
                       </p>
                     </button>
@@ -1016,7 +1016,7 @@ function BarRow({ label, count, max, barClass, barColor, onClick }) {
   return (
     <button type="button" onClick={onClick} disabled={!onClick}
       className="flex items-center gap-3 w-full text-left group disabled:cursor-default">
-      <span className="text-xs text-slate-500 w-24 shrink-0 truncate group-hover:underline underline-offset-2 transition-colors" title={label}>{label}</span>
+      <span className="text-xs text-slate-500 w-24 shrink-0 truncate group-hover:underline group-hover:text-indigo-600 underline-offset-2 transition-colors" title={label}>{label}</span>
       <div className="flex-1 h-2.5 rounded-full bg-slate-100 overflow-hidden">
         <div className={`h-full rounded-full ${barClass || ''} ${onClick ? 'group-hover:opacity-80 transition-opacity' : ''}`}
           style={{ width: `${pct}%`, backgroundColor: barColor }} />
@@ -1197,7 +1197,7 @@ function DashboardTab({ user, canWrite, departments, onGoToTasks, onGoToNotes, o
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-semibold text-slate-700 group-hover:text-slate-900 group-hover:underline transition-colors">{n.user_name}</span>
+                      <span className="text-xs font-semibold text-slate-700 group-hover:underline group-hover:text-indigo-600 transition-colors">{n.user_name}</span>
                       <DeptTag dept={n.department} />
                       <span className="text-[10px] text-slate-400">
                         {n.note_date ? format(parseISO(String(n.note_date).slice(0, 10)), 'dd MMM yyyy') : ''}
@@ -1224,7 +1224,7 @@ function DashboardTab({ user, canWrite, departments, onGoToTasks, onGoToNotes, o
                 <button key={t.id} type="button" onClick={() => onOpenTask?.(t.id)}
                   className="flex items-center justify-between gap-2 pb-3 border-b border-slate-50 last:border-0 last:pb-0 w-full text-left group">
                   <div className="min-w-0">
-                    <p className="text-xs font-medium text-slate-700 truncate group-hover:underline underline-offset-2 transition-colors" title={t.title}>{t.title}</p>
+                    <p className="text-xs font-medium text-slate-700 truncate group-hover:underline group-hover:text-indigo-600 underline-offset-2 transition-colors" title={t.title}>{t.title}</p>
                     <div className="flex items-center gap-1.5 mt-1">
                       <span className="font-mono text-[10px] text-slate-400">{t.code}</span>
                       <DeptTag dept={t.department} />

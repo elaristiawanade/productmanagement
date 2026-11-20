@@ -48,6 +48,10 @@
     font-size: 14px;
   }
   :focus-visible { outline: 2px solid rgb(var(--c-indigo-500)); outline-offset: 2px; }
+  /* Brand red for native controls (checkbox, radio, range) and a soft red text highlight.
+     --c-indigo-* is the red brand scale and flips with the theme, so both work in dark mode too. */
+  :root { accent-color: rgb(var(--c-indigo-600)); }
+  ::selection { background-color: rgb(var(--c-indigo-200) / .7); color: inherit; }
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { @apply bg-slate-300 rounded-full; border: 2px solid transparent; background-clip: padding-box; }
