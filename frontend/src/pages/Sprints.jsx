@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
@@ -104,6 +105,7 @@ function SprintForm({ sprint, productId, onSave, onClose }) {
 
 export default function Sprints() {
   const { can } = useAuth();
+  const navigate = useNavigate();
   const [products,  setProducts]  = useState([]);
   const [selProduct, setSelProduct] = useState('');
   const [sprints,   setSprints]   = useState([]);
@@ -288,7 +290,10 @@ export default function Sprints() {
                       </div>
                       <div className="p-2 space-y-2 min-h-[120px]">
                         {colItems.map(item => (
-                          <div key={item.id} className="group bg-white border border-slate-100 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow">
+                          // The card opens the item in Backlog (the title is a real link too, for Ctrl/middle click)
+                          <div key={item.id} onClick={() => { if (!window.getSelection?.().toString()) navigate(`/backlog?item=${item.id}`); }}
+                            title={`Buka ${item.code} di Backlog`}
+                            className="group cursor-pointer bg-white border border-slate-100 rounded-lg p-3 shadow-sm hover:shadow-md hover:border-slate-300 transition">
                             <div className="flex items-start justify-between gap-1 mb-2">
                               <span className="text-xs text-slate-400 font-mono">{item.code}</span>
                               <span className="flex items-center gap-1">
@@ -296,7 +301,10 @@ export default function Sprints() {
                                 <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${TYPE_COLORS[item.type] || ''}`}>{item.type}</span>
                               </span>
                             </div>
-                            <p className="text-xs font-medium text-slate-700 leading-snug mb-2 line-clamp-2">{item.title}</p>
+                            <Link to={`/backlog?item=${item.id}`} onClick={e => e.stopPropagation()}
+                              className="block text-xs font-medium text-slate-700 leading-snug mb-2 line-clamp-2 group-hover:underline group-hover:text-indigo-600 underline-offset-2">
+                              {item.title}
+                            </Link>
                             <div className="flex items-center justify-between">
                               {item.assignees?.length > 0
                                 ? <AssigneeStack assignees={item.assignees} showName={false} size="xs" />
@@ -356,17 +364,18 @@ export default function Sprints() {
                           </button>
                           <div className="mt-2">
                             <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
-                              <div className="h-full bg-purple-500 rounded-full" style={{ width: `${pct}%` }} />
+                              <div className={`h-full rounded-full ${progressFill(pct)}`} style={{ width: `${pct}%` }} />
                             </div>
                           </div>
                           {expanded[epic.id] && (
                             <div className="mt-2 pl-6 space-y-1">
                               {(sprintDetail?.items || []).filter(i => i.epic_name === epic.name).map(item => (
-                                <div key={item.id} className="flex items-center gap-2 text-xs text-slate-500">
-                                  <span className="font-mono text-slate-400">{item.code}</span>
-                                  <span className="truncate">{item.title}</span>
+                                <Link key={item.id} to={`/backlog?item=${item.id}`} title={`Buka ${item.code} di Backlog`}
+                                  className="group/it flex items-center gap-2 text-xs text-slate-500 rounded px-1 -mx-1 hover:bg-slate-50">
+                                  <span className="font-mono text-indigo-600">{item.code}</span>
+                                  <span className="truncate group-hover/it:underline group-hover/it:text-indigo-600 underline-offset-2">{item.title}</span>
                                   <StatusBadge status={item.status} size="xs" />
-                                </div>
+                                </Link>
                               ))}
                             </div>
                           )}

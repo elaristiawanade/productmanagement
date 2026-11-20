@@ -19,6 +19,7 @@ import { renderWithLinks } from '../utils/linkify';
 import { useDeepLink } from '../utils/deepLink';
 import { stageMeta } from '../utils/bugStages';
 import CopyLinkButton from '../components/CopyLinkButton';
+import OpenLinkButton, { isNewTabClick } from '../components/OpenLinkButton';
 import { toastCreated } from '../utils/createdToast';
 import ProgressBar from '../components/ProgressBar';
 import { useAuth } from '../context/AuthContext';
@@ -42,6 +43,29 @@ const TYPE_TAG = {
 
 function TypeTag({ type }) {
   return <span className={`shrink-0 text-[11px] font-medium leading-5 px-1.5 rounded ${TYPE_TAG[type] || TYPE_TAG.task}`}>{type}</span>;
+}
+
+// ─── Parent links ─────────────────────────────────────────────────────────────
+// Go up from a card to its parent (Story → Epic, Task/Bug → Story): the chip below and the OpenLinkButton beside the
+// Parent field in the modal. Both are plain <a href> (not buttons) so they keep working inside the read-only
+// <fieldset disabled>, and Ctrl/Shift/middle click still opens the parent in a new tab. A normal click opens the parent
+// in the modal through state, not by navigating to ?item= — that would drop the ?product= param and reset the filter.
+
+const parentLabel = (item) => `${item.parent_code}${item.parent_title ? ` — ${item.parent_title}` : ''}`;
+
+/** Code chip on a list row / board card. Clicking opens the parent, not the card itself; plain chip when onOpen is absent. */
+function ParentChip({ item, onOpen }) {
+  const label = `Parent: ${parentLabel(item)}`;
+  const cls = 'shrink-0 inline-flex items-center gap-0.5 font-mono text-[11px] text-slate-600 bg-slate-100 rounded px-1.5 leading-[18px]';
+  const inner = <><Link2 className="w-2.5 h-2.5" />{item.parent_code}</>;
+  if (!onOpen) return <span className={cls} title={label}>{inner}</span>;
+  return (
+    <a href={`/backlog?item=${item.parent_id}`} title={`Buka ${label}`} aria-label={`Buka ${label}`}
+      className={`${cls} hover:bg-slate-200 hover:text-slate-800 transition-colors`}
+      onClick={e => { e.stopPropagation(); if (isNewTabClick(e)) return; e.preventDefault(); onOpen(); }}>
+      {inner}
+    </a>
+  );
 }
 
 
@@ -386,7 +410,8 @@ function ChildrenSection({ item, onOpenItem }) {
 // readOnly: a user without backlog edit permission who opened an item through a shared link — fields are
 // disabled and the save button is hidden; comments, children and attachments' viewing still work.
 // focusRelated: opened from a card's Related Card chip, so that section starts expanded and scrolled into view.
-function ItemForm({ item, defaults, products, users, sprints, features, epics, onSave, onClose, onOpenItem, readOnly = false, focusRelated = false }) {
+// Rendered with key={item.id}: the form state is seeded once, so switching to a child/parent must remount it.
+function ItemForm({ item, defaults, products, users, sprints, features, epics, onSave, onClose, onOpenItem, onOpenItemById, readOnly = false, focusRelated = false }) {
   const [form, setForm] = useState({
     product_id: item?.product_id || '',
     code: item?.code || '',
@@ -406,6 +431,19 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
     notes: item?.notes || '',
     deadline: item?.deadline ? item.deadline.split('T')[0] : '',
   });
+  // First-render form = what is saved. Opening a child or the parent replaces this form, so ask before dropping unsaved edits.
+  const savedForm = useRef(form);
+  const confirmLeave = () => readOnly
+    || JSON.stringify(form) === JSON.stringify(savedForm.current)
+    || confirm('Perubahan yang belum disimpan akan hilang. Lanjutkan?');
+  const openChild  = (child) => { if (confirmLeave()) onOpenItem(child); };
+  const openParent = () => { if (confirmLeave()) onOpenItemById(item.parent_id); };
+  // Saved parent only: once the picker is changed (not saved yet) the link would point at the old parent
+  const showParentLink = !!item?.parent_id && !!item.parent_code && String(form.parent_id) === String(item.parent_id);
+  const parentButton = showParentLink && (
+    <OpenLinkButton href={`/backlog?item=${item.parent_id}`} onOpen={openParent}
+      code={item.parent_code} title={`Buka parent: ${parentLabel(item)}`} />
+  );
   const [stories,      setStories]      = useState([]);
   const [epicsBacklog, setEpicsBacklog] = useState([]);
   const [saving,      setSaving]      = useState(false);
@@ -543,14 +581,19 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
       {(form.type === 'task' || form.type === 'bug') && (
         <div className="col-span-2">
           <F label="Parent User Story" required>
-            <SearchableSelect
-              value={form.parent_id}
-              onChange={v => setForm(f => ({ ...f, parent_id: v }))}
-              options={stories.map(s => ({ value: String(s.id), label: `${s.code} — ${s.title}` }))}
-              placeholder="— Pilih user story —"
-              searchPlaceholder="Cari user story..."
-              emptyMessage="Tidak ada story di produk ini"
-            />
+            <div className="flex gap-2">
+              <div className="flex-1 min-w-0">
+                <SearchableSelect
+                  value={form.parent_id}
+                  onChange={v => setForm(f => ({ ...f, parent_id: v }))}
+                  options={stories.map(s => ({ value: String(s.id), label: `${s.code} — ${s.title}` }))}
+                  placeholder="— Pilih user story —"
+                  searchPlaceholder="Cari user story..."
+                  emptyMessage="Tidak ada story di produk ini"
+                />
+              </div>
+              {parentButton}
+            </div>
           </F>
           <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
             <Link2 className="w-3 h-3" />{form.type === 'task' ? 'Task' : 'Bug'} harus terhubung ke tepat 1 user story
@@ -560,16 +603,21 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
       {form.type === 'story' && (
         <div className="col-span-2">
           <F label="Parent Epic">
-            <SearchableSelect
-              className="border-purple-300"
-              value={form.parent_id}
-              onChange={v => setForm(f => ({ ...f, parent_id: v }))}
-              options={epicsBacklog.map(e => ({ value: String(e.id), label: `${e.code} — ${e.title}` }))}
-              placeholder="— Tanpa epic (standalone story) —"
-              emptyOptionLabel="— Tanpa epic (standalone story) —"
-              searchPlaceholder="Cari epic..."
-              emptyMessage="Tidak ada epic di produk ini"
-            />
+            <div className="flex gap-2">
+              <div className="flex-1 min-w-0">
+                <SearchableSelect
+                  className="border-purple-300"
+                  value={form.parent_id}
+                  onChange={v => setForm(f => ({ ...f, parent_id: v }))}
+                  options={epicsBacklog.map(e => ({ value: String(e.id), label: `${e.code} — ${e.title}` }))}
+                  placeholder="— Tanpa epic (standalone story) —"
+                  emptyOptionLabel="— Tanpa epic (standalone story) —"
+                  searchPlaceholder="Cari epic..."
+                  emptyMessage="Tidak ada epic di produk ini"
+                />
+              </div>
+              {parentButton}
+            </div>
           </F>
           <p className="text-xs text-purple-500 mt-1 flex items-center gap-1">
             <Link2 className="w-3 h-3" />Story dapat dihubungkan ke satu epic
@@ -713,21 +761,21 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
       {/* Children (Stories for Epic, Tasks+Bugs for Story) — only when editing */}
       {item?.id && (item.type === 'epic' || item.type === 'story') && (
         <div className="col-span-2">
-          <ChildrenSection item={item} onOpenItem={onOpenItem} />
+          <ChildrenSection item={item} onOpenItem={openChild} />
         </div>
       )}
 
       {/* Related Card: Bugs Incident tickets and QA test cases linked to this item (info only, collapsible) */}
       {item?.id && (
         <div className="col-span-2">
-          <RelatedCards key={item.id} item={item} initiallyOpen={focusRelated} />
+          <RelatedCards key={item.id} item={item} initiallyOpen={focusRelated} onBeforeLeave={confirmLeave} />
         </div>
       )}
 
       {/* Personal tasks that relate to this item (info only; hidden when there are none) */}
       {item?.id && (
         <div className="col-span-2 empty:hidden">
-          <RelatedPersonalTasks itemId={item.id} />
+          <RelatedPersonalTasks itemId={item.id} onBeforeLeave={confirmLeave} />
         </div>
       )}
 
@@ -750,8 +798,9 @@ function ItemForm({ item, defaults, products, users, sprints, features, epics, o
   );
 }
 
-/** Info only: personal tasks (from My Task → Add Task) that point at this item. Changes nothing on the item. */
-function RelatedPersonalTasks({ itemId }) {
+/** Info only: personal tasks (from My Task → Add Task) that point at this item. Changes nothing on the item.
+ *  Your own tasks link to My Task (?ptask=), where they open; someone else's task can only be opened by its owner. */
+function RelatedPersonalTasks({ itemId, onBeforeLeave }) {
   const { user } = useAuth();
   const [tasks, setTasks] = useState([]);
 
@@ -769,18 +818,23 @@ function RelatedPersonalTasks({ itemId }) {
       <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
         Task Pribadi Terkait <span className="font-normal normal-case text-slate-400">({tasks.length})</span>
       </p>
-      <p className="text-xs text-slate-400 mb-3">Catatan kerja pribadi yang menunjuk ke item ini. Tidak mengubah assignee maupun progress item.</p>
+      <p className="text-xs text-slate-400 mb-3">Catatan kerja pribadi yang menunjuk ke item ini. Tidak mengubah assignee maupun progress item. Task milik Anda bisa diklik untuk dibuka di My Task.</p>
       <div className="space-y-1.5">
-        {tasks.map(t => (
-          <div key={t.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200">
-            <span className="text-sm text-slate-800 truncate flex-1" title={t.title}>{t.title}</span>
-            <span className="text-xs text-slate-500 shrink-0">{t.owner_id === user?.id ? 'Anda' : t.owner_name}</span>
-            {t.deadline && <span className={`text-xs shrink-0 ${t.is_delayed ? 'text-red-600 font-medium' : 'text-slate-400'}`}>
-              {format(parseISO(String(t.deadline).slice(0, 10)), 'd MMM', { locale: localeId })}
-            </span>}
-            <StatusBadge status={t.status} />
-          </div>
-        ))}
+        {tasks.map(t => {
+          const mine = t.owner_id === user?.id;
+          return (
+            <RelatedRow key={t.id} to={mine ? `/my-tasks?ptask=${t.id}` : null} onBeforeLeave={onBeforeLeave}
+              blockedTitle={`Task pribadi milik ${t.owner_name} — hanya pemiliknya yang bisa membukanya`}>
+              <span className={`text-sm text-slate-800 truncate flex-1 min-w-0 ${mine ? 'group-hover:underline group-hover:text-indigo-600 underline-offset-2' : ''}`}
+                title={mine ? `Buka di My Task: ${t.title}` : t.title}>{t.title}</span>
+              <span className="text-xs text-slate-500 shrink-0">{mine ? 'Anda' : t.owner_name}</span>
+              {t.deadline && <span className={`text-xs shrink-0 ${t.is_delayed ? 'text-red-600 font-medium' : 'text-slate-400'}`}>
+                {format(parseISO(String(t.deadline).slice(0, 10)), 'd MMM', { locale: localeId })}
+              </span>}
+              <StatusBadge status={t.status} />
+            </RelatedRow>
+          );
+        })}
       </div>
     </div>
   );
@@ -838,14 +892,17 @@ function RelatedChips({ item, onOpen }) {
   );
 }
 
-function RelatedRow({ to, blockedTitle, children }) {
+// A row in the modal that leads to a card on another page. onBeforeLeave (the form's unsaved-edits check) can cancel a
+// plain click; a Ctrl/middle click opens a new tab and leaves this form alone.
+function RelatedRow({ to, blockedTitle, onBeforeLeave, children }) {
   const cls = 'w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 text-left';
   return to
-    ? <Link to={to} className={`${cls} hover:bg-slate-50 transition-colors group`}>{children}</Link>
+    ? <Link to={to} className={`${cls} hover:bg-slate-50 transition-colors group`}
+        onClick={e => { if (onBeforeLeave && !isNewTabClick(e) && !onBeforeLeave()) e.preventDefault(); }}>{children}</Link>
     : <div className={cls} title={blockedTitle}>{children}</div>;
 }
 
-function RelatedCards({ item, initiallyOpen = false }) {
+function RelatedCards({ item, initiallyOpen = false, onBeforeLeave }) {
   const { can } = useAuth();
   const [open, setOpen]     = useState(initiallyOpen);
   const [data, setData]     = useState(null);     // null until the section is first opened
@@ -905,7 +962,7 @@ function RelatedCards({ item, initiallyOpen = false }) {
                   </p>
                   <div className="space-y-1.5">
                     {data.bugs.map(b => (
-                      <RelatedRow key={b.id} to={canOpenBugs ? `/bugs?bug=${b.id}` : null}
+                      <RelatedRow key={b.id} to={canOpenBugs ? `/bugs?bug=${b.id}` : null} onBeforeLeave={onBeforeLeave}
                         blockedTitle="Butuh akses modul Bugs Incident untuk membuka tiket ini">
                         <span className="status-pill h-5 px-1.5 gap-1 text-[10px] shrink-0" style={{ '--c': b.type_color || '#64748B' }}>
                           <Tag className="w-2.5 h-2.5 shrink-0" />{b.type_name || b.type}
@@ -930,7 +987,7 @@ function RelatedCards({ item, initiallyOpen = false }) {
                   </p>
                   <div className="space-y-1.5">
                     {data.test_cases.map(tc => (
-                      <RelatedRow key={tc.id} to={`/qa?case=${tc.id}`}>
+                      <RelatedRow key={tc.id} to={`/qa?case=${tc.id}`} onBeforeLeave={onBeforeLeave}>
                         <span className="font-mono text-xs text-slate-400 shrink-0">{tc.code}</span>
                         <span className="text-sm text-slate-800 truncate flex-1 min-w-0 group-hover:underline group-hover:text-indigo-600 underline-offset-2" title={tc.title}>{tc.title}</span>
                         {tc.status === 'deprecated' && <span className="shrink-0 text-[11px] text-slate-400">deprecated</span>}
@@ -1088,7 +1145,18 @@ export default function Backlog() {
   // Chip click handler; none (plain indicator with a tooltip) for users who may not open items from the list
   const openRelated = (item) => (canEdit ? () => openItem(item, true) : undefined);
   const openNew  = (status) => setModal({ open: true, item: null, defaults: status ? { status } : null });
-  const closeModal = () => setModal({ open: false, item: null, defaults: null });
+  // Bumped when the modal is closed or switched, so a slow openItemById response can't reopen/override it afterwards
+  const modalSeq = useRef(0);
+  const closeModal = () => { modalSeq.current++; setModal({ open: false, item: null, defaults: null }); };
+  const showItem = (item) => { modalSeq.current++; setModal({ open: true, item, defaults: null }); };
+  // Parent links: the parent is usually not in the loaded page of items, so fetch it (same endpoint as the ?item= deep link).
+  // Errors already raise a toast in the API client.
+  const openItemById = (id) => {
+    const seq = ++modalSeq.current;
+    client.get(`/backlog/${id}`).then(res => { if (seq === modalSeq.current) showItem(res.data); }).catch(() => {});
+  };
+  // Same rule as opening a row: only users who may edit open items from the list; others get the plain chip
+  const openParent = (item) => (canEdit ? () => openItemById(item.parent_id) : undefined);
   const toggleGroup = (s) => setCollapsedGroups(prev => {
     const next = new Set(prev);
     next.has(s) ? next.delete(s) : next.add(s);
@@ -1146,11 +1214,7 @@ export default function Backlog() {
           {item.is_delayed && <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" aria-label="Terlambat" />}
           <span className={`font-medium truncate min-w-0 ${item.type === 'epic' ? 'text-purple-700' : 'text-slate-800'}`} title={item.title}>{item.title}</span>
           <TypeTag type={item.type} />
-          {item.parent_code && (
-            <span className="shrink-0 inline-flex items-center gap-0.5 font-mono text-[11px] text-slate-600 bg-slate-100 rounded px-1.5 leading-[18px]" title="Parent">
-              <Link2 className="w-2.5 h-2.5" />{item.parent_code}
-            </span>
-          )}
+          {item.parent_code && <ParentChip item={item} onOpen={openParent(item)} />}
           <RelatedChips item={item} onOpen={openRelated(item)} />
           {item.features?.length > 0 ? (
             <span className="flex items-center gap-1 min-w-0 overflow-hidden" title={`Impacted Features: ${item.features.map(f => f.name).join(', ')}`}>
@@ -1388,11 +1452,7 @@ export default function Backlog() {
                     {/* Links row: parent + Related Card chips (own line, so the meta row below keeps its old width) */}
                     {(item.parent_code || hasRelated(item)) && (
                       <div className="flex flex-wrap items-center gap-1.5">
-                        {item.parent_code && (
-                          <span className="inline-flex items-center gap-0.5 font-mono text-[11px] text-slate-600 bg-slate-100 rounded px-1.5 leading-[18px]">
-                            <Link2 className="w-2.5 h-2.5" />{item.parent_code}
-                          </span>
-                        )}
+                        {item.parent_code && <ParentChip item={item} onOpen={openParent(item)} />}
                         <RelatedChips item={item} onOpen={openRelated(item)} />
                       </div>
                     )}
@@ -1423,13 +1483,15 @@ export default function Backlog() {
         title={modal.item ? `${canEdit ? 'Edit' : 'Detail'} Item — ${modal.item.code}` : 'Tambah Backlog Item'} size="lg"
         shareLink={modal.item ? `/backlog?item=${modal.item.id}` : undefined}>
         <ItemForm
+          key={modal.item?.id ?? 'new'}
           readOnly={!!modal.item && !canEdit}
           focusRelated={!!modal.focusRelated}
           item={modal.item} defaults={modal.defaults} products={products} users={users}
           sprints={sprints} features={features} epics={epics}
           onSave={() => { closeModal(); load(); }}
           onClose={closeModal}
-          onOpenItem={childItem => setModal({ open: true, item: childItem, defaults: null })}
+          onOpenItem={showItem}
+          onOpenItemById={openItemById}
         />
       </Modal>
     </div>

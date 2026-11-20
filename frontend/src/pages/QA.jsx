@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
@@ -46,7 +46,10 @@ import DeadlineDate from '../components/DeadlineDate';
 import ProgressBar from '../components/ProgressBar';
 import { buildBacklogTreeOptions } from '../utils/backlogHierarchy';
 import { buildFeatureOptions, featureText } from '../utils/featureOptions';
-import AttachmentSection from '../components/AttachmentSection';import { useAuth } from '../context/AuthContext';
+import AttachmentSection from '../components/AttachmentSection';
+import OpenLinkButton from '../components/OpenLinkButton';
+import RefLink from '../components/RefLink';
+import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { format, parseISO } from 'date-fns';
 
@@ -58,14 +61,17 @@ const RESULT_ICONS = {
   skip:    { icon: Clock,        cls: 'text-slate-300'   },
 };
 
-// Progress of a test case comes from its latest test run (backend): the bar takes the colour of that result.
-const RUN_COLOR = { pass: '#1F9D55', fail: '#E5484D', blocked: '#D9891A' };
+// Progress of a test case comes from its latest test run (backend). The bar is green like every progress bar; the
+// result itself is in the tooltip and in the Pass/Fail columns.
 const RUN_LABEL = { pass: 'Pass', fail: 'Fail', blocked: 'Blocked', pending: 'Pending', skip: 'Skip' };
 const caseProgressTitle = (tc) => tc.last_result
   ? `Progress dari run terakhir: ${RUN_LABEL[tc.last_result] || tc.last_result} (Pass 100%, Fail 50%, Blocked 25%)`
   : 'Belum pernah dijalankan (0%)';
 
+// Rendered with key={tc.id}: the form state is seeded once, so switching to another test case (?case= deep link from
+// Ctrl K while this modal is open) must remount it, or saving would write this case's fields onto the other one.
 function TestCaseForm({ tc, products, backlogItems, features, onSave, onClose }) {
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     product_id: tc?.product_id || '', backlog_item_id: tc?.backlog_item_id || '',
     feature_id: tc?.feature_id || '',
@@ -74,6 +80,16 @@ function TestCaseForm({ tc, products, backlogItems, features, onSave, onClose })
     status: tc?.status || 'draft', priority: tc?.priority || 'medium',
     deadline: tc?.deadline ? String(tc.deadline).slice(0, 10) : '', // optional; '' clears it on update
   });
+  // The "Buka" buttons leave the QA page, so ask first when the form has unsaved edits (first-render form = saved)
+  const savedForm = useRef(form);
+  const leaveTo = (path) => {
+    const dirty = JSON.stringify(form) !== JSON.stringify(savedForm.current);
+    if (dirty && !confirm('Perubahan yang belum disimpan akan hilang. Lanjutkan?')) return;
+    navigate(path);
+  };
+  // Saved links only: once a picker is changed (not saved yet) its button would point at the old record
+  const showItemButton = !!tc?.backlog_item_id && !!tc.item_code && String(form.backlog_item_id) === String(tc.backlog_item_id);
+  const showFeatureButton = !!tc?.feature_id && !!tc.feature_code && String(form.feature_id) === String(tc.feature_id);
   const [saving, setSaving] = useState(false);
   const attachRef = useRef(null);
   // Done items are hidden from new picks (QA shouldn't pile onto closed work) but the
@@ -109,25 +125,41 @@ function TestCaseForm({ tc, products, backlogItems, features, onSave, onClose })
       </div>
       <div>
         <label className="label">Backlog Item *</label>
-        <SearchableSelect
-          value={form.backlog_item_id}
-          onChange={v => setForm(f => ({ ...f, backlog_item_id: v }))}
-          options={buildBacklogTreeOptions(filteredItems)}
-          placeholder="Pilih item"
-          searchPlaceholder="Cari backlog item..."
-        />
+        <div className="flex gap-2">
+          <div className="flex-1 min-w-0">
+            <SearchableSelect
+              value={form.backlog_item_id}
+              onChange={v => setForm(f => ({ ...f, backlog_item_id: v }))}
+              options={buildBacklogTreeOptions(filteredItems)}
+              placeholder="Pilih item"
+              searchPlaceholder="Cari backlog item..."
+            />
+          </div>
+          {showItemButton && (
+            <OpenLinkButton href={`/backlog?item=${tc.backlog_item_id}`} onOpen={() => leaveTo(`/backlog?item=${tc.backlog_item_id}`)}
+              code={tc.item_code} title={`Buka di Backlog: ${tc.item_code} — ${tc.item_title || ''}`} />
+          )}
+        </div>
       </div>
       <div className="col-span-2">
         <label className="label">Feature (opsional)</label>
-        <SearchableSelect
-          value={form.feature_id}
-          onChange={v => setForm(f => ({ ...f, feature_id: v }))}
-          options={buildFeatureOptions(features, products, form.product_id)}
-          placeholder="— Tidak terkait —"
-          emptyOptionLabel="— Tidak terkait —"
-          searchPlaceholder="Cari kode produk, kode atau nama feature..."
-          emptyMessage="Belum ada feature di produk ini"
-        />
+        <div className="flex gap-2">
+          <div className="flex-1 min-w-0">
+            <SearchableSelect
+              value={form.feature_id}
+              onChange={v => setForm(f => ({ ...f, feature_id: v }))}
+              options={buildFeatureOptions(features, products, form.product_id)}
+              placeholder="— Tidak terkait —"
+              emptyOptionLabel="— Tidak terkait —"
+              searchPlaceholder="Cari kode produk, kode atau nama feature..."
+              emptyMessage="Belum ada feature di produk ini"
+            />
+          </div>
+          {showFeatureButton && (
+            <OpenLinkButton href={`/products?feature=${tc.feature_id}`} onOpen={() => leaveTo(`/products?feature=${tc.feature_id}`)}
+              code={tc.feature_code} title={`Buka feature di Products: ${tc.feature_code} — ${tc.feature_name || ''}`} />
+          )}
+        </div>
       </div>
       <div className="col-span-2">
         <label className="label">Judul Test Case *</label>
@@ -351,6 +383,22 @@ export default function QA() {
   const pagedCases      = testCases.slice((pageCases - 1) * perPageCases, pageCases * perPageCases);
   const totalPagesRuns  = Math.max(1, Math.ceil(testRuns.length / perPageRuns));
   const pagedRuns       = testRuns.slice((pageRuns - 1) * perPageRuns, pageRuns * perPageRuns);
+  // Test runs carry only test_case_id; both lists load with the same product filter, so every run's case is here
+  const itemIdByCase    = new Map(testCases.map(t => [t.id, t.backlog_item_id]));
+
+  // Opens a test case's form from another row (a test run, a recent failure). Same rule as the ?case= deep link:
+  // only with qa.update. A case outside the current product filter (Recent Failures is not filtered) is looked up in
+  // the unfiltered list.
+  const canOpenCase = can('qa', 'update');
+  const openCaseById = (id) => {
+    const found = testCases.find(t => t.id === id);
+    if (found) { setModal({ open: true, type: 'tc', data: found }); return; }
+    client.get('/qa/test-cases').then(r => {
+      const f = r.data.find(t => t.id === id);
+      if (f) setModal({ open: true, type: 'tc', data: f });
+      else toast.error('Test case tidak ditemukan');
+    }).catch(() => {});
+  };
 
   // Data can shrink under the current page (product filter, reload): never sit on an empty page past the end
   useEffect(() => { if (pageCases > totalPagesCases) setPageCases(totalPagesCases); }, [pageCases, totalPagesCases]);
@@ -494,8 +542,21 @@ export default function QA() {
                     <div key={run.id} className="px-5 py-3 flex items-start gap-3">
                       <XCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-700">{run.tc_title}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">[{run.tc_code}] {run.item_code} · {run.product} · Tester: {run.tester}</p>
+                        {/* test_case_id / backlog_item_id come with the API from this version on; without them it stays plain text */}
+                        {canOpenCase && run.test_case_id ? (
+                          <button type="button" onClick={() => openCaseById(run.test_case_id)} title={`Buka test case ${run.tc_code}`}
+                            className="text-left text-sm font-medium text-slate-700 hover:underline hover:text-indigo-600 underline-offset-2">
+                            {run.tc_title}
+                          </button>
+                        ) : <p className="text-sm font-medium text-slate-700">{run.tc_title}</p>}
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          [{run.tc_code}]{' '}
+                          {run.backlog_item_id
+                            ? <Link to={`/backlog?item=${run.backlog_item_id}`} title={`Buka ${run.item_code} di Backlog`}
+                                className="font-mono text-indigo-600 hover:underline underline-offset-2">{run.item_code}</Link>
+                            : run.item_code}
+                          {' '}· {run.product} · Tester: {run.tester}
+                        </p>
                         {run.notes && <p className="text-xs text-red-600 mt-1 italic">{run.notes}</p>}
                         {run.bug_reference && <p className="text-xs text-orange-600 mt-0.5">Bug Ref: {run.bug_reference}</p>}
                       </div>
@@ -577,26 +638,22 @@ export default function QA() {
                             {tc.description && <p className="text-xs text-slate-400 truncate">{tc.description}</p>}
                           </td>
                           <td className="px-3 py-3 text-xs text-slate-500">
-                            {tc.item_code ? (
-                              <div className="flex items-center gap-1 min-w-[170px] max-w-[240px]" title={`[${tc.item_code}] ${tc.item_title || ''}`}>
-                                <span className="font-mono text-slate-400 shrink-0 whitespace-nowrap">[{tc.item_code}]</span>
-                                <span className="truncate">{tc.item_title}</span>
-                              </div>
-                            ) : '—'}
+                            {tc.item_code
+                              ? <RefLink to={tc.backlog_item_id ? `/backlog?item=${tc.backlog_item_id}` : null} tip="Buka di Backlog"
+                                  code={tc.item_code} title={tc.item_title} />
+                              : '—'}
                           </td>
                           <td className="px-3 py-3 text-xs text-slate-500">
-                            {tc.feature_code ? (
-                              <div className="flex items-center gap-1 min-w-[150px] max-w-[220px]" title={featureText(tc)}>
-                                <span className="font-mono text-slate-400 shrink-0 whitespace-nowrap">[{tc.feature_code}]</span>
-                                <span className="truncate">{tc.feature_name}</span>
-                              </div>
-                            ) : '—'}
+                            {tc.feature_code
+                              ? <RefLink to={tc.feature_id ? `/products?feature=${tc.feature_id}` : null} tip="Buka feature di Products"
+                                  code={tc.feature_code} title={tc.feature_name} className="min-w-[150px] max-w-[220px]" />
+                              : '—'}
                           </td>
                           <td className="px-3 py-3 text-center"><PriorityBadge priority={tc.priority} /></td>
                           <td className="px-3 py-3 text-center"><StatusBadge status={tc.status} /></td>
                           {/* Red as soon as the deadline day is over (test cases have no "finished" status) */}
                           <td className="px-3 py-3 text-xs whitespace-nowrap"><DeadlineDate date={tc.deadline} /></td>
-                          <td className="px-3 py-3"><ProgressBar value={tc.progress} color={RUN_COLOR[tc.last_result]} title={caseProgressTitle(tc)} /></td>
+                          <td className="px-3 py-3"><ProgressBar value={tc.progress} title={caseProgressTitle(tc)} /></td>
                           <td className="px-3 py-3 text-center text-slate-600 font-medium">{tc.run_count}</td>
                           <td className="px-3 py-3 text-center text-emerald-600 font-medium">{tc.pass_count}</td>
                           <td className="px-3 py-3 text-center text-red-600 font-medium">{tc.fail_count}</td>
@@ -678,18 +735,24 @@ export default function QA() {
                       return (
                         <tr key={run.id} className="table-row">
                           <td className="px-4 py-3">
-                            <div>
-                              <p className="font-medium text-slate-700 text-xs">{run.tc_title}</p>
-                              <p className="text-xs text-slate-400 font-mono">{run.tc_code}</p>
-                            </div>
+                            {canOpenCase ? (
+                              <button type="button" onClick={() => openCaseById(run.test_case_id)} title={`Buka test case ${run.tc_code}`}
+                                className="group/tc text-left">
+                                <span className="block font-medium text-slate-700 text-xs group-hover/tc:underline group-hover/tc:text-indigo-600 underline-offset-2">{run.tc_title}</span>
+                                <span className="block text-xs text-indigo-600 font-mono">{run.tc_code}</span>
+                              </button>
+                            ) : (
+                              <div>
+                                <p className="font-medium text-slate-700 text-xs">{run.tc_title}</p>
+                                <p className="text-xs text-slate-400 font-mono">{run.tc_code}</p>
+                              </div>
+                            )}
                           </td>
                           <td className="px-3 py-3 text-xs text-slate-500">
-                            {run.item_code ? (
-                              <div className="flex items-center gap-1 min-w-[170px] max-w-[240px]" title={`[${run.item_code}] ${run.item_title || ''}`}>
-                                <span className="font-mono shrink-0 whitespace-nowrap">[{run.item_code}]</span>
-                                <span className="text-slate-600 truncate">{run.item_title}</span>
-                              </div>
-                            ) : '—'}
+                            {run.item_code
+                              ? <RefLink to={itemIdByCase.get(run.test_case_id) ? `/backlog?item=${itemIdByCase.get(run.test_case_id)}` : null}
+                                  tip="Buka di Backlog" code={run.item_code} title={run.item_title} codeClass="" />
+                              : '—'}
                           </td>
                           <td className="px-3 py-3 text-center">
                             <div className="flex items-center gap-1.5 justify-center">
@@ -732,7 +795,7 @@ export default function QA() {
       <Modal open={modal.open && modal.type === 'tc'} onClose={() => setModal({ ...modal, open: false })}
         title={modal.data ? 'Edit Test Case' : 'Buat Test Case'} size="lg"
         shareLink={modal.data ? `/qa?case=${modal.data.id}` : undefined}>
-        <TestCaseForm tc={modal.data} products={products} backlogItems={backlogItems} features={features}
+        <TestCaseForm key={modal.data?.id ?? 'new'} tc={modal.data} products={products} backlogItems={backlogItems} features={features}
           onSave={() => { setModal({ ...modal, open: false }); load(); }}
           onClose={() => setModal({ ...modal, open: false })} />
       </Modal>

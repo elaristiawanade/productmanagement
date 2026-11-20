@@ -28,11 +28,13 @@ const BACKLOG_STATUSES = ['backlog', 'todo', 'in_progress', 'in_review', 'done',
 const QA_META = { not_run: { label: 'Belum Dijalankan', c: '#9AA0A9', icon: 'dashed', n: true } };
 
 // Link to the row's own record (null when the viewer cannot open that module).
-function hrefOf(item, can) {
+function hrefOf(item, can, userId) {
   if (item.source === 'backlog') return `/backlog?item=${item.id}`;
   if (item.source === 'bug') return can('bugs', 'access') ? `/bugs?bug=${item.id}` : null;
   if (item.source === 'qa') return `/qa?case=${item.id}`;
-  return null;   // a personal task lives in its owner's My Task only
+  // A personal task opens in its owner's My Task only (PIC = the owner)
+  if (item.source === 'mytask') return item.pic?.[0]?.id === userId ? `/my-tasks?ptask=${item.id}` : null;
+  return null;
 }
 
 /**
@@ -138,7 +140,7 @@ export default function OpenItemTable({
             <tbody className="divide-y divide-slate-50">
               {rows.map(item => {
                 const src = SOURCE_OF[item.source];
-                const href = hrefOf(item, can);
+                const href = hrefOf(item, can, user?.id);
                 const child = !!item.parent_id && !filter;   // indent only while the story is shown too
                 const title = (
                   <span className={`font-medium truncate ${item.done_in_week ? 'text-slate-500' : 'text-slate-700'} ${href ? 'group-hover:underline group-hover:text-indigo-600 underline-offset-2' : ''}`}

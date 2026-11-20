@@ -308,7 +308,8 @@ public class QaController {
             sprintParams);
 
         List<Map<String, Object>> recentFails = jdbc.queryForList(
-            "SELECT tr.id, tr.result, tr.notes, tr.bug_reference, tr.executed_at, " +
+            // test_case_id / backlog_item_id: the QA dashboard links each failure to its test case and backlog item
+            "SELECT tr.id, tr.result, tr.notes, tr.bug_reference, tr.executed_at, tr.test_case_id, tc.backlog_item_id, " +
             "  tc.code AS tc_code, tc.title AS tc_title, " +
             "  bi.code AS item_code, bi.title AS item_title, " +
             "  p.name AS product, u.name AS tester " +

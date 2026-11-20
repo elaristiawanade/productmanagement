@@ -653,24 +653,27 @@ export default function Products() {
       )}
 
       {/* ── Modals ── */}
+      {/* Each form seeds its state once, so it is keyed by the record (and product): a ?product= / ?epic= / ?feature= /
+          ?roadmap= deep link (Ctrl K) while a form is open must remount it, or saving would write the old record's
+          fields onto the new one. */}
       <Modal open={modal.open && modal.type === 'product'} onClose={closeModal}
         title={modal.data ? 'Edit Produk' : 'Tambah Produk'} size="md"
         shareLink={modal.data ? `/products?product=${modal.data.id}` : undefined}>
-        <ProductForm product={modal.data} users={users}
+        <ProductForm key={modal.data?.id ?? 'new'} product={modal.data} users={users}
           onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
 
       <Modal open={modal.open && modal.type === 'epic'} onClose={closeModal}
         title={modal.data ? 'Edit Epic' : 'Tambah Epic'} size="sm"
         shareLink={modal.data ? `/products?epic=${modal.data.id}` : undefined}>
-        <EpicForm epic={modal.data} productId={modal.productId}
+        <EpicForm key={`${modal.data?.id ?? 'new'}-${modal.productId}`} epic={modal.data} productId={modal.productId}
           onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
 
       <Modal open={modal.open && modal.type === 'feature'} onClose={closeModal}
         title={modal.data ? 'Edit Feature' : 'Tambah Feature'} size="md"
         shareLink={modal.data ? `/products?feature=${modal.data.id}` : undefined}>
-        <FeatureForm feature={modal.data} productId={modal.productId} users={users}
+        <FeatureForm key={`${modal.data?.id ?? 'new'}-${modal.productId}`} feature={modal.data} productId={modal.productId} users={users}
           epics={epics.filter(e => e.product_id === modal.productId)}
           onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
@@ -678,7 +681,7 @@ export default function Products() {
       <Modal open={modal.open && modal.type === 'roadmap'} onClose={closeModal}
         title={modal.data ? 'Edit Item Roadmap' : 'Tambah Item ke Roadmap'} size="md"
         shareLink={modal.data ? `/products?roadmap=${modal.data.id}` : undefined}>
-        <RoadmapForm item={modal.data} products={products}
+        <RoadmapForm key={`${modal.data?.id ?? 'new'}-${modal.productId}`} item={modal.data} products={products}
           defaultProductId={modal.productId}
           onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>

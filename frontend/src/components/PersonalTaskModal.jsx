@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Info, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import client from '../api/client';
 import Modal from './Modal';
 import SearchableSelect from './SearchableSelect';
+import OpenLinkButton from './OpenLinkButton';
 import { STATUS_MAP } from './StatusBadge';
 
 // Statuses a personal task can have: the Backlog ones minus `backlog` (a personal task is never "not planned yet").
@@ -16,21 +18,25 @@ const EMPTY = { title: '', product_id: '', backlog_item_id: '', status: 'todo', 
 // `task` = an existing personal task to edit, or null to create. onSaved(task) / onDeleted(id) let the page update
 // its list without a reload.
 export default function PersonalTaskModal({ open, task, onClose, onSaved, onDeleted }) {
+  const navigate = useNavigate();
   const [form, setForm] = useState(EMPTY);
   const [products, setProducts] = useState([]);
   const [items, setItems] = useState([]);
   const [saving, setSaving] = useState(false);
+  const savedForm = useRef(JSON.stringify(EMPTY));   // the form as opened, to spot unsaved edits
 
   useEffect(() => {
     if (!open) return;
-    setForm(task ? {
+    const initial = task ? {
       title: task.title || '',
       product_id: task.product_id ? String(task.product_id) : '',
       backlog_item_id: task.backlog_item_id ? String(task.backlog_item_id) : '',
       status: task.status || 'todo',
       deadline: task.deadline ? String(task.deadline).slice(0, 10) : '',
       notes: task.notes || '',
-    } : EMPTY);
+    } : EMPTY;
+    setForm(initial);
+    savedForm.current = JSON.stringify(initial);
     // Same list as the sidebar's Planning products: only the products this user has access to.
     client.get('/products').then(r => {
       const list = r.data || [];
@@ -58,6 +64,15 @@ export default function PersonalTaskModal({ open, task, onClose, onSaved, onDele
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const changeProduct = (v) => setForm(f => ({ ...f, product_id: v, backlog_item_id: '' }));
+
+  // "Buka" beside the related item: the saved relation only (a changed, unsaved pick would point at the old item).
+  // Leaving the page drops unsaved edits, so ask first.
+  const showItemButton = !!task?.backlog_item_id && !!task.related_code && form.backlog_item_id === String(task.backlog_item_id);
+  const openRelated = () => {
+    if (JSON.stringify(form) !== savedForm.current && !window.confirm('Perubahan yang belum disimpan akan hilang. Lanjutkan?')) return;
+    onClose();
+    navigate(`/backlog?item=${task.backlog_item_id}`);
+  };
 
   const save = async (e) => {
     e.preventDefault();
@@ -108,10 +123,18 @@ export default function PersonalTaskModal({ open, task, onClose, onSaved, onDele
         </div>
         <div>
           <label className="label">Item Backlog terkait <span className="font-normal text-slate-400">(opsional)</span></label>
-          <SearchableSelect value={form.backlog_item_id} onChange={v => set('backlog_item_id', v)} options={itemOptions}
-            disabled={!form.product_id} placeholder={form.product_id ? 'Tidak ada' : 'Pilih produk dulu'}
-            searchPlaceholder="Cari kode atau judul..." emptyOptionLabel="— Tidak ada —"
-            emptyMessage="Produk ini belum punya item Backlog" />
+          <div className="flex gap-2">
+            <div className="flex-1 min-w-0">
+              <SearchableSelect value={form.backlog_item_id} onChange={v => set('backlog_item_id', v)} options={itemOptions}
+                disabled={!form.product_id} placeholder={form.product_id ? 'Tidak ada' : 'Pilih produk dulu'}
+                searchPlaceholder="Cari kode atau judul..." emptyOptionLabel="— Tidak ada —"
+                emptyMessage="Produk ini belum punya item Backlog" />
+            </div>
+            {showItemButton && (
+              <OpenLinkButton href={`/backlog?item=${task.backlog_item_id}`} onOpen={openRelated}
+                code={task.related_code} title={`Buka di Backlog: ${task.related_code} — ${task.related_title || ''}`} />
+            )}
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line
@@ -24,7 +24,10 @@ import DeadlineDate from '../components/DeadlineDate';
 import { renderWithLinks } from '../utils/linkify';
 import { makeStageLookup } from '../utils/bugStages';
 import { buildBacklogTreeOptions } from '../utils/backlogHierarchy';
-import { buildFeatureOptions, featureText } from '../utils/featureOptions';import { useAuth } from '../context/AuthContext';
+import { buildFeatureOptions, featureText } from '../utils/featureOptions';
+import OpenLinkButton from '../components/OpenLinkButton';
+import RefLink from '../components/RefLink';
+import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import {
   format, parseISO, formatDistanceToNow,
@@ -347,7 +350,10 @@ function ActivitySection({ bugId, users = [] }) {
   );
 }
 
+// Rendered with key={bug.id}: the form state is seeded once, so switching to another bug (?bug= deep link from Ctrl K
+// while this modal is open) must remount it, or saving would write this bug's fields onto the other one.
 function BugForm({ bug, products, backlogItems, features, users, bugTypes, stageLookup, onDirtyChange, onSave, onClose }) {
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     product_id: bug?.product_id || '', backlog_item_id: bug?.backlog_item_id || '',
     feature_id: bug?.feature_id || '',
@@ -365,6 +371,14 @@ function BugForm({ bug, products, backlogItems, features, users, bugTypes, stage
   const initialRef = useRef(null);
   if (initialRef.current === null) initialRef.current = JSON.stringify(form);
   useEffect(() => { onDirtyChange?.(JSON.stringify(form) !== initialRef.current); }, [form, onDirtyChange]);
+  // The "Buka" buttons beside Backlog Item / Feature leave this page: ask first when there are unsaved edits
+  const leaveTo = (path) => {
+    if (JSON.stringify(form) !== initialRef.current && !confirm('Perubahan yang belum disimpan akan hilang. Lanjutkan?')) return;
+    navigate(path);
+  };
+  // Saved links only: once a picker is changed (not saved yet) its button would point at the old record
+  const showItemButton = !!bug?.backlog_item_id && !!bug.item_code && String(form.backlog_item_id) === String(bug.backlog_item_id);
+  const showFeatureButton = !!bug?.feature_id && !!bug.feature_code && String(form.feature_id) === String(bug.feature_id);
   // Done items are hidden from new picks but the item currently linked stays visible
   // even if done, so editing an existing bug never silently unlinks it.
   const filteredItems = backlogItems.filter(b =>
@@ -409,26 +423,42 @@ function BugForm({ bug, products, backlogItems, features, users, bugTypes, stage
       </div>
       <div>
         <label className="label">Backlog Item (opsional)</label>
-        <SearchableSelect
-          value={form.backlog_item_id}
-          onChange={v => setForm(f => ({ ...f, backlog_item_id: v }))}
-          options={buildBacklogTreeOptions(filteredItems)}
-          placeholder="— Tidak terkait —"
-          emptyOptionLabel="— Tidak terkait —"
-          searchPlaceholder="Cari backlog item..."
-        />
+        <div className="flex gap-2">
+          <div className="flex-1 min-w-0">
+            <SearchableSelect
+              value={form.backlog_item_id}
+              onChange={v => setForm(f => ({ ...f, backlog_item_id: v }))}
+              options={buildBacklogTreeOptions(filteredItems)}
+              placeholder="— Tidak terkait —"
+              emptyOptionLabel="— Tidak terkait —"
+              searchPlaceholder="Cari backlog item..."
+            />
+          </div>
+          {showItemButton && (
+            <OpenLinkButton href={`/backlog?item=${bug.backlog_item_id}`} onOpen={() => leaveTo(`/backlog?item=${bug.backlog_item_id}`)}
+              code={bug.item_code} title={`Buka di Backlog: ${bug.item_code} — ${bug.item_title || ''}`} />
+          )}
+        </div>
       </div>
       <div className="col-span-2">
         <label className="label">Feature (opsional)</label>
-        <SearchableSelect
-          value={form.feature_id}
-          onChange={v => setForm(f => ({ ...f, feature_id: v }))}
-          options={buildFeatureOptions(features, products, form.product_id)}
-          placeholder="— Tidak terkait —"
-          emptyOptionLabel="— Tidak terkait —"
-          searchPlaceholder="Cari kode produk, kode atau nama feature..."
-          emptyMessage="Belum ada feature di produk ini"
-        />
+        <div className="flex gap-2">
+          <div className="flex-1 min-w-0">
+            <SearchableSelect
+              value={form.feature_id}
+              onChange={v => setForm(f => ({ ...f, feature_id: v }))}
+              options={buildFeatureOptions(features, products, form.product_id)}
+              placeholder="— Tidak terkait —"
+              emptyOptionLabel="— Tidak terkait —"
+              searchPlaceholder="Cari kode produk, kode atau nama feature..."
+              emptyMessage="Belum ada feature di produk ini"
+            />
+          </div>
+          {showFeatureButton && (
+            <OpenLinkButton href={`/products?feature=${bug.feature_id}`} onOpen={() => leaveTo(`/products?feature=${bug.feature_id}`)}
+              code={bug.feature_code} title={`Buka feature di Products: ${bug.feature_code} — ${bug.feature_name || ''}`} />
+          )}
+        </div>
       </div>
       <div className="col-span-2">
         <label className="label">Judul Bug *</label>
@@ -740,6 +770,21 @@ export default function BugsIncident() {
   });
   useEffect(() => { setPageBugs(1); }, [bugFilters, hideClosed, sortKey, sortDir]);
 
+  // Opens a bug's form from another row (a progress update, a dashboard feed line) without touching the URL, so the
+  // ?product= filter stays. A bug outside the loaded list (the dashboard feeds are not product-filtered) is looked up
+  // in the unfiltered list, the same way the ?bug= deep link does.
+  const openBugById = (id) => {
+    const found = bugs.find(b => b.id === id);
+    if (found) { setModal({ open: true, type: 'bug', data: found }); return; }
+    client.get('/bugs').then(r => {
+      const f = r.data.find(b => b.id === id);
+      if (f) setModal({ open: true, type: 'bug', data: f });
+      else toast.error('Bug tidak ditemukan');
+    }).catch(() => {});
+  };
+  // Progress updates carry only bug_id; they load with the same product filter as the bugs, so every bug is here
+  const bugItemById = useMemo(() => new Map(bugs.map(b => [b.id, b.backlog_item_id])), [bugs]);
+
   // Cycle: click a new column -> its default direction: click again -> the
   // opposite direction; click a third time -> clear back to the original order.
   const handleSort = (key) => {
@@ -1012,7 +1057,11 @@ Judul, prioritas, assignee, deadline, dan lampiran disalin ke kartu Backlog (sta
                       <div key={a.id} className="px-5 py-3 flex items-start gap-3">
                         <BugIcon className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-700">{a.bug_title}</p>
+                          {/* bug_id comes with the API from this version on; without it the title stays plain text */}
+                          {a.bug_id ? (
+                            <button type="button" onClick={() => openBugById(a.bug_id)} title={`Buka bug ${a.bug_code}`}
+                              className="text-left text-sm font-medium text-slate-700 hover:underline hover:text-indigo-600 underline-offset-2">{a.bug_title}</button>
+                          ) : <p className="text-sm font-medium text-slate-700">{a.bug_title}</p>}
                           <p className="text-xs text-slate-400 mt-0.5">[{a.bug_code}] · {a.product} · oleh {a.updated_by_name || '—'} → <StatusBadge status={a.stage} meta={stageLookup.metaOf(a.stage)} size="xs" /></p>
                           {a.note && <p className="text-xs text-slate-600 mt-1 italic">{a.note}</p>}
                         </div>
@@ -1038,7 +1087,15 @@ Judul, prioritas, assignee, deadline, dan lampiran disalin ke kartu Backlog (sta
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-slate-700">{c.user_name || 'Unknown'}</p>
-                          <p className="text-xs text-slate-400 mt-0.5">[{c.bug_code}] {c.bug_title} · {c.product}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            {c.bug_id ? (
+                              <button type="button" onClick={() => openBugById(c.bug_id)} title={`Buka bug ${c.bug_code}`}
+                                className="text-left hover:underline hover:text-indigo-600 underline-offset-2">
+                                <span className="font-mono text-indigo-600">[{c.bug_code}]</span> {c.bug_title}
+                              </button>
+                            ) : <>[{c.bug_code}] {c.bug_title}</>}
+                            {' '}· {c.product}
+                          </p>
                           <p className="text-xs text-slate-600 mt-1 bg-slate-50 rounded-lg px-2.5 py-1.5">{renderComment(c.content)}</p>
                         </div>
                         <span className="text-xs text-slate-400 shrink-0">{c.created_at ? format(parseISO(c.created_at), 'dd MMM HH:mm') : '—'}</span>
@@ -1165,20 +1222,16 @@ Judul, prioritas, assignee, deadline, dan lampiran disalin ke kartu Backlog (sta
                           <td className="px-3 py-3"><TypeBadge type={b.type} name={b.type_name} color={b.type_color} /></td>
                           <td className="px-3 py-3 text-xs text-slate-500">
                             {/* One line: code never wraps, title truncates (full text on hover) */}
-                            {b.item_code ? (
-                              <div className="flex items-center gap-1 min-w-[170px] max-w-[240px]" title={`[${b.item_code}] ${b.item_title || ''}`}>
-                                <span className="font-mono text-slate-400 shrink-0 whitespace-nowrap">[{b.item_code}]</span>
-                                <span className="truncate">{b.item_title}</span>
-                              </div>
-                            ) : '—'}
+                            {b.item_code
+                              ? <RefLink to={b.backlog_item_id ? `/backlog?item=${b.backlog_item_id}` : null} tip="Buka di Backlog"
+                                  code={b.item_code} title={b.item_title} />
+                              : '—'}
                           </td>
                           <td className="px-3 py-3 text-xs text-slate-500">
-                            {b.feature_code ? (
-                              <div className="flex items-center gap-1 min-w-[150px] max-w-[220px]" title={featureText(b)}>
-                                <span className="font-mono text-slate-400 shrink-0 whitespace-nowrap">[{b.feature_code}]</span>
-                                <span className="truncate">{b.feature_name}</span>
-                              </div>
-                            ) : '—'}
+                            {b.feature_code
+                              ? <RefLink to={b.feature_id ? `/products?feature=${b.feature_id}` : null} tip="Buka feature di Products"
+                                  code={b.feature_code} title={b.feature_name} className="min-w-[150px] max-w-[220px]" />
+                              : '—'}
                           </td>
                           <td className="px-3 py-3 text-center"><PriorityBadge priority={b.severity} /></td>
                           <td className="px-3 py-3 text-center"><PriorityBadge priority={b.priority} /></td>
@@ -1299,18 +1352,17 @@ Judul, prioritas, assignee, deadline, dan lampiran disalin ke kartu Backlog (sta
                       return (
                         <tr key={p.id} className="table-row">
                           <td className="px-4 py-3">
-                            <div>
-                              <p className="font-medium text-slate-700 text-xs">{p.bug_title}</p>
-                              <p className="text-xs text-slate-400 font-mono">{p.bug_code}</p>
-                            </div>
+                            <button type="button" onClick={() => openBugById(p.bug_id)} title={`Buka bug ${p.bug_code}`}
+                              className="group/bug text-left">
+                              <span className="block font-medium text-slate-700 text-xs group-hover/bug:underline group-hover/bug:text-indigo-600 underline-offset-2">{p.bug_title}</span>
+                              <span className="block text-xs text-indigo-600 font-mono">{p.bug_code}</span>
+                            </button>
                           </td>
                           <td className="px-3 py-3 text-xs text-slate-500">
-                            {p.item_code ? (
-                              <div className="flex items-center gap-1 min-w-[170px] max-w-[240px]" title={`[${p.item_code}] ${p.item_title || ''}`}>
-                                <span className="font-mono shrink-0 whitespace-nowrap">[{p.item_code}]</span>
-                                <span className="text-slate-600 truncate">{p.item_title}</span>
-                              </div>
-                            ) : '—'}
+                            {p.item_code
+                              ? <RefLink to={bugItemById.get(p.bug_id) ? `/backlog?item=${bugItemById.get(p.bug_id)}` : null}
+                                  tip="Buka di Backlog" code={p.item_code} title={p.item_title} codeClass="" />
+                              : '—'}
                           </td>
                           <td className="px-3 py-3 text-center">
                             <div className="flex items-center gap-1.5 justify-center">
@@ -1367,7 +1419,7 @@ Judul, prioritas, assignee, deadline, dan lampiran disalin ke kartu Backlog (sta
               </button>
             )
         )}>
-        <BugForm bug={modal.data} products={products} backlogItems={backlogItems} features={features} users={users} bugTypes={bugTypes} stageLookup={stageLookup} onDirtyChange={setBugFormDirty}
+        <BugForm key={modal.data?.id ?? 'new'} bug={modal.data} products={products} backlogItems={backlogItems} features={features} users={users} bugTypes={bugTypes} stageLookup={stageLookup} onDirtyChange={setBugFormDirty}
           onSave={() => { setModal({ ...modal, open: false }); load(); }}
           onClose={() => setModal({ ...modal, open: false })} />
       </Modal>
