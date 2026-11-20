@@ -68,8 +68,13 @@ export default {
         app: 'rgb(var(--app) / <alpha-value>)',
         line: { DEFAULT: 'rgb(var(--line) / <alpha-value>)', soft: 'rgb(var(--line-soft) / <alpha-value>)' },
         hover: 'rgb(var(--hover) / <alpha-value>)',
-        frame: { DEFAULT: '#0F0F11', 2: '#1D1D21', 3: '#2B2B30', ink: '#F4F4F5', 'ink-2': '#A1A1AA' },
-      },
+        // Shell frame (top bar + icon rail): light grey in light mode, near-black in dark mode
+        frame: {
+          DEFAULT: 'rgb(var(--frame) / <alpha-value>)', 2: 'rgb(var(--frame-2) / <alpha-value>)',
+          3: 'rgb(var(--frame-3) / <alpha-value>)', ink: 'rgb(var(--frame-ink) / <alpha-value>)',
+          'ink-2': 'rgb(var(--frame-ink-2) / <alpha-value>)',
+        },
+        side: 'rgb(var(--side) / <alpha-value>)',      },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],

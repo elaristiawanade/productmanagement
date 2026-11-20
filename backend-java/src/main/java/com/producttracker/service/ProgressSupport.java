@@ -99,18 +99,46 @@ public class ProgressSupport {
             }
             return w == 0 ? null : (int) Math.round(sum / w);
         }
+
+        /**
+         * Weighted average over the work below some items: each item counts with all the leaves under it (itself
+         * when it is a leaf), and a leaf reached twice (a story and one of its tasks both listed) counts once.
+         * Used for a feature, whose linked items can be stories with tasks. null when there is no work below.
+         */
+        public Integer averageOfSubtrees(Collection<Long> ids) {
+            Map<Long, Node> leaves = new LinkedHashMap<>();
+            for (Long id : ids) collectLeaves(nodes.get(id), leaves, new HashSet<>());
+            double sum = 0, w = 0;
+            for (Node n : leaves.values()) { sum += n.own * n.weight; w += n.weight; }
+            return w == 0 ? null : (int) Math.round(sum / w);
+        }
+
+        private static void collectLeaves(Node n, Map<Long, Node> out, Set<Long> visiting) {
+            if (n == null || !visiting.add(n.id)) return;
+            if (n.children.isEmpty()) {
+                if (!"epic".equals(n.type)) out.put(n.id, n);
+                return;
+            }
+            for (Node c : n.children) collectLeaves(c, out, visiting);
+        }
     }
 
     /** Loads the full backlog of the given products (one query) and computes every item's progress. */
     public Snapshot snapshot(Collection<Long> productIds) {
-        Snapshot snap = new Snapshot();
-        if (productIds == null || productIds.isEmpty()) return snap;
+        if (productIds == null || productIds.isEmpty()) return new Snapshot();
         List<Long> ids = new ArrayList<>(new LinkedHashSet<>(productIds));
         String in = String.join(",", Collections.nCopies(ids.size(), "?"));
-        List<Map<String, Object>> rows = jdbc.queryForList(
+        return fromRows(jdbc.queryForList(
             "SELECT id, product_id, parent_id, type, status, story_points FROM backlog_items WHERE product_id IN (" + in + ")",
-            ids.toArray());
+            ids.toArray()));
+    }
 
+    /**
+     * Same computation over rows the caller already loaded (id, product_id, parent_id, type, status, story_points).
+     * The weekly snapshot uses this with each item's status AS OF the end of a week instead of its current status.
+     */
+    public static Snapshot fromRows(List<Map<String, Object>> rows) {
+        Snapshot snap = new Snapshot();
         for (Map<String, Object> r : rows) {
             Node n = new Node();
             n.id = ((Number) r.get("id")).longValue();
@@ -132,7 +160,7 @@ public class ProgressSupport {
         return snap;
     }
 
-    private void aggregate(Node n, Set<Long> visiting) {
+    private static void aggregate(Node n, Set<Long> visiting) {
         if (n.counted) return;
         if (!visiting.add(n.id)) return;
         for (Node c : n.children) {

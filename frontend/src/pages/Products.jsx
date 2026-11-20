@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Pencil, Trash2, Package, ExternalLink, ChevronDown, ChevronUp, Map } from 'lucide-react';
+import { Plus, Pencil, Trash2, Package, ExternalLink, ChevronDown, ChevronUp, Map, Target, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import client from '../api/client';
 import { useDeepLink } from '../utils/deepLink';
@@ -7,6 +7,7 @@ import Modal from '../components/Modal';
 import ExportMdButton from '../components/ExportMdButton';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
+import { progressFill } from '../components/ProgressBar';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
@@ -27,10 +28,36 @@ const ROADMAP_STATUS_MAP = Object.fromEntries(ROADMAP_STATUSES.map(s => [s.key, 
 function RoadmapStatusBadge({ status }) {
   const cfg = ROADMAP_STATUS_MAP[status] || { label: status, cls: 'bg-slate-100 text-slate-600' };
   return (
-    <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full border ${cfg.cls}`}>
+    <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full border whitespace-nowrap ${cfg.cls}`}>
       {cfg.label}
     </span>
   );
+}
+
+// ─── Roadmap table sorting (client side; the whole list is already loaded) ─────
+// Status sorts by workflow order (Planned → … → Offline), not alphabetically. Text uses numeric collation so
+// "v1.2" comes before "v1.10". Rows with no value always go last, whichever direction is chosen.
+const ROADMAP_STATUS_RANK = Object.fromEntries(ROADMAP_STATUSES.map((s, i) => [s.key, i]));
+const ROADMAP_SORTS = {
+  feature_name:         r => r.feature_name,
+  product:              r => r.product_name,
+  status:               r => ROADMAP_STATUS_RANK[r.status] ?? ROADMAP_STATUSES.length,
+  product_version:      r => r.product_version,
+  month_release_target: r => (r.month_release_target ? String(r.month_release_target).slice(0, 10) : null),
+};
+
+function sortRoadmap(rows, { key, dir }) {
+  const get = ROADMAP_SORTS[key];
+  if (!get) return rows;
+  const missing = v => v === null || v === undefined || v === '';
+  return [...rows].sort((a, b) => {
+    const va = get(a), vb = get(b);
+    if (missing(va) || missing(vb)) return missing(va) === missing(vb) ? 0 : (missing(va) ? 1 : -1);
+    const res = typeof va === 'number' && typeof vb === 'number'
+      ? va - vb
+      : String(va).localeCompare(String(vb), 'id', { numeric: true, sensitivity: 'base' });
+    return dir === 'asc' ? res : -res;
+  });
 }
 
 // ─── RoadmapForm ──────────────────────────────────────────────────────────────
@@ -205,6 +232,7 @@ export default function Products() {
   const [loading,  setLoading]  = useState(true);
   const [filterRoadmapProduct, setFilterRoadmapProduct] = useState('');
   const [filterRoadmapStatus,  setFilterRoadmapStatus]  = useState('');
+  const [roadmapSort, setRoadmapSort] = useState({ key: null, dir: 'asc' });   // key null = server order
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -287,11 +315,30 @@ export default function Products() {
 
   const closeModal = () => setModal(m => ({ ...m, open: false }));
 
-  const filteredRoadmap = roadmap.filter(r => {
+  const filteredRoadmap = sortRoadmap(roadmap.filter(r => {
     if (filterRoadmapProduct && String(r.product_id) !== filterRoadmapProduct) return false;
     if (filterRoadmapStatus  && r.status !== filterRoadmapStatus) return false;
     return true;
-  });
+  }), roadmapSort);
+
+  // Same cycle as the Bugs Incident table: 1st click ascending, 2nd descending, 3rd back to the original order
+  const toggleRoadmapSort = (key) => setRoadmapSort(s =>
+    s.key !== key ? { key, dir: 'asc' } : s.dir === 'asc' ? { key, dir: 'desc' } : { key: null, dir: 'asc' });
+
+  const roadmapTh = (key, label, align = 'center') => {
+    const active = roadmapSort.key === key;
+    const Icon = !active ? ArrowUpDown : roadmapSort.dir === 'asc' ? ArrowUp : ArrowDown;
+    return (
+      <th className={`${align === 'left' ? 'text-left' : 'text-center'} ${key === 'feature_name' ? 'px-5' : 'px-4'} py-3`}
+        aria-sort={active ? (roadmapSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+        <button type="button" onClick={() => toggleRoadmapSort(key)} title={`Urutkan berdasarkan ${label}`}
+          className={`inline-flex items-center gap-1 uppercase tracking-wide whitespace-nowrap hover:text-slate-800 ${active ? 'text-slate-800' : ''}`}>
+          {label}
+          <Icon className={`w-3 h-3 shrink-0 ${active ? 'text-slate-800' : 'text-slate-300'}`} />
+        </button>
+      </th>
+    );
+  };
 
   if (loading) return <div className="flex items-center justify-center h-48"><div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>;
 
@@ -305,7 +352,7 @@ export default function Products() {
         ].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors
-              ${tab === id ? 'border-slate-800 text-slate-800 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+              ${tab === id ? 'border-indigo-600 text-slate-800 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
             {label}
           </button>
         ))}
@@ -350,7 +397,7 @@ export default function Products() {
                       <span>Done: <strong className="text-emerald-600">{product.done_items}</strong></span>
                       <span>Active Sprints: <strong className="text-blue-600">{product.active_sprints}</strong></span>
                       {product.repository_url && (
-                        <a href={product.repository_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-slate-600 hover:text-slate-800 underline underline-offset-2 decoration-slate-300">
+                        <a href={product.repository_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-slate-600 hover:text-indigo-600 underline underline-offset-2 decoration-slate-300 hover:decoration-indigo-600 transition-colors">
                           <ExternalLink className="w-3 h-3" /> Repo
                         </a>
                       )}
@@ -358,7 +405,7 @@ export default function Products() {
                     <div className="mt-3 flex items-center gap-2"
                       title="Progress dihitung otomatis dari item Backlog produk ini: In Progress 50%, In Review 80%, Done 100%, dibobot story point">
                       <div className="flex-1 max-w-[200px] h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-slate-800 rounded-full" style={{ width: `${pct}%` }} />
+                        <div className={`h-full rounded-full ${progressFill(pct)}`} style={{ width: `${pct}%` }} />
                       </div>
                       <span className="text-xs text-slate-400">Progress {pct}%</span>
                     </div>
@@ -444,9 +491,12 @@ export default function Products() {
                                   <StatusBadge status={f.status} size="xs" />
                                   <PriorityBadge priority={f.priority} />
                                   <span className="text-xs text-slate-400">{f.target_release || '—'}</span>
+                                  <span className="inline-flex items-center gap-1 text-xs text-slate-500 tabular-nums w-24 shrink-0" title="Target (tanggal), tampil di Management Dashboard">
+                                    {f.target_date && <><Target className="w-3 h-3 shrink-0" />{format(parseISO(String(f.target_date).slice(0, 10)), 'dd MMM yyyy')}</>}
+                                  </span>
                                   <div className="flex items-center gap-1.5 w-24 shrink-0">
                                     <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                      <div className="h-full bg-slate-800 rounded-full" style={{ width: `${pct2}%` }} />
+                                      <div className={`h-full rounded-full ${progressFill(pct2)}`} style={{ width: `${pct2}%` }} />
                                     </div>
                                     <span className="text-xs text-slate-400">{pct2}%</span>
                                   </div>
@@ -518,17 +568,17 @@ export default function Products() {
             })}
           </div>
 
-          {/* Roadmap table */}
+          {/* Roadmap table: a minimum width keeps the columns readable; narrower screens scroll it sideways */}
           <div className="card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[980px] text-sm">
                 <thead>
-                  <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                    <th className="text-left px-5 py-3">Fitur</th>
-                    <th className="text-left px-4 py-3">Produk</th>
-                    <th className="text-center px-4 py-3">Status</th>
-                    <th className="text-center px-4 py-3">Versi</th>
-                    <th className="text-center px-4 py-3">Target Rilis</th>
+                  <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 whitespace-nowrap">
+                    {roadmapTh('feature_name', 'Fitur', 'left')}
+                    {roadmapTh('product', 'Produk', 'left')}
+                    {roadmapTh('status', 'Status')}
+                    {roadmapTh('product_version', 'Versi')}
+                    {roadmapTh('month_release_target', 'Target Rilis')}
                     <th className="text-left px-4 py-3">Deskripsi</th>
                     <th className="text-center px-4 py-3">Aksi</th>
                   </tr>
@@ -545,9 +595,9 @@ export default function Products() {
                   {filteredRoadmap.map(item => (
                     <tr key={item.id} className="table-row">
                       <td className="px-5 py-3">
-                        <p className="font-medium text-slate-800">{item.feature_name}</p>
+                        <p className="font-medium text-slate-800 min-w-[180px]">{item.feature_name}</p>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <span className="text-xs font-medium px-2 py-0.5 rounded border font-mono"
                           style={{
                             color: item.product_color,
@@ -561,20 +611,23 @@ export default function Products() {
                       <td className="px-4 py-3 text-center">
                         <RoadmapStatusBadge status={item.status} />
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
                         {item.product_version
                           ? <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">{item.product_version}</span>
                           : <span className="text-slate-300">—</span>}
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
                         {item.month_release_target
                           ? <span className="text-xs text-slate-600">{format(parseISO(item.month_release_target), 'MMMM yyyy')}</span>
                           : <span className="text-slate-300">—</span>}
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-500 max-w-[260px] truncate">
-                        {item.description || <span className="text-slate-300 italic">Tidak ada deskripsi</span>}
+                      <td className="px-4 py-3 text-xs text-slate-500">
+                        {/* Fixed width on an inner block: max-width on a table cell is not honoured, so truncate here */}
+                        <div className="w-[240px] truncate" title={item.description || undefined}>
+                          {item.description || <span className="text-slate-300 italic">Tidak ada deskripsi</span>}
+                        </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-1 justify-center">
                           {can('roadmap', 'update') && (
                             <button className="btn-ghost btn-sm p-1.5 rounded-lg"
@@ -661,7 +714,7 @@ function EpicForm({ epic, productId, onSave, onClose }) {
 
 // ─── FeatureForm ──────────────────────────────────────────────────────────────
 function FeatureForm({ feature, productId, users, epics, onSave, onClose }) {
-  const [form, setForm] = useState({ product_id: feature?.product_id || productId, epic_id: feature?.epic_id || '', code: feature?.code || '', name: feature?.name || '', owner_id: feature?.owner_id || '', status: feature?.status || 'not_started', priority: feature?.priority || 'medium', target_release: feature?.target_release || '', is_roadmap_item: feature?.is_roadmap_item || false });
+  const [form, setForm] = useState({ product_id: feature?.product_id || productId, epic_id: feature?.epic_id || '', code: feature?.code || '', name: feature?.name || '', owner_id: feature?.owner_id || '', status: feature?.status || 'not_started', priority: feature?.priority || 'medium', target_release: feature?.target_release || '', target_date: feature?.target_date ? String(feature.target_date).slice(0, 10) : '', is_roadmap_item: feature?.is_roadmap_item || false });
   const [saving, setSaving] = useState(false);
   const save = async (e) => {
     e.preventDefault(); setSaving(true);
@@ -680,6 +733,7 @@ function FeatureForm({ feature, productId, users, epics, onSave, onClose }) {
       <div><label className="label">Status</label><select className="select" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>{['not_started','in_development','testing','released','on_hold'].map(s => <option key={s} value={s}>{s.replace('_',' ')}</option>)}</select></div>
       <div><label className="label">Prioritas</label><select className="select" value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>{['critical','high','medium','low'].map(p => <option key={p} value={p}>{p}</option>)}</select></div>
       <div><label className="label">Target Release</label><input className="input" value={form.target_release} onChange={e => setForm(f => ({ ...f, target_release: e.target.value }))} placeholder="v1.0" /></div>
+      <div><label className="label">Target (tanggal)</label><input type="date" className="input" value={form.target_date} onChange={e => setForm(f => ({ ...f, target_date: e.target.value }))} /><p className="text-[11px] text-slate-400 mt-1">Tampil sebagai kolom Target di Management Dashboard</p></div>
       <div className="col-span-2 flex items-center gap-2 pt-1">
         <input id="is_roadmap_item" type="checkbox" className="w-4 h-4 rounded accent-indigo-600" checked={form.is_roadmap_item}
           onChange={e => setForm(f => ({ ...f, is_roadmap_item: e.target.checked }))} />

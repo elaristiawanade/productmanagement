@@ -206,6 +206,9 @@ const MODULE_CATALOG = [
   { module: 'c_level', label: 'C-Level Dashboard', actions: [
     { key: 'access', label: 'Akses' },
   ]},
+  { module: 'management_dashboard', label: 'Management Dashboard', actions: [
+    { key: 'view', label: 'Lihat' },
+  ]},
   { module: 'clients', label: 'Client Management', actions: [
     { key: 'access', label: 'Akses' }, { key: 'create', label: 'Buat' },
     { key: 'update', label: 'Ubah & Catatan' }, { key: 'delete', label: 'Hapus' },
@@ -602,7 +605,7 @@ export default function Users() {
         {[['users','Users'], ['roles','Roles & Permissions'], ['departments','Departemen']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors
-              ${tab === id ? 'border-slate-800 text-slate-800 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+              ${tab === id ? 'border-indigo-600 text-slate-800 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
             {label}
           </button>
         ))}

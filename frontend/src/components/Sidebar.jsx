@@ -5,7 +5,7 @@ import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { SECTIONS, visibleItems } from './navConfig';
 
-// Black icon rail: one tile per section that has at least one item the user may see.
+// Icon rail on the shell frame (light grey, near-black in dark mode); the active section is the red tile: one tile per section that has at least one item the user may see.
 export function IconRail({ activeKey }) {
   const { can } = useAuth();
   return (
@@ -18,9 +18,9 @@ export function IconRail({ activeKey }) {
         return (
           <Link key={section.key} to={items[0].to} aria-current={on ? 'page' : undefined}
             className={`group w-14 flex flex-col items-center gap-[3px] pt-1.5 pb-1 text-[10.5px] font-medium
-              ${on ? 'text-[#fff]' : 'text-frame-ink-2 hover:text-[#fff]'}`}>
+              ${on ? 'text-frame-ink font-semibold' : 'text-frame-ink-2 hover:text-frame-ink'}`}>
             <span className={`w-[38px] h-8 rounded-[9px] grid place-items-center transition-colors
-              ${on ? 'bg-indigo-600' : 'group-hover:bg-frame-2'}`}>
+              ${on ? 'bg-indigo-600 text-white' : 'group-hover:bg-frame-2'}`}>
               <Icon className="w-[19px] h-[19px]" />
             </span>
             {section.label}
@@ -35,24 +35,32 @@ export function IconRail({ activeKey }) {
 export default function Sidebar({ section, onCollapse }) {
   const { can } = useAuth();
   const location = useLocation();
-  const [products, setProducts] = useState([]);
-  // Products shortcut list (Planning + Quality): each opens the page filtered to that product —
-  // Backlog in Planning; QA Module or Bugs Incident (whichever is open, QA by default) in Quality
+  // Products shortcut list: each opens the page filtered to that product — Backlog in Planning; QA Module or
+  // Bugs Incident (whichever is open, QA by default) in Quality; the Management Dashboard in Home (only while it is open)
   const productBase = section.key === 'plan' ? '/backlog'
     : section.key === 'quality' ? (location.pathname === '/bugs' ? '/bugs' : '/qa')
+    : section.key === 'home' && location.pathname === '/management' ? '/management'
     : null;
   const activeProduct = productBase && location.pathname === productBase ? new URLSearchParams(location.search).get('product') : null;
+  // The dashboard has its own product list (Commissioner sees every product there), so lists are kept per source.
+  const productSource = productBase === '/management' ? '/management/products' : '/products';
+  const [productLists, setProductLists] = useState({});
+  const products = productLists[productSource] || [];
 
   useEffect(() => {
-    if (!productBase || products.length) return;
-    client.get('/products').then(r => setProducts(r.data || [])).catch(() => {});
-  }, [productBase, products.length]);
+    if (!productBase || productLists[productSource]) return;   // fetched once per source (an empty list counts)
+    client.get(productSource, { silent: true })
+      .then(r => setProductLists(m => ({ ...m, [productSource]: r.data || [] })))
+      .catch(() => {});
+  }, [productBase, productSource, productLists]);
 
-  const navCls = (on) => `flex items-center gap-2.5 h-8 px-2.5 rounded-lg text-[13.5px] whitespace-nowrap transition-colors
-    ${on ? 'bg-slate-200/70 text-slate-800 font-medium' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-800'}`;
+  // Active page: red tint + thin red bar on the left (brand accent, same red as the primary buttons)
+  const navCls = (on) => `relative flex items-center gap-2.5 h-8 px-2.5 rounded-lg text-[13.5px] whitespace-nowrap transition-colors
+    ${on ? `bg-indigo-50 text-indigo-700 font-medium before:content-[''] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-full before:bg-indigo-600`
+         : 'text-slate-600 hover:bg-slate-100 hover:text-slate-800'}`;
 
   return (
-    <aside className="h-full w-full bg-app flex flex-col min-w-0 overflow-hidden border-r border-slate-200">
+    <aside className="h-full w-full bg-side flex flex-col min-w-0 overflow-hidden border-r border-slate-200">
       <div className="flex items-center gap-2 pl-[18px] pr-2.5 pt-4 pb-2">
         <span className="flex-1 text-[19px] font-semibold tracking-tight text-slate-800 truncate">{section.label}</span>
         <button onClick={onCollapse} title="Sembunyikan sidebar" aria-label="Sembunyikan sidebar"

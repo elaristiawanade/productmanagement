@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, ListTodo, Zap, Package, Users, TestTube2, FileDown, ClipboardList, Layers, CheckSquare,
-  Settings, Crown, Bug, Home, CalendarRange, User, Landmark, Building2, Tags, Tag, ListOrdered,
+  Settings, Crown, Bug, Home, CalendarRange, User, Landmark, Building2, Tags, Tag, ListOrdered, Gauge,
 } from 'lucide-react';
 
 // Navigation grouped into icon-rail sections. `title` (when set) is the page title from the old header,
@@ -9,6 +9,7 @@ import {
 // (super_admin always passes via can()'s bypass). Route-level gates stay in App.jsx.
 export const SECTIONS = [
   { key: 'home', label: 'Home', icon: Home, items: [
+    { to: '/management', label: 'Management', icon: Gauge, title: 'Management Dashboard', gate: ['management_dashboard', 'view'] },
     { to: '/',         label: 'Dashboard', icon: LayoutDashboard },
     { to: '/my-tasks', label: 'My Tasks',  icon: CheckSquare },
   ] },

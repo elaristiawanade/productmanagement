@@ -15,6 +15,13 @@
     --ink: 24 24 27;
     --ink-2: 93 95 103;
     --ink-3: 154 156 164;
+    /* App shell (top bar + icon rail): light grey frame like ClickUp, the work panel and sidebar sit on it as white */
+    --side: 255 255 255;
+    --frame: 240 240 243;
+    --frame-2: 255 255 255;
+    --frame-3: 222 222 228;
+    --frame-ink: 24 24 27;
+    --frame-ink-2: 93 95 103;
   }
   [data-theme="dark"] {
     color-scheme: dark;
@@ -26,6 +33,12 @@
     --ink: 236 236 238;
     --ink-2: 165 166 174;
     --ink-3: 113 114 123;
+    --side: 21 21 24;
+    --frame: 15 15 17;
+    --frame-2: 29 29 33;
+    --frame-3: 43 43 48;
+    --frame-ink: 244 244 245;
+    --frame-ink-2: 161 161 170;
   }
 
   * { box-sizing: border-box; }
@@ -35,6 +48,10 @@
     font-size: 14px;
   }
   :focus-visible { outline: 2px solid rgb(var(--c-indigo-500)); outline-offset: 2px; }
+  /* Brand red for native controls (checkbox, radio, range) and a soft red text highlight.
+     --c-indigo-* is the red brand scale and flips with the theme, so both work in dark mode too. */
+  :root { accent-color: rgb(var(--c-indigo-600)); }
+  ::selection { background-color: rgb(var(--c-indigo-200) / .7); color: inherit; }
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { @apply bg-slate-300 rounded-full; border: 2px solid transparent; background-clip: padding-box; }

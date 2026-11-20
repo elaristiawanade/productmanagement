@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Search, CheckCircle2, Clock, AlertCircle, ExternalLink,
-  X, CheckCheck, Layers, Link2
+  X, CheckCheck, Layers, Link2, Plus, Pencil
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
@@ -15,17 +15,27 @@ import { useAuth } from '../context/AuthContext';
 import { renderWithLinks } from '../utils/linkify';
 import toast from 'react-hot-toast';
 import CopyLinkButton from '../components/CopyLinkButton';
+import PersonalTaskModal, { PERSONAL_STATUSES } from '../components/PersonalTaskModal';
 
 const STATUSES   = ['backlog','todo','in_progress','in_review','done','blocked'];
 const PRIORITIES = ['critical','high','medium','low'];
-const TYPES      = ['story','bug','task','epic'];
+const TYPES      = ['story','bug','task','epic','pribadi'];
 
 const TYPE_CLS = {
   story: 'text-blue-600 bg-blue-50',
   bug:   'text-red-600 bg-red-50',
   task:  'text-slate-600 bg-slate-100',
   epic:  'text-purple-600 bg-purple-50',
+  pribadi: 'text-amber-700 bg-amber-50',
 };
+
+// A personal task (made with "Add Task") shown as a row of the same list. It has no code, priority or sprint;
+// its related Backlog item (a reference only) takes the place of the parent line.
+const personalRow = (t) => ({
+  ...t, kind: 'personal', type: 'pribadi', code: null, priority: null, sprint_id: null, sprint_name: null,
+  parent_code: null, epic_name: null, features: [],
+});
+const rowKey = (i) => (i.kind === 'personal' ? `p-${i.id}` : `b-${i.id}`);
 
 const PRIORITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
 
@@ -182,7 +192,7 @@ function TaskPanel({ item, onClose, onStatusChange, onMarkDone }) {
 
         <div className="px-5 py-3 border-t border-slate-100 shrink-0">
           <Link to={`/backlog?item=${item.id}`} onClick={onClose}
-            className="flex items-center justify-center gap-1.5 text-sm text-slate-800 font-medium hover:underline underline-offset-2">
+            className="flex items-center justify-center gap-1.5 text-sm text-slate-800 font-medium hover:text-indigo-600 hover:underline underline-offset-2 transition-colors">
             <ExternalLink className="w-3.5 h-3.5" /> Edit lengkap di Backlog
           </Link>
         </div>
@@ -196,6 +206,8 @@ function TaskPanel({ item, onClose, onStatusChange, onMarkDone }) {
 export default function MyTask() {
   const { user } = useAuth();
   const [items,    setItems]    = useState([]);
+  const [personal, setPersonal] = useState([]);
+  const [ptModal,  setPtModal]  = useState({ open: false, task: null });
   const [sprints,  setSprints]  = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [panel,    setPanel]    = useState(null);
@@ -211,10 +223,13 @@ export default function MyTask() {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const [bl, sp] = await Promise.all([
+      const [bl, sp, pt] = await Promise.all([
         client.get('/backlog', { params: { assignee_id: user.id, limit: 500 } }),
         client.get('/sprints'),
+        // Personal tasks are optional: a backend without them must not break the page.
+        client.get('/personal-tasks', { silent: true }).catch(() => ({ data: [] })),
       ]);
+      setPersonal(pt.data || []);
       // sort: priority asc, deadline asc (nulls last)
       const sorted = (bl.data.items || []).sort((a, b) => {
         const pd = (PRIORITY_ORDER[a.priority] ?? 9) - (PRIORITY_ORDER[b.priority] ?? 9);
@@ -231,9 +246,21 @@ export default function MyTask() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Assigned Backlog items plus the user's own personal tasks, in one list. A personal task has no priority, so it
+  // sorts after the prioritised work, by deadline (none last).
+  const rows = useMemo(() => {
+    const own = personal.map(personalRow).sort((a, b) => {
+      if (!a.deadline && !b.deadline) return b.id - a.id;
+      if (!a.deadline) return 1;
+      if (!b.deadline) return -1;
+      return String(a.deadline).localeCompare(String(b.deadline));
+    });
+    return [...items, ...own];
+  }, [items, personal]);
+
   const stats = useMemo(() => {
     const s = { total: 0, in_progress: 0, overdue: 0, done: 0, blocked: 0, todo: 0, in_review: 0 };
-    items.forEach(i => {
+    rows.forEach(i => {
       s.total++;
       if (i.status === 'in_progress') s.in_progress++;
       if (i.status === 'done')        s.done++;
@@ -243,10 +270,10 @@ export default function MyTask() {
       if (i.is_delayed)               s.overdue++;
     });
     return s;
-  }, [items]);
+  }, [rows]);
 
   const filtered = useMemo(() => {
-    return items.filter(i => {
+    return rows.filter(i => {
       if (tab === 'active' && ['done','backlog'].includes(i.status)) return false;
       if (tab !== 'active' && tab !== 'all' && i.status !== tab)    return false;
       if (fType     && i.type     !== fType)     return false;
@@ -254,21 +281,34 @@ export default function MyTask() {
       if (fSprint   && String(i.sprint_id) !== String(fSprint)) return false;
       if (search) {
         const q = search.toLowerCase();
-        if (!i.title.toLowerCase().includes(q) && !i.code.toLowerCase().includes(q)) return false;
+        if (!i.title.toLowerCase().includes(q) && !(i.code || i.related_code || '').toLowerCase().includes(q)) return false;
       }
       return true;
     });
-  }, [items, tab, fType, fPriority, fSprint, search]);
+  }, [rows, tab, fType, fPriority, fSprint, search]);
 
   const paged = useMemo(() =>
     filtered.slice((page - 1) * perPage, page * perPage),
   [filtered, page, perPage]);
 
   const tabCount = useCallback((key) => {
-    if (key === 'all')    return items.length;
-    if (key === 'active') return items.filter(i => !['done','backlog'].includes(i.status)).length;
-    return items.filter(i => i.status === key).length;
-  }, [items]);
+    if (key === 'all')    return rows.length;
+    if (key === 'active') return rows.filter(i => !['done','backlog'].includes(i.status)).length;
+    return rows.filter(i => i.status === key).length;
+  }, [rows]);
+
+  // Personal task status: the response carries the derived progress / lateness, so no reload is needed.
+  const personalStatus = async (id, status) => {
+    try {
+      const res = await client.patch(`/personal-tasks/${id}/status`, { status });
+      setPersonal(prev => prev.map(t => t.id === id ? res.data : t));
+      return true;
+    } catch { return false; }
+  };
+
+  const savedPersonal = (task) => setPersonal(prev =>
+    prev.some(t => t.id === task.id) ? prev.map(t => t.id === task.id ? task : t) : [task, ...prev]);
+  const deletedPersonal = (id) => setPersonal(prev => prev.filter(t => t.id !== id));
 
   const quickStatus = async (id, status) => {
     try {
@@ -292,6 +332,11 @@ export default function MyTask() {
     setPanel(null);
   };
 
+  const markRowDone = async (row) => {
+    if (row.kind !== 'personal') return markDone(row.id);
+    if (await personalStatus(row.id, 'done')) toast.success('Task ditandai selesai');
+  };
+
   const resetFilters = () => { setFType(''); setFPriority(''); setFSprint(''); setSearch(''); setPage(1); };
   const hasFilter    = fType || fPriority || fSprint || search;
 
@@ -309,6 +354,13 @@ export default function MyTask() {
         onStatusChange={quickStatus}
         onMarkDone={markDone}
       />
+      <PersonalTaskModal
+        open={ptModal.open}
+        task={ptModal.task}
+        onClose={() => setPtModal({ open: false, task: null })}
+        onSaved={savedPersonal}
+        onDeleted={deletedPersonal}
+      />
 
       <div className="space-y-5">
         {/* Hero */}
@@ -317,10 +369,13 @@ export default function MyTask() {
             style={{ backgroundColor: user?.avatarColor || '#6366f1' }}>
             {user?.name?.charAt(0).toUpperCase()}
           </div>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-xl font-bold text-slate-800">My Tasks</h1>
-            <p className="text-sm text-slate-500">Semua tugas yang di-assign ke <strong>{user?.name}</strong></p>
+            <p className="text-sm text-slate-500">Semua tugas yang di-assign ke <strong>{user?.name}</strong>, plus task pribadi Anda</p>
           </div>
+          <button className="btn-primary ml-auto shrink-0" onClick={() => setPtModal({ open: true, task: null })}>
+            <Plus className="w-4 h-4" /> Add Task
+          </button>
         </div>
 
         {/* Stat Cards */}
@@ -328,7 +383,7 @@ export default function MyTask() {
           {[
             {
               label: 'Aktif',
-              value: stats.total - stats.done - items.filter(i => i.status === 'backlog').length,
+              value: stats.total - stats.done - rows.filter(i => i.status === 'backlog').length,
               color: 'bg-slate-100 text-slate-700',
               icon: Clock,
               action: () => { setTab('active'); setPage(1); }
@@ -375,12 +430,12 @@ export default function MyTask() {
             <button key={t.key}
               className={`flex items-center gap-1.5 h-10 text-[13.5px] whitespace-nowrap border-b-2 transition-colors -mb-px
                 ${tab === t.key
-                  ? 'border-slate-800 text-slate-800 font-semibold'
+                  ? 'border-indigo-600 text-slate-800 font-semibold'
                   : 'border-transparent text-slate-500 hover:text-slate-800'}`}
               onClick={() => { setTab(t.key); setPage(1); }}>
               {t.label}
               <span className={`text-[11px] px-1.5 leading-[18px] rounded-full font-semibold
-                ${tab === t.key ? 'bg-slate-800 text-panel' : 'bg-slate-100 text-slate-500'}`}>
+                ${tab === t.key ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
                 {tabCount(t.key)}
               </span>
             </button>
@@ -453,27 +508,41 @@ export default function MyTask() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {paged.map(item => (
-                    <tr key={item.id}
+                  {paged.map(item => {
+                    const isPersonal = item.kind === 'personal';
+                    // A personal task opens its edit form; a Backlog item opens the side panel.
+                    const openRow = () => isPersonal
+                      ? setPtModal({ open: true, task: personal.find(t => t.id === item.id) || item })
+                      : setPanel(item);
+                    return (
+                    <tr key={rowKey(item)}
                       // Whole row opens the task panel (like the title); inner controls stop propagation
-                      onClick={() => { if (!window.getSelection?.().toString()) setPanel(item); }}
+                      onClick={() => { if (!window.getSelection?.().toString()) openRow(); }}
                       className={`group cursor-pointer hover:bg-slate-50 transition-colors ${
                         item.is_delayed    ? 'bg-red-50/30' :
                         item.status === 'done' ? 'opacity-60' : ''
                       }`}>
                       <td className="px-4 py-3">
-                        <span className="font-mono text-xs text-slate-500 font-medium">{item.code}</span>
+                        {isPersonal
+                          ? <span className="text-[11px] font-medium text-amber-700" title="Task pribadi, dibuat lewat Add Task">Pribadi</span>
+                          : <span className="font-mono text-xs text-slate-500 font-medium">{item.code}</span>}
                         {item.is_delayed && <AlertCircle className="w-3 h-3 text-red-500 inline ml-1" />}
                       </td>
                       <td className="px-4 py-3 max-w-[260px]">
                         <button className="text-left group w-full"
-                          onClick={e => { e.stopPropagation(); setPanel(item); }}>
+                          onClick={e => { e.stopPropagation(); openRow(); }}>
                           {(item.parent_code) && (
                             <p className="text-[11px] text-slate-500 font-mono flex items-center gap-1 mb-0.5">
                               <Link2 className="w-2.5 h-2.5" />{item.parent_code}
                             </p>
                           )}
-                          <p className={`font-medium truncate group-hover:underline underline-offset-2 transition-colors
+                          {isPersonal && item.related_code && (
+                            <p className="text-[11px] text-slate-500 flex items-center gap-1 mb-0.5" title={`Terkait ${item.related_code} · ${item.related_title || ''}`}>
+                              <Link2 className="w-2.5 h-2.5" /><span className="font-mono">{item.related_code}</span>
+                              <span className="text-slate-400">terkait</span>
+                            </p>
+                          )}
+                          <p className={`font-medium truncate group-hover:underline group-hover:text-indigo-600 underline-offset-2 transition-colors
                             ${item.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700'}`}
                             title={item.title}>
                             {item.title}
@@ -493,10 +562,12 @@ export default function MyTask() {
                         </span>
                       </td>
                       <td className="px-3 py-3 text-center">
-                        <PriorityBadge priority={item.priority} />
+                        {item.priority ? <PriorityBadge priority={item.priority} /> : <span className="text-xs text-slate-400">—</span>}
                       </td>
                       <td className="px-3 py-3 text-center">
-                        <StatusMenu status={item.status} statuses={STATUSES} onChange={s => quickStatus(item.id, s)} />
+                        {isPersonal
+                          ? <StatusMenu status={item.status} statuses={PERSONAL_STATUSES} onChange={s => personalStatus(item.id, s)} />
+                          : <StatusMenu status={item.status} statuses={STATUSES} onChange={s => quickStatus(item.id, s)} />}
                       </td>
                       <td className="px-3 py-3"><ProgressBar value={item.progress} /></td>
                       <td className="px-3 py-3 text-xs text-slate-500">{item.sprint_name || '—'}</td>
@@ -512,20 +583,40 @@ export default function MyTask() {
                           {item.status !== 'done' && (
                             <button title="Tandai selesai"
                               className="p-1 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition-colors"
-                              onClick={() => markDone(item.id)}>
+                              onClick={() => markRowDone(item)}>
                               <CheckCheck className="w-3.5 h-3.5" />
                             </button>
                           )}
-                          <CopyLinkButton path={`/backlog?item=${item.id}`} label={`Salin link ${item.code}`} className="!w-6 !h-6" />
-                          <Link to={`/backlog?item=${item.id}`}
-                            className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-800 transition-colors"
-                            title="Buka di Backlog">
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </Link>
+                          {isPersonal ? (
+                            <>
+                              <button title="Edit task"
+                                className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-800 transition-colors"
+                                onClick={openRow}>
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              {item.backlog_item_id && (
+                                <Link to={`/backlog?item=${item.backlog_item_id}`}
+                                  className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-800 transition-colors"
+                                  title={`Buka ${item.related_code} di Backlog`}>
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                </Link>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <CopyLinkButton path={`/backlog?item=${item.id}`} label={`Salin link ${item.code}`} className="!w-6 !h-6" />
+                              <Link to={`/backlog?item=${item.id}`}
+                                className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-800 transition-colors"
+                                title="Buka di Backlog">
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </Link>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
 

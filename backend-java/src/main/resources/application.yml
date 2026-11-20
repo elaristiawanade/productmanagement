@@ -40,6 +40,9 @@ app:
     expiration: ${APP_JWT_EXPIRATION:604800000}
   cors:
     origin: ${APP_CORS_ORIGIN:http://localhost:5173}
+  management:
+    # Management Dashboard: a week runs Monday 00:00 to Monday 00:00 in this zone (the database clock is UTC)
+    week-zone: ${MANAGEMENT_WEEK_ZONE:Asia/Jakarta}
 
 logging:
   level:

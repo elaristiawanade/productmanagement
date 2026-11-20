@@ -54,7 +54,17 @@ public class BacklogController {
         "(SELECT COALESCE(json_agg(json_build_object('id', pf.id, 'name', pf.feature_name) " +
         " ORDER BY pf.feature_name, pf.id), '[]'::json)::text " +
         " FROM backlog_item_features bif JOIN product_roadmap pf ON pf.id = bif.roadmap_id " +
-        " WHERE bif.backlog_item_id = bi.id) AS features_json ";
+        " WHERE bif.backlog_item_id = bi.id) AS features_json, " +
+        // Related Card indicator: Bugs Incident tickets that point at this item ("Related Backlog Item") or that this
+        // card was created from ("Buat Backlog"), and QA test cases of this item. Details: GET /api/backlog/{id}/related.
+        // Open = its stage is not flagged is_closed (configurable stages, same rule as the Bugs Incident page).
+        "(SELECT COUNT(*) FROM bugs rb WHERE rb.backlog_item_id = bi.id OR rb.converted_backlog_id = bi.id) AS related_bug_count, " +
+        "(SELECT COUNT(*) FROM bugs rb LEFT JOIN bug_stages rbs ON rbs.code = rb.stage " +
+        " WHERE (rb.backlog_item_id = bi.id OR rb.converted_backlog_id = bi.id) " +
+        "   AND NOT COALESCE(rbs.is_closed, false)) AS related_bug_open_count, " +
+        "(SELECT string_agg(rb.code, ', ' ORDER BY rb.code) FROM bugs rb " +
+        " WHERE rb.backlog_item_id = bi.id OR rb.converted_backlog_id = bi.id) AS related_bug_codes, " +
+        "(SELECT COUNT(*) FROM qa_test_cases rtc WHERE rtc.backlog_item_id = bi.id) AS related_tc_count ";
 
     private static final String ITEM_JOINS =
         "FROM backlog_items bi " +
@@ -194,6 +204,45 @@ public class BacklogController {
         enrichAssignees(rows);
         progress.attachToItems(rows);
         return ResponseEntity.ok(rows.get(0));
+    }
+
+    // ─── RELATED CARDS ─────────────────────────────────────────────────────
+    // Read-only list behind the "Related Card" section of a backlog item:
+    //   bugs        Bugs Incident tickets whose "Related Backlog Item" is this item (relation "related") or that this
+    //               card was made from with "Buat Backlog" (relation "source"). Shown to everyone who can open the item
+    //               (code, title, type, stage only); opening the ticket itself still needs bugs.access.
+    //   test_cases  QA test cases of this item, with the result of their latest run.
+    // Same access as GET /{id}: any signed-in user.
+
+    @GetMapping("/{id}/related")
+    public ResponseEntity<?> related(@PathVariable Long id) {
+        Long exists = jdbc.queryForObject("SELECT COUNT(*) FROM backlog_items WHERE id = ?", Long.class, id);
+        if (exists == null || exists == 0) return ResponseEntity.status(404).body(Map.of("error", "Item tidak ditemukan"));
+
+        List<Map<String, Object>> bugs = jdbc.queryForList(
+            "SELECT b.id, b.code, b.title, b.type, b.stage, b.priority, b.deadline, b.created_at, " +
+            "  CASE WHEN b.converted_backlog_id = ? THEN 'source' ELSE 'related' END AS relation, " +
+            "  bt.name AS type_name, bt.color AS type_color, " +
+            "  bs.name AS stage_name, bs.color AS stage_color, " +
+            "  COALESCE(bs.is_closed, false) AS stage_is_closed, COALESCE(bs.not_late, false) AS stage_not_late, " +
+            "  au.name AS assigned_to_name " +
+            "FROM bugs b " +
+            "LEFT JOIN bug_types  bt ON bt.code = b.type " +
+            "LEFT JOIN bug_stages bs ON bs.code = b.stage " +
+            "LEFT JOIN users      au ON au.id   = b.assigned_to " +
+            "WHERE b.backlog_item_id = ? OR b.converted_backlog_id = ? " +
+            // the ticket this card came from first, then open before closed, newest first
+            "ORDER BY COALESCE(b.converted_backlog_id = ?, false) DESC, COALESCE(bs.is_closed, false), b.created_at DESC, b.id DESC",
+            id, id, id, id);
+
+        List<Map<String, Object>> testCases = jdbc.queryForList(
+            "SELECT tc.id, tc.code, tc.title, tc.status, tc.priority, " +
+            "  (SELECT r.result FROM qa_test_runs r WHERE r.test_case_id = tc.id " +
+            "     ORDER BY COALESCE(r.executed_at, r.created_at) DESC, r.id DESC LIMIT 1) AS last_result " +
+            "FROM qa_test_cases tc WHERE tc.backlog_item_id = ? ORDER BY tc.code, tc.id",
+            id);
+
+        return ResponseEntity.ok(Map.of("bugs", bugs, "test_cases", testCases));
     }
 
     // ─── CREATE ────────────────────────────────────────────────────────────

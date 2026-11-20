@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Bell, Check, CheckCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
+import { setTabBadge } from '../utils/tabBadge';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { id as localeId } from 'date-fns/locale';
 
@@ -19,12 +20,22 @@ export default function NotificationBell() {
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
 
-  // Poll unread count every 30 s
+  // Poll unread count every 30 s, and right away when the user comes back to this tab
   useEffect(() => {
     fetchCount();
     const interval = setInterval(fetchCount, 30000);
-    return () => clearInterval(interval);
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchCount(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
+
+  // Mirror the count on the browser tab (title + favicon) so it shows while working in another tab;
+  // unmounting (logout) restores the plain title and logo.
+  useEffect(() => { setTabBadge(unread); }, [unread]);
+  useEffect(() => () => setTabBadge(0), []);
 
   // Close on outside click
   useEffect(() => {
@@ -39,7 +50,8 @@ export default function NotificationBell() {
 
   const fetchCount = async () => {
     try {
-      const res = await client.get('/notifications/unread-count');
+      // silent: a background poll must not toast "Terjadi kesalahan" every 30 s while the backend restarts
+      const res = await client.get('/notifications/unread-count', { silent: true });
       setUnread(res.data.count || 0);
     } catch { /* silent */ }
   };
@@ -82,7 +94,7 @@ export default function NotificationBell() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={toggleOpen}
-        className="relative w-8 h-8 grid place-items-center rounded-md text-frame-ink-2 hover:bg-frame-2 hover:text-[#fff] transition-colors"
+        className="relative w-8 h-8 grid place-items-center rounded-md text-frame-ink-2 hover:bg-frame-2 hover:text-frame-ink transition-colors"
         title="Notifikasi">
         <Bell className="w-[18px] h-[18px]" />
         {unread > 0 && (

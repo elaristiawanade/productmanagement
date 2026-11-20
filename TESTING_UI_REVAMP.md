@@ -460,3 +460,114 @@ Fitur baru (PRD 3.9, v3.25). **Butuh `migration_v32.sql`** (tabel `bug_stages`, 
 - ✅ Form bersih → konfirmasi (menyebut lampiran) → modal menutup, toast "Kartu Backlog … dibuat dari … (1 lampiran disalin)", baris tabel bertanda hijau; membuka ulang modal: header menampilkan "Di Backlog: PB-xxx" tanpa tombol Buat Backlog
 - ✅ Lampiran bug ikut ke kartu (file fisik terpisah); catatan kartu memuat baris "Dilaporkan oleh"
 - ⚠️ Feature bug (tabel `features`) tidak bisa ditautkan ke Impacted Features Backlog (roadmap); ditulis di notes kartu
+
+## 37. Management Dashboard + Add Task di My Tasks
+
+Fitur baru (PRD 3.3, 3.6, 3.18, v3.26). **Butuh `migration_v33.sql`** (riwayat status + trigger, `features.target_date`, `personal_tasks`, `weekly_snapshots`/`weekly_snapshot_items`, `open_item_remarks`, `weekly_notes`, permission `management_dashboard.view` termasuk role PO). Diuji di stack Docker lokal (:8500) lewat Chrome headless (CDP) sebagai Super Admin, Product Owner (Budi) dan Commissioner (Sarah), 19 Nov 2026.
+
+- ✅ Migrasi pada DB lokal (backup dulu): dijalankan dua kali di DB percobaan tanpa duplikat; trigger task pribadi (completed_at terisi saat Done, kosong lagi saat dibuka ulang, riwayat status tercatat, hapus → riwayat ikut terhapus)
+- ✅ Menu **Management** paling atas di Home; tidak tampil untuk Developer
+- ✅ Header: pilihan Produk (Super Admin & Commissioner: Finance Dashboard, HRIS Portal, Sales CRM), "Data per …", tombol muat ulang
+- ✅ **Sprint Aktif**: default sprint aktif ("HRS Sprint 2 · 14 Okt – 27 Okt 2026 (aktif)"), progress 59%, "1 dari 7 item kerja selesai", keterangan merah "Lewat 23 hari dari tanggal selesai"; pilihan "–" tersedia
+- ✅ **Features**: kolom No / Feature / Status / Target / Progress; fitur Done = 100%; jumlah item Backlog terhubung tampil di bawah nama
+- ✅ **Open Item · Minggu Ini** (label Live): 20 baris HRIS dari 4 sumber, chip filter per sumber dengan jumlah, ringkasan "20 terbuka · 0 selesai minggu ini · 7 lewat deadline"; task HRS-2-S2 menjorok di bawah HRS-2; Bug progress "—"; QA "Belum Dijalankan" + tanda draft
+- ✅ Status bisa diubah di minggu ini (Backlog, Bug, My Task) untuk Super Admin; Commissioner hanya melihat (0 dropdown aktif) karena tidak punya izin ubah di modul asalnya; QA selalu baca-saja
+- ✅ **Minggu Lalu** (versi awal, saat 4 minggu terakhir masih diestimasi): default "Minggu lalu · 9 – 15 Nov 2026 (estimasi)", badge **Estimasi**, tanpa dropdown status; memilih minggu tertua mengubah URL `?week=2026-10-26` dan isi tabel
+- ✅ **My Tasks → Add Task**: tombol merah kanan atas; form Judul / Produk / Item Backlog terkait (26 opsi, bisa dicari) / Status / Deadline / Catatan + keterangan "bukan Backlog"; simpan → toast "Task ditambahkan", baris berlabel **Pribadi**, "HRS-2 terkait", tipe pribadi, prioritas & sprint "—"
+- ✅ Task pribadi baru langsung muncul di Management Dashboard (sumber My Task, PIC Admin)
+- ✅ **Detail Backlog → Task Pribadi Terkait**: item yang dirujuk task pribadi menampilkan panel info (judul, pemilik atau "Anda", deadline, status) di atas Aktivitas; item tanpa task terkait tidak menampilkan panel; catatan pribadi tidak ikut tampil; assignee dan progress item tidak berubah
+- ✅ **Products → Features**: form Feature punya field **Target (tanggal)**; tanggal tampil di daftar feature dengan ikon target
+- ✅ **Pilih produk dari sidebar:** saat di Management, sidebar Home menampilkan **Products** (Finance Dashboard, HRIS Portal, Sales CRM); klik Sales CRM → `?product=8` dan header ikut berganti; produk default juga tersorot. Dashboard dan My Tasks tidak menampilkan daftar produk; daftar Products di Planning/Quality tetap sama
+- ✅ Pilihan Produk di header dan di **Add Task** sekarang dropdown + cari ("hris" → HRIS Portal, "sales" → Sales CRM); setelah memilih produk, Item Backlog terkait aktif
+- ✅ Kartu **Minggu Ini**: judul "W47 · 16 – 22 Nov 2026 · Live"; kolom baru **PO Remarks**; ringkasan menambah "1 lewat ekspektasi"
+- ✅ **PO Remarks** (Budi, Owner HRIS): klik "+ Isi remark" → popover Ekspektasi selesai + Keterangan (penghitung 0/300) → Simpan → sel menampilkan "27 Nov 2026" + keterangan, popover tertutup. Remark dari minggu lalu tampil dengan "dari W46"; tanggal lewat dan item belum selesai berwarna merah dengan "· lewat"
+- ✅ **Catatan Product Owner** di bawah kedua tabel: "Tulis catatan" → isi → Simpan → teks + "Terakhir diubah oleh Budi Santoso · tanggal"; catatan minggu lalu tetap tampil saat minggu itu dibuka dan masih bisa diubah
+- ✅ Kartu **Minggu Lalu**: chip filter sumber hilang, semua item tampil; chip **Minggu lalu W46 / 2 minggu lalu W45 / 3 minggu lalu W44 / 4 minggu lalu W43** (W43 nonaktif di data lokal karena produk dibuat 28 Okt); klik "2 minggu lalu" → `?week=2026-11-02`
+- ✅ **Pencatatan mulai minggu ini** (keputusan mentor): data estimasi lama dihapus; kartu Minggu Lalu kosong dengan keterangan "Pencatatan mingguan dimulai W47 (16 – 22 Nov 2026); minggu sebelumnya tidak dicatat. Belum ada minggu yang selesai…", tanpa kalender/chip
+- ✅ Simulasi awal pencatatan W46: chip "Minggu lalu W46" aktif, W45/W44/W43 nonaktif dengan keterangan "Sebelum pencatatan mingguan dimulai (W46)"; di kalender baris W44–W45 abu-abu dengan keterangan yang sama, legenda "Pencatatan dimulai W46 · 9 – 15 Nov 2026"
+- ✅ **Pilih bulan & tahun** di kalender: dropdown Bulan (Januari–Desember) dan Tahun; pilih Februari → baris W5–W10 tanpa menutup kalender; kembali ke November, klik W46 → `?week=2026-11-09`
+- ✅ **Kalender minggu** (tombol "W45 · 2 – 8 Nov 2026", diuji saat data estimasi masih ada): November 2026, baris W44–W49 dengan nomor minggu di kolom abu-abu kiri, W45 tersorot, W47 (minggu ini) dan sesudahnya abu-abu, hari ini dilingkari merah, nomor minggu Estimasi kuning; panah ke Oktober 2026 (W40–W45); klik baris W46 → `?week=2026-11-09`; Escape menutup
+- ✅ Ganti minggu tidak membuat halaman melompat (tabel lama tampil pudar sampai data baru datang)
+- ✅ Commissioner (Sarah): remark dan catatan terlihat, tetapi tidak ada tombol "Isi remark" maupun "Tulis/Ubah catatan"
+- ✅ Tabel muat di layar 1440 px tanpa geser ke samping (judul item panjang dipotong, judul lengkap saat hover)
+- ✅ Tidak ada error JavaScript di console selama uji
+- 🧑 Cek dengan Owner produk di kantor: isi remark minggu ini, lalu Senin depan pastikan remark ikut ("dari W…") dan minggu lalu tetap menunjukkan remark lama
+- 🧑 **Production:** jalankan `backend/db/migration_v33.sql` manual SEBELUM backend baru naik (lewat mentor); lalu rebuild backend + frontend. Saat backend pertama kali naik, minggu itu dicatat sebagai awal pencatatan; minggu sebelumnya kosong (tanpa estimasi)
+- 🧑 Cek Senin berikutnya (23 Nov 2026): minggu yang baru lewat (W47) tersimpan otomatis tanpa label Estimasi dan muncul sebagai "Minggu lalu"; chip minggu dan tombol kalender muncul (2/3/4 minggu lalu nonaktif "Sebelum pencatatan mingguan dimulai"), dropdown Bulan & Tahun bisa dipakai, PO Remarks dan catatan W47 ikut tampil
+- ⚠️ Riwayat status sebelum v33 adalah perkiraan dari log teks; perubahan status lewat jalur yang tidak menulis log (mis. import) hanya terlihat sebagai satu perubahan di `updated_at`
+- ⚠️ Minggu beku menyimpan judul, PIC, dan deadline seperti saat dibekukan (tidak punya riwayat); status dan progress per akhir minggu
+- ⚠️ Ditunda: kartu KPI, insight otomatis, grafik tren, panel roadmap, tombol bekukan manual
+
+## 38. Sort & scroll tabel Roadmap + Related Card di Backlog
+
+Fitur baru (PRD 3.2, 3.6, v3.27). **Tanpa migrasi.** Diuji 19 Nov 2026 di headless Chrome (Super Admin dan PO Budi) + API.
+
+**Products → Roadmap**
+- ✅ Lebar 1100 px dengan sidebar terbuka: tabel tidak lagi terjepit (sebelumnya "Absensi GPS" dan badge "On Progress" terlipat 2 baris, kolom Aksi terpotong); badge status satu baris dan tabel bisa digeser ke kanan sampai Aksi
+- ✅ Lebar 390 px (HP): tabel digeser di dalam kartunya, halaman sendiri tidak melebar
+- ✅ Klik **Fitur**: A–Z (panah naik, `aria-sort`), klik lagi Z–A, klik ketiga kembali ke urutan awal
+- ✅ **Status** urut alur Planned → On Progress → Testing → Active (bukan abjad); **Versi** natural v1.0 → v1.3, kosong di bawah; **Target Rilis** turun Februari 2027 → …, kosong tetap di bawah; **Produk** A–Z
+- ✅ Filter Produk "Sales CRM" + sort Fitur bekerja bersamaan; kartu ringkasan status tidak berubah
+- ✅ Deskripsi dipotong satu baris, teks lengkap saat hover
+
+**Backlog → Related Card**
+- ✅ List: HRS-3 menampilkan chip merah 🐞1 + chip test case 1 di samping chip parent; tooltip "Related Card: 1 tiket Bugs Incident (1 masih open): BUG-001 · 1 QA test case"
+- ✅ Item yang semua tiketnya closed (CRM-1, filter Selesai): chip bug abu-abu, tooltip "(semua closed)"
+- ✅ Item tanpa relasi tidak punya chip; di detail section **Related Card (0)** tertutup, saat dibuka "Belum ada kartu terkait…"
+- ✅ Klik chip → modal item terbuka dengan **Related Card (2) · 1 tiket masih open** sudah terbuka dan di-scroll ke tampilan: grup Bugs Incident (Type BUG, BUG-001, judul, Stage In Progress) dan QA Test Case (TC-002, hasil run terakhir Fail)
+- ✅ Klik baris BUG-001 → `/bugs` dengan form tiket itu terbuka; baris test case menaut ke `/qa?case=2`
+- ✅ Board: chip ada di baris di bawah judul (bersama chip parent); baris info kartu (prioritas · pt · deadline · avatar) tetap satu baris di 14 kartu yang punya chip
+- ✅ Section lama (Tasks & Bugs, Aktivitas & Komentar) tetap tampil; Task Pribadi Terkait tidak berubah
+- ✅ Mode gelap: chip, badge Type/Stage, dan teks section terbaca
+- ✅ PO Budi (tanpa akses Bugs Incident): chip terlihat; di section, baris BUG-001 tampil tanpa link (tooltip "Butuh akses modul Bugs Incident…"), test case tetap bisa diklik
+- ✅ **Diuji user di lokal (19 Nov 2026): oke**
+- 🧑 **Production:** rebuild backend + frontend (lewat mentor); tidak ada migrasi
+- ⚠️ Chip hanya bisa diklik oleh user yang boleh membuka/mengedit item dari daftar Backlog (aturan lama); user lain melihat chip sebagai penanda dengan tooltip
+
+## 39. Bingkai terang ala ClickUp + toggle tema + aksen merah
+
+Perubahan tampilan saja (PRD 3.16, v3.28; dibuat 18 Nov 2026, sebelumnya PR #30 yang ditutup dan kini ikut PR bersama Management Dashboard). Tanpa perubahan backend/database.
+
+- ✅ Top bar + icon rail abu terang (#F0F0F3), rail setinggi layar dengan logo PTAP di atas; sidebar per section dan area kerja putih
+- ✅ Mode gelap: bingkai hampir hitam; warna bingkai diambil dari token `frame*`/`side` yang diganti tema
+- ✅ HP: rail ikut masuk ke drawer
+- ✅ Toggle tema: track amber (terang) / biru (gelap), ikon matahari dan bulan selalu terlihat, tooltip "Ganti ke mode …"
+- ✅ Aksen merah: garis bawah tab aktif (Backlog, Products, QA, Standup, Users, Bugs, C-Level, My Task), bar progress merah dan hijau saat 100%, menu aktif sidebar merah muda + batang merah
+- ✅ Tidak berubah: bar kapasitas Dashboard (hijau/kuning/merah), status/badge/prioritas, warna avatar
+- ✅ Backlog: **Group: Status** di baris tab, tidak lagi terdampar di baris filter
+- ✅ Dicek lewat screenshot headless Chrome (terang, gelap, HP) di Backlog, Products, Sprints, My Tasks
+
+## 40. Badge notifikasi di tab browser (judul + ikon)
+
+Fitur baru (PRD 3.13, v3.29). Frontend saja, **tanpa migrasi** dan tanpa perubahan backend; memakai polling `GET /api/notifications/unread-count` yang sudah ada (tidak ada request tambahan). Diuji 20 Nov 2026 di headless Chrome sebagai Dimas (developer), di Vite dev (StrictMode) dan di build Docker :8500. Notifikasi uji berawalan `[e2e] tab badge` dan sudah dihapus.
+
+- ✅ 0 belum dibaca: judul tab tetap `Product Tracker — Internal Dev`, ikon tab logo biasa; halaman Login juga
+- ✅ Notif baru masuk (tab dibiarkan): dalam ≤30 detik judul jadi `(1) Product Tracker — Internal Dev` dan ikon tab mendapat titik merah berangka; badge lonceng ikut 1
+- ✅ Kembali ke tab PO Tracker: angka langsung diperbarui (±0,3 detik), tidak menunggu polling 30 detik
+- ✅ 12 belum dibaca: judul `(12) …` (angka pas, maks `99+`), ikon tab `9+`; tidak ada awalan ganda `(1) (1)`
+- ✅ Baca satu notif dari dropdown → `(11) …`; **Tandai semua** → judul dan logo kembali normal
+- ✅ Pindah halaman (mis. ke Backlog) tidak menghapus angka
+- ✅ Logout → judul dan logo kembali normal
+- ✅ Polling gagal (backend mati/restart): tidak ada toast "Terjadi kesalahan" tiap 30 detik, angka terakhir tetap tampil
+- ✅ Ikon tab terbaca di ukuran 16 px dan 32 px (dicek lewat screenshot); tidak ada error di console
+- ✅ **Diuji user di lokal (20 Nov 2026): oke** — login Admin, bekerja di tab lain:
+  - Budi (PO) meng-assign item → tab langsung menampilkan `(1) Product Tracker — Internal Dev` + titik merah di ikon; klik notif di lonceng → angka hilang
+  - assignment + mention `@[Admin]` → `(2) …`; **Tandai semua** → judul dan logo kembali normal
+  - data uji (item HRS-109, komentar, notifikasi) sudah dihapus
+- ⚠️ Browser hanya mengizinkan web mengubah judul dan ikon tab (tidak bisa menaruh angka di kanan tab). Chrome memperlambat timer tab latar, jadi angka bisa muncul sampai ±1 menit setelah notif masuk; tab yang "ditidurkan" browser (Memory Saver Chrome / Sleeping Tabs Edge) baru diperbarui saat dibuka lagi
+- 🧑 **Production:** rebuild frontend saja (lewat mentor); tidak ada migrasi
+
+## 41. Aksen merah dirapikan: progress abu-abu, link merah saat hover, checkbox + highlight merah
+
+Perubahan tampilan (PRD 3.16, v3.30). Frontend saja, **tanpa migrasi** dan tanpa perubahan backend. Aturannya: merah brand untuk identitas, navigasi, dan aksi; tidak untuk kondisi data, karena di sana merah berarti masalah. Diuji 20 Nov 2026 di headless Chrome sebagai Admin di Vite dev, mode terang dan gelap (warna dicek lewat `getComputedStyle`, bukan hanya screenshot).
+
+- ✅ **Bar progress abu-abu, hijau saat 100%** — Board Backlog, Management (Sprint Aktif + Features), Products, Dashboard (kolom Progress), Sprints: isi bar `#6E7079` di mode terang, `#8E8F98` di mode gelap; fitur 100% (FIN-F1) hijau. My Tasks memakai komponen `ProgressBar` yang sama (data uji Admin hanya punya item 0%)
+- ✅ Bar yang **tidak diubah** di kode dan tetap berwarna menurut artinya: hasil run QA (Pass hijau / Fail merah / Blocked oranye), kapasitas Dashboard (overload merah), kepatuhan Standup, bar Epic di Sprints (ungu, terlihat), bar status/departemen C-Level (terlihat)
+- ✅ **Judul yang bisa diklik merah saat hover** (teks + garis bawah) — dicek dengan hover: judul fitur di Management, judul di My Tasks, label bar status di C-Level, sub-item dan Related Card (tiket Bug + test case) di detail Backlog CRM-3 (build Docker :8500, terang + gelap), tautan "Edit lengkap di Backlog" di panel item My Tasks → `rgb(215,31,43)` terang, `rgb(234,63,71)` gelap. Kelas yang sama dipasang di Open Item (Management) dan item/task/nama penulis catatan C-Level
+- ✅ **Link merah saat hover**: link Repo di Products (dicek dengan hover, terang + gelap); URL dan link markdown di deskripsi/komentar (linkify) memakai kelas yang sama — belum di-hover karena data uji belum punya deskripsi/komentar berisi link
+- ✅ Angka di tabel Cross-Project Overview Dashboard tetap berwarna status, hover hanya garis bawah (sisa hover biru di kolom To Do sudah disamakan)
+- ✅ **Checkbox merah** bawaan browser: form Tambah Stage (Admin → Bug Stages) yang sebelumnya biru; `accent-color` root = merah brand di kedua tema
+- ✅ **Highlight teks** saat diblok merah muda tipis (terang) / merah gelap (gelap), teks tetap terbaca
+- ✅ `vite build` lolos; tidak ada error di console di 11 halaman (Dashboard, Backlog, My Tasks, Products, Sprints, QA, Standup, C-Level, Management, Bugs, Bug Stages) maupun saat membuka detail Backlog dan panel item My Tasks di build Docker :8500; tidak ada data yang diubah (form Tambah Stage tidak disimpan)
+- ✅ **Diuji user di lokal (20 Nov 2026): oke** — progress abu-abu/hijau, hover merah, checkbox, dan highlight teks di mode terang dan gelap
+- 🧑 **Production:** rebuild frontend saja (lewat mentor); tidak ada migrasi

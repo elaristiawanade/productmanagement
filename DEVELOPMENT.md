@@ -164,6 +164,7 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v30.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v31.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v32.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v33.sql"
 ```
 
 > **Penting:** `migration_v10.sql` menambahkan kolom `users.department`, yang di-query
@@ -287,6 +288,18 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 > ```
 > Idempotent; perilaku semua stage lama tetap identik (flag selesai / tidak terlambat / dihitung open di-seed sesuai aturan lama), dan tiket lama tidak berubah.
 
+> **Penting juga:** `migration_v33.sql` menyiapkan **Management Dashboard** (Home → Management) dan **Add Task** di My Tasks:
+> tabel riwayat status `backlog_status_events` / `roadmap_status_events` / `personal_task_status_events` + trigger pencatatnya, kolom `backlog_items.completed_at`,
+> `features.target_date` (field Target di form Feature), tabel `personal_tasks`, tabel pembekuan mingguan `weekly_snapshots` + `weekly_snapshot_items`, `open_item_remarks` (PO Remarks)
+> + `weekly_notes` (catatan Product Owner), dan permission `management_dashboard.view` (digabung ke Super Admin, Manager, Commissioner, Product Owner). Riwayat status lama di-backfill sekali dari log teks `item_activities` (perkiraan; `updated_at` tidak berubah).
+> **Jalankan SEBELUM backend baru naik** — dashboard, task pribadi, dan simpan Feature membaca tabel/kolom ini. Saat start dan setiap jam backend membekukan minggu yang belum tersimpan
+> (4 minggu terakhir, tetapi tidak sebelum awal pencatatan: minggu saat backend pertama kali jalan, disimpan di `app_settings` key
+> `management.tracking_start`; minggu sebelumnya dibiarkan kosong); tanpa migrasi langkah itu hanya menulis peringatan di log. Pada database yang sudah ada jalankan manual (**backup dulu**):
+> ```bash
+> docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v33.sql
+> ```
+> Idempotent dan satu transaksi (gagal = tidak ada yang berubah). Batas minggu = Senin 00:00 **WIB**; ganti lewat env `MANAGEMENT_WEEK_ZONE` (default `Asia/Jakarta`).
+
 ---
 
 ## 8. Notifikasi Email (Testing Lokal)
@@ -357,7 +370,8 @@ product-tracker/
 │       ├── migration_v29.sql
 │       ├── migration_v30.sql
 │       ├── migration_v31.sql
-│       └── migration_v32.sql
+│       ├── migration_v32.sql
+│       └── migration_v33.sql
 ├── backend-java/          # Spring Boot API (port 4000)
 │   ├── src/
 │   ├── pom.xml

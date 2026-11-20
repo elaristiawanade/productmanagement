@@ -11,6 +11,7 @@ import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import AssigneeStack from '../components/AssigneeStack';
+import { progressFill } from '../components/ProgressBar';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { format, parseISO, differenceInDays } from 'date-fns';
@@ -266,7 +267,7 @@ export default function Sprints() {
                 <span>Progress</span><span>{pct}%</span>
               </div>
               <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full bg-slate-800 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                <div className={`h-full rounded-full transition-all ${progressFill(pct)}`} style={{ width: `${pct}%` }} />
               </div>
             </div>
           </div>
