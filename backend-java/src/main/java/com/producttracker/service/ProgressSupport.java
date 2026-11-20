@@ -17,7 +17,8 @@ import java.util.*;
  *  - Backlog item WITH children (story/epic): average of the leaves below it, weighted by story points
  *    (an item with 0 points weighs 1, so unestimated work still counts). Epics that are still empty are
  *    containers, not work, so they never count towards a parent or a product.
- *  - Product: the same average over all of its leaves.
+ *  - Product and Feature progress are NOT computed here: they are set by hand through the Feature's status
+ *    and never come from the Backlog (see FeatureRoadmapSync).
  *  - QA test case: from the result of its latest test run, see RUN_PCT.
  *  - Standup: snapshot of the author's work in the ACTIVE sprint when the standup of today is saved.
  *
@@ -40,7 +41,10 @@ public class ProgressSupport {
         return STATUS_PCT.getOrDefault(status == null ? "" : status.toString(), 0);
     }
 
-    /** null for a deprecated test case (retired, no progress to show). */
+    /**
+     * From the latest run only; the test case status (Draft … Finish, migration_v35) does not change the number.
+     * null for a test case still on the status `deprecated` from before v35 (retired, no progress to show).
+     */
     public static Integer testCasePct(Object testCaseStatus, Object lastResult) {
         if ("deprecated".equals(testCaseStatus)) return null;
         return RUN_PCT.getOrDefault(lastResult == null ? "" : lastResult.toString(), 0);
@@ -59,7 +63,6 @@ public class ProgressSupport {
     /** The whole backlog of some products, with progress computed for every item. */
     public static final class Snapshot {
         private final Map<Long, Node> nodes = new HashMap<>();
-        private final Map<Long, List<Node>> byProduct = new HashMap<>();
 
         /** Progress of one item (null when the item is unknown). */
         public Integer itemPct(Long id) {
@@ -77,16 +80,6 @@ public class ProgressSupport {
         public boolean isWorkItem(Long id) {
             Node n = nodes.get(id);
             return n != null && n.children.isEmpty() && !"epic".equals(n.type);
-        }
-
-        /** Progress of a product; null when it has no work items yet. */
-        public Integer productPct(Long productId) {
-            double sum = 0, w = 0;
-            for (Node n : byProduct.getOrDefault(productId, List.of())) {
-                if (!n.children.isEmpty() || "epic".equals(n.type)) continue;   // leaves of real work only
-                sum += n.own * n.weight; w += n.weight;
-            }
-            return w == 0 ? null : (int) Math.round(sum / w);
         }
 
         /** Weighted average over some leaf items (null when the list has none). */
@@ -149,7 +142,6 @@ public class ProgressSupport {
             n.weight = sp > 0 ? sp : 1;
             n.own = statusPct(n.status);
             snap.nodes.put(n.id, n);
-            snap.byProduct.computeIfAbsent(((Number) r.get("product_id")).longValue(), k -> new ArrayList<>()).add(n);
         }
         for (Node n : snap.nodes.values()) {
             Node p = n.parentId == null ? null : snap.nodes.get(n.parentId);
@@ -187,15 +179,6 @@ public class ProgressSupport {
             Object id = r.get("id");
             r.put("progress", id == null ? null : snap.itemPct(((Number) id).longValue()));
         }
-    }
-
-    /** Adds "progress" to product rows (each needs id). */
-    public void attachToProducts(List<Map<String, Object>> rows) {
-        if (rows == null || rows.isEmpty()) return;
-        List<Long> ids = new ArrayList<>();
-        for (Map<String, Object> r : rows) ids.add(((Number) r.get("id")).longValue());
-        Snapshot snap = snapshot(ids);
-        for (Map<String, Object> r : rows) r.put("progress", snap.productPct(((Number) r.get("id")).longValue()));
     }
 
     // ── Standup snapshot ─────────────────────────────────────────────────────

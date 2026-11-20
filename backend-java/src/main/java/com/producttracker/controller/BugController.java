@@ -498,7 +498,8 @@ public class BugController {
             params);
 
         List<Map<String, Object>> recentActivity = jdbc.queryForList(
-            "SELECT bp.id, bp.stage, bp.note, bp.created_at, " +
+            // bug_id: the Bugs dashboard opens the ticket from this feed
+            "SELECT bp.id, bp.bug_id, bp.stage, bp.note, bp.created_at, " +
             "  b.code AS bug_code, b.title AS bug_title, " +
             "  p.name AS product, u.name AS updated_by_name " +
             "FROM bug_progress_updates bp " +
@@ -509,7 +510,8 @@ public class BugController {
             "LIMIT 10");
 
         List<Map<String, Object>> recentComments = jdbc.queryForList(
-            "SELECT a.id, a.content, a.created_at, " +
+            // bug_id: the Bugs dashboard opens the ticket from this feed
+            "SELECT a.id, a.bug_id, a.content, a.created_at, " +
             "  b.code AS bug_code, b.title AS bug_title, " +
             "  p.name AS product, u.name AS user_name, u.avatar_color AS user_avatar_color " +
             "FROM bug_activities a " +

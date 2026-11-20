@@ -165,6 +165,8 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v31.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v32.sql"
 & $psql -U postgres -d product_tracker -f "backend\db\migration_v33.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v34.sql"
+& $psql -U postgres -d product_tracker -f "backend\db\migration_v35.sql"
 ```
 
 > **Penting:** `migration_v10.sql` menambahkan kolom `users.department`, yang di-query
@@ -300,6 +302,26 @@ $psql = "C:\Program Files\PostgreSQL\13\bin\psql.exe"
 > ```
 > Idempotent dan satu transaksi (gagal = tidak ada yang berubah). Batas minggu = Senin 00:00 **WIB**; ganti lewat env `MANAGEMENT_WEEK_ZONE` (default `Asia/Jakarta`).
 
+> **Penting juga:** `migration_v34.sql` menjadikan **Feature master Roadmap** (Products → Produk & Features dan Roadmap): setiap Feature punya satu baris Roadmap dan sebaliknya.
+> Baris Roadmap yang belum terhubung dipasangkan dengan Feature menurut nama (produk sama), baris tanpa pasangan dibuatkan Feature (kode `{kode produk}FT-{n}`), Feature tanpa baris
+> dibuatkan baris Roadmap, `features.target_release` diperlebar ke 50 karakter, status Feature lama `in_progress`/`done` dirapikan, dan ada indeks unik satu Feature = satu baris Roadmap.
+> ID baris Roadmap tidak berubah, jadi kaitan Backlog (label Impacted Features) tetap utuh. Progress Feature/Roadmap/produk sejak itu dari **status Feature** (+20% per tahap), bukan dari Backlog.
+> **Jalankan SEBELUM backend baru naik** (backend baru selalu membuat/menautkan baris Roadmap dan memakai indeks itu). Lihat dulu hasilnya dengan pratinjau read-only, lalu jalankan (**backup dulu**):
+> ```bash
+> docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v34_preview.sql
+> docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v34.sql
+> ```
+> Idempotent dan satu transaksi. Butuh `migration_v33.sql`. Pratinjau menampilkan: **A** pasangan Roadmap ↔ Feature (versi Roadmap **dipertahankan** dan disalin ke Feature, perubahan status), **B** Feature baru yang akan dibuat beserta kodenya, **C** baris Roadmap baru, **D** progress produk sesudah migrasi (rata-rata Feature; mis. B-Mata 95% → 56%), **E** hal yang perlu dicek manual.
+
+> **Penting juga:** `migration_v35.sql` menyiapkan **QA Test Case: Assignee + status baru** (PRD 3.8, v3.34): tabel `qa_test_case_assignees` (assignee lebih dari satu, primary ditandai `is_primary`)
+> dan pemetaan status lama `draft / active / deprecated` ke **Draft, To Do, In Progress, In Review, Finish** (`active` dari hasil run terakhir: Pass → Finish, Fail/Blocked → In Progress,
+> lainnya → To Do; `deprecated` → Finish). **Jalankan SEBELUM backend baru naik** (daftar/buat/edit test case membaca tabel itu; tanpa migrasi `500`). Pratinjau read-only dulu, lalu jalankan (**backup dulu**):
+> ```bash
+> docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v35_preview.sql
+> docker exec -i pt_postgres psql -U postgres -d product_tracker < backend/db/migration_v35.sql
+> ```
+> Idempotent dan satu transaksi. Pratinjau menampilkan: **A** ringkasan status lama → baru, **B** rincian test case yang berubah, **C** status tak dikenal (seharusnya kosong), **D** sebaran status sesudah migrasi.
+
 ---
 
 ## 8. Notifikasi Email (Testing Lokal)
@@ -371,7 +393,11 @@ product-tracker/
 │       ├── migration_v30.sql
 │       ├── migration_v31.sql
 │       ├── migration_v32.sql
-│       └── migration_v33.sql
+│       ├── migration_v33.sql
+│       ├── migration_v34.sql
+│       ├── migration_v34_preview.sql   # read-only: pratinjau migration_v34
+│       ├── migration_v35.sql
+│       └── migration_v35_preview.sql   # read-only: pratinjau migration_v35
 ├── backend-java/          # Spring Boot API (port 4000)
 │   ├── src/
 │   ├── pom.xml

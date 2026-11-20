@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
@@ -38,17 +38,29 @@ import client from '../api/client';
 import { useDeepLink } from '../utils/deepLink';
 import { toastCreated } from '../utils/createdToast';
 import Modal from '../components/Modal';
-import StatusBadge from '../components/StatusBadge';
+import StatusBadge, { STATUS_MAP } from '../components/StatusBadge';
+import StatusMenu from '../components/StatusMenu';
 import PriorityBadge from '../components/PriorityBadge';
 import SearchableSelect from '../components/SearchableSelect';
+import SearchableMultiSelect from '../components/SearchableMultiSelect';
+import AssigneeStack from '../components/AssigneeStack';
 import BugsPerFeatureCard from '../components/BugsPerFeatureCard';
 import DeadlineDate from '../components/DeadlineDate';
 import ProgressBar from '../components/ProgressBar';
 import { buildBacklogTreeOptions } from '../utils/backlogHierarchy';
 import { buildFeatureOptions, featureText } from '../utils/featureOptions';
-import AttachmentSection from '../components/AttachmentSection';import { useAuth } from '../context/AuthContext';
+import AttachmentSection from '../components/AttachmentSection';
+import OpenLinkButton from '../components/OpenLinkButton';
+import RefLink from '../components/RefLink';
+import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { format, parseISO } from 'date-fns';
+
+// Test case statuses (migration_v35) in workflow order: the Backlog card names (To Do / In Progress / In Review) with
+// Draft before and Finish at the end. Labels and colours come from STATUS_MAP, so they look like Backlog's.
+const TC_STATUSES = ['draft', 'todo', 'in_progress', 'in_review', 'finish'];
+// Handed in: the deadline is never red, same rule as In Review on a Backlog card
+const TC_NOT_LATE = ['in_review', 'finish'];
 
 const RESULT_ICONS = {
   pass:    { icon: CheckCircle2, cls: 'text-emerald-500' },
@@ -58,22 +70,36 @@ const RESULT_ICONS = {
   skip:    { icon: Clock,        cls: 'text-slate-300'   },
 };
 
-// Progress of a test case comes from its latest test run (backend): the bar takes the colour of that result.
-const RUN_COLOR = { pass: '#1F9D55', fail: '#E5484D', blocked: '#D9891A' };
+// Progress of a test case comes from its latest test run (backend). The bar is green like every progress bar; the
+// result itself is in the tooltip and in the Pass/Fail columns.
 const RUN_LABEL = { pass: 'Pass', fail: 'Fail', blocked: 'Blocked', pending: 'Pending', skip: 'Skip' };
 const caseProgressTitle = (tc) => tc.last_result
   ? `Progress dari run terakhir: ${RUN_LABEL[tc.last_result] || tc.last_result} (Pass 100%, Fail 50%, Blocked 25%)`
   : 'Belum pernah dijalankan (0%)';
 
-function TestCaseForm({ tc, products, backlogItems, features, onSave, onClose }) {
+// Rendered with key={tc.id}: the form state is seeded once, so switching to another test case (?case= deep link from
+// Ctrl K while this modal is open) must remount it, or saving would write this case's fields onto the other one.
+function TestCaseForm({ tc, products, backlogItems, features, users, onSave, onClose }) {
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     product_id: tc?.product_id || '', backlog_item_id: tc?.backlog_item_id || '',
     feature_id: tc?.feature_id || '',
     title: tc?.title || '', description: tc?.description || '',
     steps: tc?.steps || '', expected_result: tc?.expected_result || '',
     status: tc?.status || 'draft', priority: tc?.priority || 'medium',
+    assignee_ids: (tc?.assignees || []).map(a => a.id),
     deadline: tc?.deadline ? String(tc.deadline).slice(0, 10) : '', // optional; '' clears it on update
   });
+  // The "Buka" buttons leave the QA page, so ask first when the form has unsaved edits (first-render form = saved)
+  const savedForm = useRef(form);
+  const leaveTo = (path) => {
+    const dirty = JSON.stringify(form) !== JSON.stringify(savedForm.current);
+    if (dirty && !confirm('Perubahan yang belum disimpan akan hilang. Lanjutkan?')) return;
+    navigate(path);
+  };
+  // Saved links only: once a picker is changed (not saved yet) its button would point at the old record
+  const showItemButton = !!tc?.backlog_item_id && !!tc.item_code && String(form.backlog_item_id) === String(tc.backlog_item_id);
+  const showFeatureButton = !!tc?.feature_id && !!tc.feature_code && String(form.feature_id) === String(tc.feature_id);
   const [saving, setSaving] = useState(false);
   const attachRef = useRef(null);
   // Done items are hidden from new picks (QA shouldn't pile onto closed work) but the
@@ -88,9 +114,13 @@ function TestCaseForm({ tc, products, backlogItems, features, onSave, onClose })
     if (!form.backlog_item_id) { toast.error('Backlog Item wajib dipilih'); return; }
     setSaving(true);
     try {
-      if (tc?.id) { await client.put(`/qa/test-cases/${tc.id}`, form); toast.success('Test case diperbarui'); }
+      // Same shape as Bugs: the first pick is the primary assignee (assigned_to), the rest additional_assignee_ids
+      const { assignee_ids, ...payload } = form;
+      payload.assigned_to = assignee_ids[0] || '';
+      payload.additional_assignee_ids = assignee_ids.slice(1);
+      if (tc?.id) { await client.put(`/qa/test-cases/${tc.id}`, payload); toast.success('Test case diperbarui'); }
       else {
-        const res = await client.post('/qa/test-cases', form);
+        const res = await client.post('/qa/test-cases', payload);
         await attachRef.current?.uploadPending(res.data.id);
         toastCreated('Test case', res.data?.code, 'dibuat');
       }
@@ -109,25 +139,41 @@ function TestCaseForm({ tc, products, backlogItems, features, onSave, onClose })
       </div>
       <div>
         <label className="label">Backlog Item *</label>
-        <SearchableSelect
-          value={form.backlog_item_id}
-          onChange={v => setForm(f => ({ ...f, backlog_item_id: v }))}
-          options={buildBacklogTreeOptions(filteredItems)}
-          placeholder="Pilih item"
-          searchPlaceholder="Cari backlog item..."
-        />
+        <div className="flex gap-2">
+          <div className="flex-1 min-w-0">
+            <SearchableSelect
+              value={form.backlog_item_id}
+              onChange={v => setForm(f => ({ ...f, backlog_item_id: v }))}
+              options={buildBacklogTreeOptions(filteredItems)}
+              placeholder="Pilih item"
+              searchPlaceholder="Cari backlog item..."
+            />
+          </div>
+          {showItemButton && (
+            <OpenLinkButton href={`/backlog?item=${tc.backlog_item_id}`} onOpen={() => leaveTo(`/backlog?item=${tc.backlog_item_id}`)}
+              code={tc.item_code} title={`Buka di Backlog: ${tc.item_code} — ${tc.item_title || ''}`} />
+          )}
+        </div>
       </div>
       <div className="col-span-2">
         <label className="label">Feature (opsional)</label>
-        <SearchableSelect
-          value={form.feature_id}
-          onChange={v => setForm(f => ({ ...f, feature_id: v }))}
-          options={buildFeatureOptions(features, products, form.product_id)}
-          placeholder="— Tidak terkait —"
-          emptyOptionLabel="— Tidak terkait —"
-          searchPlaceholder="Cari kode produk, kode atau nama feature..."
-          emptyMessage="Belum ada feature di produk ini"
-        />
+        <div className="flex gap-2">
+          <div className="flex-1 min-w-0">
+            <SearchableSelect
+              value={form.feature_id}
+              onChange={v => setForm(f => ({ ...f, feature_id: v }))}
+              options={buildFeatureOptions(features, products, form.product_id)}
+              placeholder="— Tidak terkait —"
+              emptyOptionLabel="— Tidak terkait —"
+              searchPlaceholder="Cari kode produk, kode atau nama feature..."
+              emptyMessage="Belum ada feature di produk ini"
+            />
+          </div>
+          {showFeatureButton && (
+            <OpenLinkButton href={`/products?feature=${tc.feature_id}`} onOpen={() => leaveTo(`/products?feature=${tc.feature_id}`)}
+              code={tc.feature_code} title={`Buka feature di Products: ${tc.feature_code} — ${tc.feature_name || ''}`} />
+          )}
+        </div>
       </div>
       <div className="col-span-2">
         <label className="label">Judul Test Case *</label>
@@ -148,7 +194,7 @@ function TestCaseForm({ tc, products, backlogItems, features, onSave, onClose })
       <div>
         <label className="label">Status</label>
         <select className="select" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
-          {['draft','active','deprecated'].map(s => <option key={s} value={s}>{s}</option>)}
+          {TC_STATUSES.map(s => <option key={s} value={s}>{STATUS_MAP[s]?.label || s}</option>)}
         </select>
       </div>
       <div>
@@ -156,6 +202,15 @@ function TestCaseForm({ tc, products, backlogItems, features, onSave, onClose })
         <select className="select" value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
           {['critical','high','medium','low'].map(p => <option key={p} value={p}>{p}</option>)}
         </select>
+      </div>
+      {/* Assignee + Deadline side by side, same as the Bugs and Backlog forms (more than one person allowed) */}
+      <div>
+        <label className="label">Assigned To</label>
+        <SearchableMultiSelect label="assignee"
+          options={users.map(u => ({ v: u.id, l: u.name }))}
+          selected={form.assignee_ids}
+          searchPlaceholder="Cari nama assignee..."
+          onChange={vals => setForm(f => ({ ...f, assignee_ids: vals }))} />
       </div>
       <div>
         <label className="label">Deadline (opsional)</label>
@@ -234,7 +289,10 @@ export default function QA() {
   const [backlogItems, setBacklogItems] = useState([]);
   const [features,     setFeatures]    = useState([]);
   const [sprints,      setSprints]     = useState([]);
+  const [users,        setUsers]       = useState([]);
   const [dashboard,    setDashboard]   = useState(null);
+  // Test Cases tab: show only the test cases assigned to any of these users (empty = everyone), like the Bugs filter
+  const [assigneeFilter, setAssigneeFilter] = useState([]);
   const [searchParams, setSearchParams] = useSearchParams();
   const productParam = searchParams.get('product') || '';
   const [filters,      setFilters]     = useState({ product_id: productParam });
@@ -255,13 +313,14 @@ export default function QA() {
     setLoading(true);
     try {
       const params = filters.product_id ? { product_id: filters.product_id } : {};
-      const [pr, tc, tr, bl, ft, sp, db] = await Promise.all([
+      const [pr, tc, tr, bl, ft, sp, us, db] = await Promise.all([
         products.length ? null : client.get('/products'),
         client.get('/qa/test-cases', { params }),
         client.get('/qa/test-runs',  { params }),
         backlogItems.length ? null : client.get('/backlog', { params: { limit: 2000 } }),
         features.length ? null : client.get('/features'),
         sprints.length ? null : client.get('/sprints'),
+        users.length ? null : client.get('/users'),   // assignee picker and filter
         client.get('/qa/dashboard',  { params }),
       ]);
       if (pr) setProducts(pr.data);
@@ -270,6 +329,7 @@ export default function QA() {
       if (bl) setBacklogItems(bl.data.items);
       if (ft) setFeatures(ft.data);
       if (sp) setSprints(sp.data);
+      if (us) setUsers(us.data);
       setDashboard(db.data);
     } finally { setLoading(false); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -293,6 +353,16 @@ export default function QA() {
     }
   });
 
+  // Status dropdown on the table's pill (like Backlog). Only the changed row is updated locally: load() would swap the
+  // whole tab for the spinner and refetch the dashboard for a one-field change.
+  const changeStatus = async (tc, status) => {
+    try {
+      const { data } = await client.patch(`/qa/test-cases/${tc.id}/status`, { status });
+      setTestCases(list => list.map(t => (t.id === tc.id ? { ...t, status: data?.status ?? status } : t)));
+      toast.success(`Status ${tc.code}: ${STATUS_MAP[data?.status ?? status]?.label || status}`);
+    } catch { /* the API client shows the error */ }
+  };
+
   const deleteTC = async (id) => {
     if (!confirm('Hapus test case ini?')) return;
     await client.delete(`/qa/test-cases/${id}`);
@@ -304,11 +374,14 @@ export default function QA() {
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
 
+  // Exports what the table shows (the Assignee filter applies), like the Bugs export. "Assigned To" lists names
+  // separated by commas, primary first; Import CSV reads the column back the same way.
   const exportTestCasesCSV = () => {
-    const headers = ['Kode', 'Judul', 'Deskripsi', 'Langkah', 'Expected Result', 'Status', 'Prioritas', 'Deadline', 'Backlog Item', 'Features', 'Produk', 'Author'];
-    const rows = testCases.map(tc => [
+    const headers = ['Kode', 'Judul', 'Deskripsi', 'Langkah', 'Expected Result', 'Status', 'Prioritas', 'Deadline', 'Assigned To', 'Backlog Item', 'Features', 'Produk', 'Author'];
+    const rows = filteredCases.map(tc => [
       tc.code, tc.title, tc.description, tc.steps, tc.expected_result, tc.status, tc.priority,
       tc.deadline ? String(tc.deadline).slice(0, 10) : '',
+      (tc.assignees || []).map(a => a.name).join(', '),
       tc.item_code ? `[${tc.item_code}] ${tc.item_title || ''}` : '',
       featureText(tc),
       tc.product_code || tc.product_name || '',
@@ -347,10 +420,29 @@ export default function QA() {
 
   const summary = dashboard?.summary || {};
 
-  const totalPagesCases = Math.max(1, Math.ceil(testCases.length / perPageCases));
-  const pagedCases      = testCases.slice((pageCases - 1) * perPageCases, pageCases * perPageCases);
+  const filteredCases   = assigneeFilter.length
+    ? testCases.filter(tc => (tc.assignees || []).some(a => assigneeFilter.includes(a.id)))
+    : testCases;
+  const totalPagesCases = Math.max(1, Math.ceil(filteredCases.length / perPageCases));
+  const pagedCases      = filteredCases.slice((pageCases - 1) * perPageCases, pageCases * perPageCases);
   const totalPagesRuns  = Math.max(1, Math.ceil(testRuns.length / perPageRuns));
   const pagedRuns       = testRuns.slice((pageRuns - 1) * perPageRuns, pageRuns * perPageRuns);
+  // Test runs carry only test_case_id; both lists load with the same product filter, so every run's case is here
+  const itemIdByCase    = new Map(testCases.map(t => [t.id, t.backlog_item_id]));
+
+  // Opens a test case's form from another row (a test run, a recent failure). Same rule as the ?case= deep link:
+  // only with qa.update. A case outside the current product filter (Recent Failures is not filtered) is looked up in
+  // the unfiltered list.
+  const canOpenCase = can('qa', 'update');
+  const openCaseById = (id) => {
+    const found = testCases.find(t => t.id === id);
+    if (found) { setModal({ open: true, type: 'tc', data: found }); return; }
+    client.get('/qa/test-cases').then(r => {
+      const f = r.data.find(t => t.id === id);
+      if (f) setModal({ open: true, type: 'tc', data: f });
+      else toast.error('Test case tidak ditemukan');
+    }).catch(() => {});
+  };
 
   // Data can shrink under the current page (product filter, reload): never sit on an empty page past the end
   useEffect(() => { if (pageCases > totalPagesCases) setPageCases(totalPagesCases); }, [pageCases, totalPagesCases]);
@@ -494,8 +586,21 @@ export default function QA() {
                     <div key={run.id} className="px-5 py-3 flex items-start gap-3">
                       <XCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-700">{run.tc_title}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">[{run.tc_code}] {run.item_code} · {run.product} · Tester: {run.tester}</p>
+                        {/* test_case_id / backlog_item_id come with the API from this version on; without them it stays plain text */}
+                        {canOpenCase && run.test_case_id ? (
+                          <button type="button" onClick={() => openCaseById(run.test_case_id)} title={`Buka test case ${run.tc_code}`}
+                            className="text-left text-sm font-medium text-slate-700 hover:underline hover:text-indigo-600 underline-offset-2">
+                            {run.tc_title}
+                          </button>
+                        ) : <p className="text-sm font-medium text-slate-700">{run.tc_title}</p>}
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          [{run.tc_code}]{' '}
+                          {run.backlog_item_id
+                            ? <Link to={`/backlog?item=${run.backlog_item_id}`} title={`Buka ${run.item_code} di Backlog`}
+                                className="font-mono text-indigo-600 hover:underline underline-offset-2">{run.item_code}</Link>
+                            : run.item_code}
+                          {' '}· {run.product} · Tester: {run.tester}
+                        </p>
                         {run.notes && <p className="text-xs text-red-600 mt-1 italic">{run.notes}</p>}
                         {run.bug_reference && <p className="text-xs text-orange-600 mt-0.5">Bug Ref: {run.bug_reference}</p>}
                       </div>
@@ -511,7 +616,14 @@ export default function QA() {
           {/* TEST CASES TAB */}
           {tab === 'cases' && (
             <div className="space-y-4">
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
+                <div className="mr-auto">
+                  <SearchableMultiSelect label="Assignee" minWidth={180}
+                    options={users.map(u => ({ v: u.id, l: u.name }))}
+                    selected={assigneeFilter}
+                    searchPlaceholder="Cari nama assignee..."
+                    onChange={vals => { setAssigneeFilter(vals); setPageCases(1); }} />
+                </div>
                 {can('qa', 'create') && (
                   <>
                     <input ref={importInputRef} type="file" accept=".csv" className="hidden" onChange={handleImportCSV} />
@@ -523,7 +635,7 @@ export default function QA() {
                     </button>
                   </>
                 )}
-                <button className="btn-secondary" onClick={exportTestCasesCSV} disabled={testCases.length === 0}>
+                <button className="btn-secondary" onClick={exportTestCasesCSV} disabled={filteredCases.length === 0}>
                   <Download className="w-4 h-4" /> Export CSV
                 </button>
                 {can('qa', 'create') && (
@@ -534,7 +646,9 @@ export default function QA() {
               </div>
               <div className="card overflow-hidden">
                 <div className="flex items-center justify-between px-5 py-2.5 border-b border-slate-100 bg-slate-50/50">
-                  <span className="text-xs text-slate-500">{testCases.length} test case</span>
+                  <span className="text-xs text-slate-500">
+                    {filteredCases.length} test case{assigneeFilter.length > 0 && ` (dari ${testCases.length})`}
+                  </span>
                   <div className="flex items-center gap-2 text-xs text-slate-500">
                     Tampilkan
                     <select className="border border-slate-200 rounded px-1.5 py-0.5 bg-white text-xs"
@@ -545,7 +659,7 @@ export default function QA() {
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1650px] text-sm">
+                  <table className="w-full min-w-[1800px] text-sm">
                     <thead>
                       <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 whitespace-nowrap">
                         <th className="text-left px-4 py-3">Kode</th>
@@ -555,6 +669,7 @@ export default function QA() {
                         <th className="text-center px-3 py-3">Prioritas</th>
                         <th className="text-center px-3 py-3">Status</th>
                         <th className="text-left px-3 py-3">Deadline</th>
+                        <th className="text-left px-3 py-3">Assigned To</th>
                         <th className="text-left px-3 py-3" title="Dihitung otomatis dari hasil test run terakhir">Progress</th>
                         <th className="text-center px-3 py-3">Runs</th>
                         <th className="text-center px-3 py-3">Pass</th>
@@ -565,7 +680,11 @@ export default function QA() {
                       </tr>
                     </thead>
                     <tbody>
-                      {pagedCases.length === 0 && <tr><td colSpan={14} className="text-center py-10 text-slate-400">Belum ada test case</td></tr>}
+                      {pagedCases.length === 0 && (
+                        <tr><td colSpan={15} className="text-center py-10 text-slate-400">
+                          {assigneeFilter.length > 0 && testCases.length > 0 ? 'Tidak ada test case untuk assignee yang dipilih' : 'Belum ada test case'}
+                        </td></tr>
+                      )}
                       {pagedCases.map(tc => (
                         <tr key={tc.id}
                           // Whole row opens the test case (same as the pencil, so only with qa.update); inner controls stop propagation
@@ -577,26 +696,31 @@ export default function QA() {
                             {tc.description && <p className="text-xs text-slate-400 truncate">{tc.description}</p>}
                           </td>
                           <td className="px-3 py-3 text-xs text-slate-500">
-                            {tc.item_code ? (
-                              <div className="flex items-center gap-1 min-w-[170px] max-w-[240px]" title={`[${tc.item_code}] ${tc.item_title || ''}`}>
-                                <span className="font-mono text-slate-400 shrink-0 whitespace-nowrap">[{tc.item_code}]</span>
-                                <span className="truncate">{tc.item_title}</span>
-                              </div>
-                            ) : '—'}
+                            {tc.item_code
+                              ? <RefLink to={tc.backlog_item_id ? `/backlog?item=${tc.backlog_item_id}` : null} tip="Buka di Backlog"
+                                  code={tc.item_code} title={tc.item_title} />
+                              : '—'}
                           </td>
                           <td className="px-3 py-3 text-xs text-slate-500">
-                            {tc.feature_code ? (
-                              <div className="flex items-center gap-1 min-w-[150px] max-w-[220px]" title={featureText(tc)}>
-                                <span className="font-mono text-slate-400 shrink-0 whitespace-nowrap">[{tc.feature_code}]</span>
-                                <span className="truncate">{tc.feature_name}</span>
-                              </div>
-                            ) : '—'}
+                            {tc.feature_code
+                              ? <RefLink to={tc.feature_id ? `/products?feature=${tc.feature_id}` : null} tip="Buka feature di Products"
+                                  code={tc.feature_code} title={tc.feature_name} className="min-w-[150px] max-w-[220px]" />
+                              : '—'}
                           </td>
                           <td className="px-3 py-3 text-center"><PriorityBadge priority={tc.priority} /></td>
-                          <td className="px-3 py-3 text-center"><StatusBadge status={tc.status} /></td>
-                          {/* Red as soon as the deadline day is over (test cases have no "finished" status) */}
-                          <td className="px-3 py-3 text-xs whitespace-nowrap"><DeadlineDate date={tc.deadline} /></td>
-                          <td className="px-3 py-3"><ProgressBar value={tc.progress} color={RUN_COLOR[tc.last_result]} title={caseProgressTitle(tc)} /></td>
+                          {/* Click the pill to change the status (qa.update), like Backlog; the menu does not open the row */}
+                          <td className="px-3 py-3 text-center">
+                            <StatusMenu status={tc.status} statuses={TC_STATUSES} canChange={can('qa', 'update')}
+                              onChange={s => changeStatus(tc, s)} />
+                          </td>
+                          {/* Red once the deadline day is over, unless the test case is In Review or Finish */}
+                          <td className="px-3 py-3 text-xs whitespace-nowrap"><DeadlineDate date={tc.deadline} done={TC_NOT_LATE.includes(tc.status)} /></td>
+                          <td className="px-3 py-3">
+                            {tc.assignees?.length > 0
+                              ? <AssigneeStack assignees={tc.assignees} />
+                              : <span className="text-xs text-slate-400">—</span>}
+                          </td>
+                          <td className="px-3 py-3"><ProgressBar value={tc.progress} title={caseProgressTitle(tc)} /></td>
                           <td className="px-3 py-3 text-center text-slate-600 font-medium">{tc.run_count}</td>
                           <td className="px-3 py-3 text-center text-emerald-600 font-medium">{tc.pass_count}</td>
                           <td className="px-3 py-3 text-center text-red-600 font-medium">{tc.fail_count}</td>
@@ -629,7 +753,7 @@ export default function QA() {
                 </div>
                 {totalPagesCases > 1 && (
                   <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 text-xs text-slate-500">
-                    <span>{(pageCases-1)*perPageCases+1}–{Math.min(pageCases*perPageCases, testCases.length)} dari {testCases.length}</span>
+                    <span>{(pageCases-1)*perPageCases+1}–{Math.min(pageCases*perPageCases, filteredCases.length)} dari {filteredCases.length}</span>
                     <div className="flex gap-1">
                       <button disabled={pageCases === 1} onClick={() => setPageCases(p => p-1)}
                         className="btn-ghost btn-sm px-2.5 py-1 disabled:opacity-40">‹ Prev</button>
@@ -678,18 +802,24 @@ export default function QA() {
                       return (
                         <tr key={run.id} className="table-row">
                           <td className="px-4 py-3">
-                            <div>
-                              <p className="font-medium text-slate-700 text-xs">{run.tc_title}</p>
-                              <p className="text-xs text-slate-400 font-mono">{run.tc_code}</p>
-                            </div>
+                            {canOpenCase ? (
+                              <button type="button" onClick={() => openCaseById(run.test_case_id)} title={`Buka test case ${run.tc_code}`}
+                                className="group/tc text-left">
+                                <span className="block font-medium text-slate-700 text-xs group-hover/tc:underline group-hover/tc:text-indigo-600 underline-offset-2">{run.tc_title}</span>
+                                <span className="block text-xs text-indigo-600 font-mono">{run.tc_code}</span>
+                              </button>
+                            ) : (
+                              <div>
+                                <p className="font-medium text-slate-700 text-xs">{run.tc_title}</p>
+                                <p className="text-xs text-slate-400 font-mono">{run.tc_code}</p>
+                              </div>
+                            )}
                           </td>
                           <td className="px-3 py-3 text-xs text-slate-500">
-                            {run.item_code ? (
-                              <div className="flex items-center gap-1 min-w-[170px] max-w-[240px]" title={`[${run.item_code}] ${run.item_title || ''}`}>
-                                <span className="font-mono shrink-0 whitespace-nowrap">[{run.item_code}]</span>
-                                <span className="text-slate-600 truncate">{run.item_title}</span>
-                              </div>
-                            ) : '—'}
+                            {run.item_code
+                              ? <RefLink to={itemIdByCase.get(run.test_case_id) ? `/backlog?item=${itemIdByCase.get(run.test_case_id)}` : null}
+                                  tip="Buka di Backlog" code={run.item_code} title={run.item_title} codeClass="" />
+                              : '—'}
                           </td>
                           <td className="px-3 py-3 text-center">
                             <div className="flex items-center gap-1.5 justify-center">
@@ -732,7 +862,7 @@ export default function QA() {
       <Modal open={modal.open && modal.type === 'tc'} onClose={() => setModal({ ...modal, open: false })}
         title={modal.data ? 'Edit Test Case' : 'Buat Test Case'} size="lg"
         shareLink={modal.data ? `/qa?case=${modal.data.id}` : undefined}>
-        <TestCaseForm tc={modal.data} products={products} backlogItems={backlogItems} features={features}
+        <TestCaseForm key={modal.data?.id ?? 'new'} tc={modal.data} products={products} backlogItems={backlogItems} features={features} users={users}
           onSave={() => { setModal({ ...modal, open: false }); load(); }}
           onClose={() => setModal({ ...modal, open: false })} />
       </Modal>

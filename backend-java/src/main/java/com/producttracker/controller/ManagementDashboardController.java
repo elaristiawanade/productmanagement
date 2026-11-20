@@ -1,6 +1,7 @@
 package com.producttracker.controller;
 
 import com.producttracker.config.PermissionHelper;
+import com.producttracker.service.FeatureRoadmapSync;
 import com.producttracker.service.ProgressSupport;
 import com.producttracker.service.WeeklySnapshotService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,11 +23,12 @@ import java.util.*;
  *
  *   GET /api/management/products                 products for the picker (by the rule above)
  *   GET /api/management/sprints?product_id=      sprints for the picker, active one marked, with progress
- *   GET /api/management/features?product_id=     Products -> Features with Target date and derived Progress %
+ *   GET /api/management/features?product_id=     Products -> Features with Target date and Progress % (from the status)
  *   GET /api/management/weeks?product_id=        the current week plus every frozen week, newest first, and
  *                                                tracking_start (first tracked week; earlier weeks stay empty)
  *   GET /api/management/open-items?product_id=&week=yyyy-MM-dd
- *                                                Open Item of one week (any day of it; default this week).
+ *                                                Open Item of one week (any day of it; default this week):
+ *                                                only work still open (WeeklySnapshotService#stillOpen).
  *                                                This week is live, a past week comes from its frozen copy.
  *                                                Each item carries its PO remark; the week carries its note.
  *   PUT /api/management/remarks                  {product_id, item_source, item_id, expected_date?, remark?}
@@ -100,13 +102,11 @@ public class ManagementDashboardController {
 
     // ── Features ─────────────────────────────────────────────────────────────
 
-    /** Feature statuses that mean finished: "done" (seed/import data) and "released" (the Products form's option). */
-    private static final Set<String> FINISHED_FEATURE = Set.of("done", "released");
-
     /**
-     * Progress % of a feature: Done/Released = 100. Otherwise the weighted progress of the Backlog work linked to it, via its
-     * roadmap row (product_roadmap.source_feature_id), as the item's Feature or one of its Impacted Features.
-     * A linked story counts with its tasks. No linked work (or not a roadmap item, so nothing can link) = null.
+     * Progress % of a feature: set by hand through its status, the same number as Products and Roadmap show
+     * (FeatureRoadmapSync: Planned 20 … Active/Offline 100, On Hold keeps the last stage). Not from the Backlog:
+     * linked_items (Backlog items that reference the feature's roadmap row, as Feature or Impacted Feature) is
+     * shown as information only.
      */
     @GetMapping("/features")
     public ResponseEntity<?> features(@AuthenticationPrincipal Object principal,
@@ -116,8 +116,9 @@ public class ManagementDashboardController {
 
         List<Map<String, Object>> features = jdbc.queryForList(
             "SELECT f.id, f.code, f.name, f.status, f.priority, f.target_date, f.target_release, f.is_roadmap_item, " +
-            "       f.owner_id, u.name AS owner_name " +
+            "       f.owner_id, u.name AS owner_name, rm.status AS roadmap_status " +
             "FROM features f LEFT JOIN users u ON u.id = f.owner_id " +
+            "LEFT JOIN product_roadmap rm ON rm.source_feature_id = f.id " +
             "WHERE f.product_id = ? ORDER BY f.target_date NULLS LAST, f.code", productId);
         Map<Long, Set<Long>> linked = new HashMap<>();
         for (Map<String, Object> r : jdbc.queryForList(
@@ -130,12 +131,9 @@ public class ManagementDashboardController {
                 "WHERE r.product_id = ? AND r.source_feature_id IS NOT NULL", productId, productId)) {
             linked.computeIfAbsent(num(r.get("feature_id")), k -> new LinkedHashSet<>()).add(num(r.get("item_id")));
         }
-        ProgressSupport.Snapshot snap = progressSupport.snapshot(List.of(productId));
         for (Map<String, Object> f : features) {
-            Set<Long> items = linked.getOrDefault(num(f.get("id")), Set.of());
-            f.put("linked_items", items.size());
-            f.put("progress", FINISHED_FEATURE.contains(String.valueOf(f.get("status")))
-                ? Integer.valueOf(100) : snap.averageOfSubtrees(items));
+            f.put("linked_items", linked.getOrDefault(num(f.get("id")), Set.of()).size());
+            f.put("progress", FeatureRoadmapSync.featureProgress(f.get("status"), f.get("roadmap_status")));
         }
         return ResponseEntity.ok(features);
     }
@@ -209,6 +207,8 @@ public class ManagementDashboardController {
             header = week(weekStart, frozen.get("source").toString(), frozen.get("captured_at"));
             items = weekly.frozenItems(num(frozen.get("id")));
         }
+        // Only work still being worked on (no In Review / Done / Ready to Test / Pass / Skip ...), for both kinds of week.
+        items = weekly.stillOpen(items);
         attachRemarks(productId, weekStart, items);
         boolean editor = canEdit(principal, productId);
         Map<String, Object> out = new LinkedHashMap<>(header);

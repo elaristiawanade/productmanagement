@@ -902,9 +902,11 @@ export default function Users() {
       )}
 
       {/* ── Modals ── */}
+      {/* Each form seeds its state once, so it is keyed by the record: a ?user= / ?role= / ?department= deep link
+          (Ctrl K) while a form is open must remount it, or saving would write the old record's fields onto the new one. */}
       <Modal open={modal.open && modal.type === 'user'} onClose={closeModal}
         title={modal.data ? 'Edit User' : 'Tambah User'} size="md">
-        <UserForm user={modal.data} roles={roles} products={products}
+        <UserForm key={modal.data?.id ?? 'new'} user={modal.data} roles={roles} products={products}
           onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
 
@@ -917,12 +919,12 @@ export default function Users() {
 
       <Modal open={modal.open && modal.type === 'role'} onClose={closeModal}
         title={modal.data ? 'Edit Role' : 'Tambah Role'} size="md">
-        <RoleForm role={modal.data} onSave={() => { closeModal(); load(); }} onClose={closeModal} />
+        <RoleForm key={modal.data?.id ?? 'new'} role={modal.data} onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
 
       <Modal open={modal.open && modal.type === 'department'} onClose={closeModal}
         title={modal.data ? 'Edit Departemen' : 'Tambah Departemen'} size="sm">
-        <DepartmentForm department={modal.data} users={users} onMembersChanged={load}
+        <DepartmentForm key={modal.data?.id ?? 'new'} department={modal.data} users={users} onMembersChanged={load}
           onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
 

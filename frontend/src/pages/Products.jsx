@@ -14,6 +14,8 @@ import toast from 'react-hot-toast';
 const COLORS = ['#4F46E5','#0EA5E9','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#64748B'];
 
 // ─── Roadmap status config ────────────────────────────────────────────────────
+// Progress % of Features / roadmap rows / products comes from the backend (FeatureRoadmapSync): set by hand through
+// the Feature's status, +20% per stage (Planned 20 … Active/Offline 100), On Hold keeps the last stage. Never from the Backlog.
 const ROADMAP_STATUSES = [
   { key: 'planned',     label: 'Planned',      cls: 'bg-slate-100 text-slate-600 border-slate-200' },
   { key: 'research',    label: 'Research',     cls: 'bg-purple-100 text-purple-700 border-purple-200' },
@@ -21,6 +23,17 @@ const ROADMAP_STATUSES = [
   { key: 'testing',     label: 'Testing',      cls: 'bg-amber-100 text-amber-700 border-amber-200' },
   { key: 'active',      label: 'Active',       cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
   { key: 'offline',     label: 'Offline',      cls: 'bg-red-100 text-red-700 border-red-200' },
+];
+
+// Feature statuses in workflow order; the roadmap row follows (in brackets: the roadmap status and the progress).
+const FEATURE_STATUSES = [
+  { key: 'not_started',    label: 'Not Started (Planned · 20%)' },
+  { key: 'research',       label: 'Research (40%)' },
+  { key: 'in_development', label: 'In Development (On Progress · 60%)' },
+  { key: 'testing',        label: 'Testing (80%)' },
+  { key: 'released',       label: 'Released (Active · 100%)' },
+  { key: 'on_hold',        label: 'On Hold (persen tetap yang terakhir)' },
+  { key: 'offline',        label: 'Offline (100%)' },
 ];
 
 const ROADMAP_STATUS_MAP = Object.fromEntries(ROADMAP_STATUSES.map(s => [s.key, s]));
@@ -42,6 +55,7 @@ const ROADMAP_SORTS = {
   feature_name:         r => r.feature_name,
   product:              r => r.product_name,
   status:               r => ROADMAP_STATUS_RANK[r.status] ?? ROADMAP_STATUSES.length,
+  progress:             r => r.progress,
   product_version:      r => r.product_version,
   month_release_target: r => (r.month_release_target ? String(r.month_release_target).slice(0, 10) : null),
 };
@@ -72,6 +86,9 @@ function RoadmapForm({ item, products, defaultProductId, onSave, onClose }) {
     month_release_target:  item?.month_release_target  ? item.month_release_target.split('T')[0].slice(0, 7) : '',
   });
   const [saving, setSaving] = useState(false);
+  // A row linked to a Feature (source_feature_id) gets its name / status / version / month from that Feature; only the
+  // description is edited here. The backend ignores those fields for linked rows too, so this is not the only guard.
+  const linked = !!item?.source_feature_id;
 
   const save = async (e) => {
     e.preventDefault();
@@ -83,8 +100,8 @@ function RoadmapForm({ item, products, defaultProductId, onSave, onClose }) {
         await client.put(`/roadmap/${item.id}`, payload);
         toast.success('Feature diperbarui');
       } else {
-        await client.post('/roadmap', payload);
-        toast.success('Feature ditambahkan ke roadmap');
+        const { data } = await client.post('/roadmap', payload);
+        toast.success(data?.feature_code ? `Ditambahkan ke roadmap, Feature ${data.feature_code} ikut dibuat` : 'Feature ditambahkan ke roadmap');
       }
       onSave();
     } catch (err) {
@@ -94,9 +111,15 @@ function RoadmapForm({ item, products, defaultProductId, onSave, onClose }) {
 
   return (
     <form onSubmit={save} className="space-y-4">
+      {linked && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
+          Terhubung ke Feature <strong className="font-mono">{item.feature_code}</strong>. Nama, status, versi, dan target rilis
+          diubah lewat tab <strong>Produk & Features</strong>; di sini hanya deskripsi yang bisa diedit.
+        </div>
+      )}
       <div>
         <label className="label">Produk *</label>
-        <select className="select" value={form.product_id}
+        <select className="select" value={form.product_id} disabled={linked}
           onChange={e => setForm(f => ({ ...f, product_id: e.target.value }))} required>
           <option value="">— Pilih Produk —</option>
           {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -104,7 +127,7 @@ function RoadmapForm({ item, products, defaultProductId, onSave, onClose }) {
       </div>
       <div>
         <label className="label">Nama Fitur *</label>
-        <input className="input" value={form.feature_name}
+        <input className="input" value={form.feature_name} disabled={linked}
           onChange={e => setForm(f => ({ ...f, feature_name: e.target.value }))}
           placeholder="contoh: Single Sign-On" required />
       </div>
@@ -117,23 +140,26 @@ function RoadmapForm({ item, products, defaultProductId, onSave, onClose }) {
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="label">Status</label>
-          <select className="select" value={form.status}
+          <select className="select" value={form.status} disabled={linked}
             onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
             {ROADMAP_STATUSES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
         </div>
         <div>
           <label className="label">Versi Produk</label>
-          <input className="input" value={form.product_version}
+          <input className="input" value={form.product_version} disabled={linked}
             onChange={e => setForm(f => ({ ...f, product_version: e.target.value }))}
             placeholder="contoh: v1.0, v2.3" />
         </div>
       </div>
       <div>
         <label className="label">Month Release Target</label>
-        <input type="month" className="input" value={form.month_release_target}
+        <input type="month" className="input" value={form.month_release_target} disabled={linked}
           onChange={e => setForm(f => ({ ...f, month_release_target: e.target.value }))} />
       </div>
+      {!item?.id && (
+        <p className="text-[11px] text-slate-400 -mt-2">Feature dengan kode otomatis ikut dibuat di tab Produk & Features.</p>
+      )}
       <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
         <button type="button" className="btn-secondary" onClick={onClose}>Batal</button>
         <button type="submit" className="btn-primary" disabled={saving}>
@@ -292,7 +318,7 @@ export default function Products() {
   };
 
   const deleteFeature = async (id) => {
-    if (!confirm('Hapus feature ini?')) return;
+    if (!confirm('Hapus feature ini? Item di tab Roadmap yang terhubung ikut terhapus, termasuk kaitannya ke kartu Backlog.')) return;
     await client.delete(`/features/${id}`);
     toast.success('Feature dihapus'); load();
   };
@@ -372,8 +398,8 @@ export default function Products() {
           {products.map(product => {
             const pFeatures = features.filter(f => f.product_id === product.id);
             const pEpics    = epics.filter(e => e.product_id === product.id);
-            // Progress is derived by the backend from the product's Backlog (status of each item without children,
-            // weighted by story points); null = the product has no work items yet
+            // Progress = average of the product's Features (each set by hand through its status), computed by the
+            // backend; null = the product has no Feature yet. Not from the Backlog (Item Backlog / Done are info only).
             const pct = product.progress ?? 0;
             const isExpanded = expanded[product.id];
 
@@ -393,8 +419,8 @@ export default function Products() {
                     {product.description && <p className="text-sm text-slate-500 mt-0.5 line-clamp-1">{product.description}</p>}
                     <div className="flex items-center gap-4 mt-2 text-xs text-slate-400 flex-wrap">
                       <span>Owner: <strong className="text-slate-600">{product.owner_name || '—'}</strong></span>
-                      <span>Items: <strong className="text-slate-600">{product.total_items}</strong></span>
-                      <span>Done: <strong className="text-emerald-600">{product.done_items}</strong></span>
+                      <span title="Jumlah item Backlog produk ini (informasi saja, tidak memengaruhi Progress)">Item Backlog: <strong className="text-slate-600">{product.total_items}</strong></span>
+                      <span title="Item Backlog berstatus Done (informasi saja, tidak memengaruhi Progress)">Done: <strong className="text-emerald-600">{product.done_items}</strong></span>
                       <span>Active Sprints: <strong className="text-blue-600">{product.active_sprints}</strong></span>
                       {product.repository_url && (
                         <a href={product.repository_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-slate-600 hover:text-indigo-600 underline underline-offset-2 decoration-slate-300 hover:decoration-indigo-600 transition-colors">
@@ -403,11 +429,11 @@ export default function Products() {
                       )}
                     </div>
                     <div className="mt-3 flex items-center gap-2"
-                      title="Progress dihitung otomatis dari item Backlog produk ini: In Progress 50%, In Review 80%, Done 100%, dibobot story point">
+                      title="Rata-rata progress Feature produk ini. Progress Feature diatur lewat statusnya: Planned 20%, Research 40%, On Progress 60%, Testing 80%, Active/Offline 100%">
                       <div className="flex-1 max-w-[200px] h-1.5 bg-slate-100 rounded-full overflow-hidden">
                         <div className={`h-full rounded-full ${progressFill(pct)}`} style={{ width: `${pct}%` }} />
                       </div>
-                      <span className="text-xs text-slate-400">Progress {pct}%</span>
+                      <span className="text-xs text-slate-400">Progress {product.progress == null ? '— (belum ada feature)' : `${pct}%`}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -478,23 +504,23 @@ export default function Products() {
                         ? <p className="text-sm text-slate-400">Belum ada feature</p>
                         : <div className="space-y-0.5">
                             {pFeatures.map(f => {
-                              const pct2 = f.total_points > 0 ? Math.round((f.done_points / f.total_points) * 100) : 0;
+                              // Progress is set by hand through the status (backend); On Hold keeps the last stage.
+                              const pct2 = f.progress ?? 0;
+                              const stage = ROADMAP_STATUS_MAP[f.roadmap_status]?.label;
+                              const pctTitle = f.status === 'on_hold'
+                                ? `On Hold: progress tetap di tahap terakhir${stage ? ` (${stage} ${pct2}%)` : ''}`
+                                : `Progress dari status${stage ? ` (Roadmap: ${stage})` : ''} = ${pct2}%. Tidak dihitung dari Backlog`;
                               return (
                                 <div key={f.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 rounded-lg text-sm">
                                   <span className="font-mono text-xs text-slate-400 w-14 shrink-0">{f.code}</span>
                                   <span className="flex-1 font-medium text-slate-700 truncate">{f.name}</span>
-                                  {f.is_roadmap_item && (
-                                    <span className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200" title="Tampil di Roadmap">
-                                      <Map className="w-3 h-3" /> Roadmap
-                                    </span>
-                                  )}
                                   <StatusBadge status={f.status} size="xs" />
                                   <PriorityBadge priority={f.priority} />
                                   <span className="text-xs text-slate-400">{f.target_release || '—'}</span>
                                   <span className="inline-flex items-center gap-1 text-xs text-slate-500 tabular-nums w-24 shrink-0" title="Target (tanggal), tampil di Management Dashboard">
                                     {f.target_date && <><Target className="w-3 h-3 shrink-0" />{format(parseISO(String(f.target_date).slice(0, 10)), 'dd MMM yyyy')}</>}
                                   </span>
-                                  <div className="flex items-center gap-1.5 w-24 shrink-0">
+                                  <div className="flex items-center gap-1.5 w-24 shrink-0" title={pctTitle}>
                                     <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                                       <div className={`h-full rounded-full ${progressFill(pct2)}`} style={{ width: `${pct2}%` }} />
                                     </div>
@@ -526,7 +552,7 @@ export default function Products() {
       {tab === 'roadmap' && (
         <div className="space-y-4">
           <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 text-sm text-blue-700">
-            <strong>Roadmap</strong> adalah perencanaan fitur produk secara umum. Untuk membuat <strong>Feature</strong> yang dapat dihubungkan ke Backlog Item, buka tab <strong>"Produk & Features"</strong> → expand produk → klik tombol "+ Feature".
+            <strong>Roadmap</strong> selalu sinkron dengan <strong>Feature</strong> di tab <strong>"Produk & Features"</strong>: setiap Feature otomatis tampil di sini, dan item yang ditambahkan di sini otomatis dibuatkan Feature (kode otomatis). Nama, status, versi, dan target rilis diubah lewat Feature; deskripsi diedit di sini. <strong>Progress</strong> mengikuti status (+20% per tahap: Planned 20% … Active/Offline 100%), tidak dihitung dari Backlog.
           </div>
           {/* Filter + action bar */}
           <div className="flex flex-wrap items-center gap-3">
@@ -571,12 +597,13 @@ export default function Products() {
           {/* Roadmap table: a minimum width keeps the columns readable; narrower screens scroll it sideways */}
           <div className="card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] text-sm">
+              <table className="w-full min-w-[1080px] text-sm">
                 <thead>
                   <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 whitespace-nowrap">
                     {roadmapTh('feature_name', 'Fitur', 'left')}
                     {roadmapTh('product', 'Produk', 'left')}
                     {roadmapTh('status', 'Status')}
+                    {roadmapTh('progress', 'Progress')}
                     {roadmapTh('product_version', 'Versi')}
                     {roadmapTh('month_release_target', 'Target Rilis')}
                     <th className="text-left px-4 py-3">Deskripsi</th>
@@ -586,7 +613,7 @@ export default function Products() {
                 <tbody>
                   {filteredRoadmap.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="text-center py-12 text-slate-400">
+                      <td colSpan={8} className="text-center py-12 text-slate-400">
                         <Map className="w-8 h-8 mx-auto mb-2 opacity-40" />
                         <p>Belum ada feature di roadmap</p>
                       </td>
@@ -595,7 +622,10 @@ export default function Products() {
                   {filteredRoadmap.map(item => (
                     <tr key={item.id} className="table-row">
                       <td className="px-5 py-3">
-                        <p className="font-medium text-slate-800 min-w-[180px]">{item.feature_name}</p>
+                        <div className="min-w-[180px]">
+                          <p className="font-medium text-slate-800">{item.feature_name}</p>
+                          {item.feature_code && <p className="text-[11px] font-mono text-slate-400">{item.feature_code}</p>}
+                        </div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <span className="text-xs font-medium px-2 py-0.5 rounded border font-mono"
@@ -608,8 +638,25 @@ export default function Products() {
                         </span>
                         <span className="ml-2 text-xs text-slate-500">{item.product_name}</span>
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
                         <RoadmapStatusBadge status={item.status} />
+                        {/* The roadmap has no On Hold status: the row keeps its last stage while the Feature is on hold */}
+                        {item.feature_status === 'on_hold' && (
+                          <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border bg-orange-50 text-orange-700 border-orange-200"
+                            title="Feature sedang On Hold: status dan progress tetap di tahap terakhir">
+                            On Hold
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {item.progress == null
+                          ? <span className="text-slate-300">—</span>
+                          : <div className="flex items-center gap-1.5 w-24 mx-auto" title={`Progress dari status = ${item.progress}%`}>
+                              <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full ${progressFill(item.progress)}`} style={{ width: `${item.progress}%` }} />
+                              </div>
+                              <span className="text-xs text-slate-500 tabular-nums w-8 text-right">{item.progress}%</span>
+                            </div>}
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap">
                         {item.product_version
@@ -636,10 +683,15 @@ export default function Products() {
                             </button>
                           )}
                           {can('roadmap', 'delete') && (
-                            <button className="btn-ghost btn-sm p-1.5 rounded-lg text-red-500 hover:bg-red-50"
-                              onClick={() => deleteRoadmapItem(item.id)}>
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            item.source_feature_id
+                              ? <button className="btn-ghost btn-sm p-1.5 rounded-lg text-red-500 opacity-30 cursor-not-allowed" disabled
+                                  title={`Terhubung ke Feature ${item.feature_code || ''}. Hapus lewat tab Produk & Features.`}>
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              : <button className="btn-ghost btn-sm p-1.5 rounded-lg text-red-500 hover:bg-red-50"
+                                  onClick={() => deleteRoadmapItem(item.id)}>
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
                           )}
                         </div>
                       </td>
@@ -653,24 +705,27 @@ export default function Products() {
       )}
 
       {/* ── Modals ── */}
+      {/* Each form seeds its state once, so it is keyed by the record (and product): a ?product= / ?epic= / ?feature= /
+          ?roadmap= deep link (Ctrl K) while a form is open must remount it, or saving would write the old record's
+          fields onto the new one. */}
       <Modal open={modal.open && modal.type === 'product'} onClose={closeModal}
         title={modal.data ? 'Edit Produk' : 'Tambah Produk'} size="md"
         shareLink={modal.data ? `/products?product=${modal.data.id}` : undefined}>
-        <ProductForm product={modal.data} users={users}
+        <ProductForm key={modal.data?.id ?? 'new'} product={modal.data} users={users}
           onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
 
       <Modal open={modal.open && modal.type === 'epic'} onClose={closeModal}
         title={modal.data ? 'Edit Epic' : 'Tambah Epic'} size="sm"
         shareLink={modal.data ? `/products?epic=${modal.data.id}` : undefined}>
-        <EpicForm epic={modal.data} productId={modal.productId}
+        <EpicForm key={`${modal.data?.id ?? 'new'}-${modal.productId}`} epic={modal.data} productId={modal.productId}
           onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
 
       <Modal open={modal.open && modal.type === 'feature'} onClose={closeModal}
         title={modal.data ? 'Edit Feature' : 'Tambah Feature'} size="md"
         shareLink={modal.data ? `/products?feature=${modal.data.id}` : undefined}>
-        <FeatureForm feature={modal.data} productId={modal.productId} users={users}
+        <FeatureForm key={`${modal.data?.id ?? 'new'}-${modal.productId}`} feature={modal.data} productId={modal.productId} users={users}
           epics={epics.filter(e => e.product_id === modal.productId)}
           onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
@@ -678,7 +733,7 @@ export default function Products() {
       <Modal open={modal.open && modal.type === 'roadmap'} onClose={closeModal}
         title={modal.data ? 'Edit Item Roadmap' : 'Tambah Item ke Roadmap'} size="md"
         shareLink={modal.data ? `/products?roadmap=${modal.data.id}` : undefined}>
-        <RoadmapForm item={modal.data} products={products}
+        <RoadmapForm key={`${modal.data?.id ?? 'new'}-${modal.productId}`} item={modal.data} products={products}
           defaultProductId={modal.productId}
           onSave={() => { closeModal(); load(); }} onClose={closeModal} />
       </Modal>
@@ -714,7 +769,7 @@ function EpicForm({ epic, productId, onSave, onClose }) {
 
 // ─── FeatureForm ──────────────────────────────────────────────────────────────
 function FeatureForm({ feature, productId, users, epics, onSave, onClose }) {
-  const [form, setForm] = useState({ product_id: feature?.product_id || productId, epic_id: feature?.epic_id || '', code: feature?.code || '', name: feature?.name || '', owner_id: feature?.owner_id || '', status: feature?.status || 'not_started', priority: feature?.priority || 'medium', target_release: feature?.target_release || '', target_date: feature?.target_date ? String(feature.target_date).slice(0, 10) : '', is_roadmap_item: feature?.is_roadmap_item || false });
+  const [form, setForm] = useState({ product_id: feature?.product_id || productId, epic_id: feature?.epic_id || '', code: feature?.code || '', name: feature?.name || '', owner_id: feature?.owner_id || '', status: feature?.status || 'not_started', priority: feature?.priority || 'medium', target_release: feature?.target_release || '', target_date: feature?.target_date ? String(feature.target_date).slice(0, 10) : '' });
   const [saving, setSaving] = useState(false);
   const save = async (e) => {
     e.preventDefault(); setSaving(true);
@@ -726,19 +781,15 @@ function FeatureForm({ feature, productId, users, epics, onSave, onClose }) {
   };
   return (
     <form onSubmit={save} className="grid grid-cols-2 gap-4">
-      <div><label className="label">Kode *</label><input className="input" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} placeholder="FT-01" required disabled={!!feature?.id} /></div>
+      <div><label className="label">Kode</label><input className="input" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} placeholder="Kosongkan = otomatis" disabled={!!feature?.id} /></div>
       <div><label className="label">Epic</label><select className="select" value={form.epic_id} onChange={e => setForm(f => ({ ...f, epic_id: e.target.value }))}><option value="">—</option>{epics.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select></div>
       <div className="col-span-2"><label className="label">Nama Feature *</label><input className="input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required /></div>
       <div><label className="label">Owner</label><select className="select" value={form.owner_id} onChange={e => setForm(f => ({ ...f, owner_id: e.target.value }))}><option value="">—</option>{users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
-      <div><label className="label">Status</label><select className="select" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>{['not_started','in_development','testing','released','on_hold'].map(s => <option key={s} value={s}>{s.replace('_',' ')}</option>)}</select></div>
+      <div><label className="label">Status</label><select className="select" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>{FEATURE_STATUSES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}</select><p className="text-[11px] text-slate-400 mt-1">Progress diatur lewat status (+20% per tahap), bukan dari Backlog</p></div>
       <div><label className="label">Prioritas</label><select className="select" value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>{['critical','high','medium','low'].map(p => <option key={p} value={p}>{p}</option>)}</select></div>
       <div><label className="label">Target Release</label><input className="input" value={form.target_release} onChange={e => setForm(f => ({ ...f, target_release: e.target.value }))} placeholder="v1.0" /></div>
       <div><label className="label">Target (tanggal)</label><input type="date" className="input" value={form.target_date} onChange={e => setForm(f => ({ ...f, target_date: e.target.value }))} /><p className="text-[11px] text-slate-400 mt-1">Tampil sebagai kolom Target di Management Dashboard</p></div>
-      <div className="col-span-2 flex items-center gap-2 pt-1">
-        <input id="is_roadmap_item" type="checkbox" className="w-4 h-4 rounded accent-indigo-600" checked={form.is_roadmap_item}
-          onChange={e => setForm(f => ({ ...f, is_roadmap_item: e.target.checked }))} />
-        <label htmlFor="is_roadmap_item" className="text-sm text-slate-600 cursor-pointer">Tampilkan feature ini di Roadmap</label>
-      </div>
+      <p className="col-span-2 text-[11px] text-slate-400">Feature otomatis tampil di tab Roadmap; nama, status, versi, dan target tanggalnya jadi acuan di sana.</p>
       <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-slate-100"><button type="button" className="btn-secondary" onClick={onClose}>Batal</button><button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Menyimpan...' : (feature?.id ? 'Perbarui' : 'Buat')}</button></div>
     </form>
   );

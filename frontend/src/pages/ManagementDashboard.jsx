@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { addDays, parseISO } from 'date-fns';
 import client from '../api/client';
@@ -25,6 +25,9 @@ function EstimateBadge({ source }) {
   );
 }
 
+// How often the running week's Open Item refreshes itself while the tab is visible (same pace as the notification bell).
+const LIVE_REFRESH_MS = 30000;
+
 // Put the saved remark on its row without reloading the whole week.
 const withRemark = (data, item, remark) => data && ({
   ...data,
@@ -35,7 +38,8 @@ const withRemark = (data, item, remark) => data && ({
  * Home -> Management. One product at a time (picked in the sidebar's Products list or the header), top to bottom:
  *   Sprint Aktif   the product's running sprint (or another one picked), with progress
  *   Features       Products -> Features with Target and Progress %
- *   Minggu Ini     Open Item of the running week, live and editable, with PO Remarks and the PO's weekly note
+ *   Minggu Ini     Open Item of the running week (work still open only), live, refreshing itself every 30 s, and
+ *                  editable, with PO Remarks and the PO's weekly note
  *   Minggu Lalu    a frozen week (last week by default; chips for the last four, a week-number calendar for older
  *                  ones), read-only except its weekly note
  * Picks live in the URL (?product=&sprint=&week=) so a view can be shared as a link.
@@ -105,6 +109,31 @@ export default function ManagementDashboard() {
   }, [productId]);
   useEffect(() => { loadLive(); }, [loadLive, reloadKey]);
 
+  // The running week's Open Item keeps itself current: every 30 s while the tab is visible, and right away when the
+  // tab comes back, so a status changed elsewhere (Backlog, Bugs, My Task, another user) drops out of the list or
+  // shows up again without a click. Only that list is fetched, silently (no spinner, no error toast). Remarks and the
+  // weekly note being typed keep their own state, so a refresh does not wipe them. When the week has rolled over
+  // (Monday 00:00 WIB) everything is reloaded, since last week then moves to the past-week card.
+  const liveWeekRef = useRef(null);
+  useEffect(() => { liveWeekRef.current = live?.week_start ?? null; }, [live?.week_start]);
+  useEffect(() => {
+    if (!productId) return undefined;
+    let alive = true;
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return;
+      client.get('/management/open-items', { params: { product_id: productId }, silent: true })
+        .then(r => {
+          if (!alive) return;
+          if (liveWeekRef.current && r.data.week_start !== liveWeekRef.current) loadLive(true);
+          else setLive(r.data);
+        })
+        .catch(() => { /* silent: the next tick tries again */ });
+    };
+    const timer = setInterval(refresh, LIVE_REFRESH_MS);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { alive = false; clearInterval(timer); document.removeEventListener('visibilitychange', refresh); };
+  }, [productId, loadLive]);
+
   useEffect(() => {
     if (!productId || !pastWeek) { setPast(null); return; }
     let alive = true;
@@ -138,7 +167,7 @@ export default function ManagementDashboard() {
       <FeaturesSection features={features} />
 
       <Section title="Open Item · Minggu Ini" bodyClassName=""
-        hint="Pekerjaan yang terbuka minggu ini plus yang selesai minggu ini, dari Backlog, My Task, QA Module, dan Bug. Status bisa diubah langsung di sini"
+        hint="Pekerjaan yang masih dikerjakan minggu ini, dari Backlog, My Task, QA Module, dan Bug (In Review, Done, Ready to Test, Pass, Skip, dan sejenisnya tidak ditampilkan). Status bisa diubah langsung di sini; daftar diperbarui otomatis tiap 30 detik"
         actions={currentWeekStart && (
           <span className="text-xs text-slate-500 whitespace-nowrap">
             <strong className="font-semibold text-slate-700 tabular-nums">W{weekNo(currentWeekStart)}</strong> · {weekRangeLabel(currentWeekStart)}

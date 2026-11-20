@@ -28,7 +28,8 @@ import java.util.*;
 /**
  * "Open Item (weekly basis)" of the Management Dashboard: per product and week, the work that was open during the
  * week plus the work finished in it. Four sources, always in this order: Backlog, My Task (personal_tasks), QA
- * Module (test cases), Bug.
+ * Module (test cases), Bug. The rows are built and frozen complete; the dashboard then SHOWS only the work still
+ * being worked on ({@link #stillOpen}: no In Review / Done / Ready to Test / Pass / Skip ...).
  *
  * <p>The CURRENT week is computed live on every request ({@link #buildItems}). Once a week is over it is FROZEN:
  * {@link #captureWeek} copies its rows into weekly_snapshots / weekly_snapshot_items and they never change again,
@@ -54,7 +55,8 @@ import java.util.*;
  * <p>Inclusion rules: Backlog skips epics and anything in status `backlog` (not planned yet); a Done item only
  * counts in the week it became Done. A task whose story is also listed is placed right under it (parent_id), for
  * indentation. Bugs skip tickets already turned into a Backlog item (that item is listed instead); a closed Stage
- * only counts in the week it closed. QA skips deprecated test cases; a test case is finished by a Pass run.
+ * only counts in the week it closed. QA skips deprecated test cases (status from before migration_v35); a test case is
+ * finished by a Pass run, its PIC is its assignees (else the latest tester / author) and In Review / Finish are never late.
  */
 @Service
 public class WeeklySnapshotService {
@@ -241,11 +243,15 @@ public class WeeklySnapshotService {
     }
 
     private List<Map<String, Object>> qaRows(long productId, Timestamp start, Timestamp end, LocalDate lateBefore) {
-        // PIC: whoever ran the latest test, else whoever wrote the test case (test cases have no assignee).
+        // PIC: the test case's assignees (migration_v35). A test case nobody is assigned to keeps the rule from before
+        // assignees existed: whoever ran the latest test, else whoever wrote the test case.
+        String pic = picJson(
+            "SELECT a.user_id, a.is_primary FROM qa_test_case_assignees a WHERE a.test_case_id = tc.id " +
+            "UNION SELECT COALESCE(lr.tester_id, tc.created_by), TRUE WHERE COALESCE(lr.tester_id, tc.created_by) IS NOT NULL " +
+            "  AND NOT EXISTS (SELECT 1 FROM qa_test_case_assignees a2 WHERE a2.test_case_id = tc.id)");
         List<Map<String, Object>> rows = jdbc.queryForList(
             "SELECT tc.id, tc.code, tc.title, tc.deadline, tc.status AS tc_status, lr.result, lr.run_at, " +
-            "  COALESCE((SELECT json_build_array(json_build_object('id', u.id, 'name', u.name, 'color', u.avatar_color)) " +
-            "    FROM users u WHERE u.id = COALESCE(lr.tester_id, tc.created_by)), '[]'::json)::text AS pic " +
+            pic + " " +
             "FROM qa_test_cases tc " +
             "LEFT JOIN LATERAL (SELECT r.result, COALESCE(r.executed_at, r.created_at) AS run_at, r.tester_id " +
             "  FROM qa_test_runs r WHERE r.test_case_id = tc.id AND COALESCE(r.executed_at, r.created_at) < ? " +
@@ -261,7 +267,8 @@ public class WeeklySnapshotService {
             Map<String, Object> row = row("qa", num(r.get("id")), str(r.get("tc_status")), str(r.get("code")),
                 str(r.get("title")), str(r.get("pic")), result == null ? "not_run" : result, r.get("deadline"),
                 ProgressSupport.testCasePct(r.get("tc_status"), result), passed);
-            row.put("is_late", isLate(r.get("deadline"), lateBefore, passed));
+            // In Review / Finish are never late, like In Review on a Backlog card
+            row.put("is_late", isLate(r.get("deadline"), lateBefore, passed || CLOSED_QA_STATUS.contains(str(r.get("tc_status")))));
             (passed ? finished : out).add(row);
         }
         out.addAll(finished);
@@ -463,6 +470,63 @@ public class WeeklySnapshotService {
             m.put("is_late", Boolean.TRUE.equals(r.get("is_late")));
             m.put("sort_order", r.get("sort_order"));
             out.add(m);
+        }
+        return out;
+    }
+
+    // ── What the dashboard shows ─────────────────────────────────────────────
+
+    /** Backlog / My Task statuses that are not shown: waiting for review, or finished. */
+    private static final Set<String> HIDDEN_WORK_STATUS = Set.of("in_review", "done");
+    /** QA results that are not shown: passed (finished) or skipped (the test will not be run). */
+    private static final Set<String> HIDDEN_QA_RESULT = Set.of("pass", "skip");
+    /**
+     * QA test case statuses (migration_v35) that count as handed in, like In Review / Done on a Backlog card: never late
+     * (qaRows) and not shown (stillOpen). A QA row carries the test case status in `type` (frozen rows too, as it was
+     * when the week was frozen; weeks frozen before v35 hold the old draft / active, which stay shown).
+     */
+    private static final Set<String> CLOSED_QA_STATUS = Set.of("in_review", "finish");
+    /** Bug stage shown although it is not flagged counts_open: an idea / request still waiting to be picked up. */
+    private static final String IMPROVEMENT_STAGE = "improvement";
+
+    /**
+     * Keeps only the work that is still being worked on, for the Open Item tables (the running week and frozen weeks
+     * alike). It filters what is SHOWN: frozen rows stay complete in weekly_snapshot_items, so the rule can change
+     * without losing data, and an item that goes back (In Review → In Progress, Ready to Test → Re-Open) shows again.
+     * <ul>
+     *   <li>Backlog and My Task: not In Review or Done (status `backlog` is never listed, see {@link #buildItems}).</li>
+     *   <li>QA: latest run not Pass or Skip, and the test case not In Review or Finish.</li>
+     *   <li>Bug: a stage flagged counts_open (Open, In Progress, Re-Open by default; Super Admin sets it in Admin →
+     *       Bug Stages), or Improvement. An unknown stage counts as open, as in {@link #bugRows}.</li>
+     * </ul>
+     * Anything finished in the week (done_in_week) is dropped too. A task whose story was dropped loses its parent_id,
+     * so it is shown on its own instead of indented under a row that is not there.
+     */
+    public List<Map<String, Object>> stillOpen(List<Map<String, Object>> items) {
+        Map<String, Boolean> countsOpen = new HashMap<>();
+        for (Map<String, Object> s : jdbc.queryForList("SELECT code, counts_open FROM bug_stages")) {
+            countsOpen.put(str(s.get("code")), Boolean.TRUE.equals(s.get("counts_open")));
+        }
+        List<Map<String, Object>> out = new ArrayList<>();
+        Set<Long> shownBacklog = new HashSet<>();
+        for (Map<String, Object> r : items) {
+            if (Boolean.TRUE.equals(r.get("done_in_week"))) continue;
+            String source = str(r.get("source")), status = str(r.get("status"));
+            boolean open;
+            switch (source == null ? "" : source) {
+                case "backlog": case "mytask": open = !HIDDEN_WORK_STATUS.contains(status); break;
+                case "qa":                     open = !HIDDEN_QA_RESULT.contains(status)
+                                                   && !CLOSED_QA_STATUS.contains(str(r.get("type"))); break;
+                case "bug":                    open = IMPROVEMENT_STAGE.equals(status) || countsOpen.getOrDefault(status, true); break;
+                default:                       open = true;
+            }
+            if (!open) continue;
+            out.add(r);
+            if ("backlog".equals(source)) shownBacklog.add(num(r.get("id")));
+        }
+        for (Map<String, Object> r : out) {
+            Object parent = r.get("parent_id");
+            if (parent != null && !shownBacklog.contains(num(parent))) r.put("parent_id", null);
         }
         return out;
     }

@@ -1,7 +1,7 @@
 package com.producttracker.controller;
 
 import com.producttracker.config.PermissionHelper;
-import com.producttracker.service.ProgressSupport;
+import com.producttracker.service.FeatureRoadmapSync;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -20,7 +20,7 @@ public class ProductController {
     private JdbcTemplate jdbc;
 
     @Autowired
-    private ProgressSupport progressSupport;
+    private FeatureRoadmapSync featureRoadmapSync;
 
     @GetMapping
     public ResponseEntity<?> list(@AuthenticationPrincipal Object principal) {
@@ -45,7 +45,9 @@ public class ProductController {
                 ids.toArray()
             );
         }
-        progressSupport.attachToProducts(rows);   // "progress": derived from the product's backlog, null if it has no work items
+        // "progress": average of the product's Features (each set by hand through its status), null without Features.
+        // Not from the Backlog; total_items / done_items above are Backlog counts shown as information only.
+        featureRoadmapSync.attachToProducts(rows);
         return ResponseEntity.ok(rows);
     }
 

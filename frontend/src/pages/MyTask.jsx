@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Search, CheckCircle2, Clock, AlertCircle, ExternalLink,
-  X, CheckCheck, Layers, Link2, Plus, Pencil
+  X, CheckCheck, Layers, Link2, Plus, Pencil, ArrowUpRight
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useDeepLink } from '../utils/deepLink';
 import { format, parseISO } from 'date-fns';
 import { id as localeId } from 'date-fns/locale';
 import client from '../api/client';
@@ -135,16 +136,21 @@ function TaskPanel({ item, onClose, onStatusChange, onMarkDone }) {
             </div>
           </div>
 
-          {/* Parent */}
+          {/* Parent: opens the parent card in Backlog */}
           {item.parent_code && (
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <Link to={`/backlog?item=${item.parent_id}`} onClick={onClose}
+              title={`Buka parent di Backlog: ${item.parent_code}${item.parent_title ? ` — ${item.parent_title}` : ''}`}
+              className="group block p-3 bg-slate-50 rounded-xl border border-slate-200 hover:border-indigo-200 hover:bg-indigo-50/40 transition-colors">
               <p className="text-xs text-slate-400 mb-1 flex items-center gap-1">
                 <Link2 className="w-3 h-3" /> Parent
+                <span className="ml-auto inline-flex items-center gap-0.5 font-medium text-indigo-600">
+                  Buka <ArrowUpRight className="w-3 h-3" />
+                </span>
               </p>
               <p className="text-sm font-mono text-slate-800">{item.parent_code}
-                {item.parent_title && <span className="font-sans font-normal text-slate-600 ml-2">{item.parent_title}</span>}
+                {item.parent_title && <span className="font-sans font-normal text-slate-600 ml-2 group-hover:underline underline-offset-2">{item.parent_title}</span>}
               </p>
-            </div>
+            </Link>
           )}
 
           {/* Epic / Feature */}
@@ -245,6 +251,16 @@ export default function MyTask() {
   }, [user?.id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // ?ptask=<id> opens one of your personal tasks (links from a Backlog item's "Task Pribadi Terkait" and from the
+  // Management dashboard). Looked up in your own list, so someone else's task id just says it is not found.
+  useDeepLink(['ptask'], ({ ptask }) => {
+    client.get('/personal-tasks', { silent: true }).then(r => {
+      const found = (r.data || []).find(t => String(t.id) === String(ptask));
+      if (found) setPtModal({ open: true, task: found });
+      else toast.error('Task pribadi tidak ditemukan — hanya pemiliknya yang bisa membukanya');
+    }).catch(() => {});
+  });
 
   // Assigned Backlog items plus the user's own personal tasks, in one list. A personal task has no priority, so it
   // sorts after the prioritised work, by deadline (none last).
@@ -529,19 +545,25 @@ export default function MyTask() {
                         {item.is_delayed && <AlertCircle className="w-3 h-3 text-red-500 inline ml-1" />}
                       </td>
                       <td className="px-4 py-3 max-w-[260px]">
+                        {/* Parent / related item: links to that card in Backlog (outside the title button: no link inside a button) */}
+                        {item.parent_code && item.parent_id && (
+                          <Link to={`/backlog?item=${item.parent_id}`} onClick={e => e.stopPropagation()}
+                            title={`Buka parent di Backlog: ${item.parent_code}${item.parent_title ? ` — ${item.parent_title}` : ''}`}
+                            className="w-fit text-[11px] text-slate-500 font-mono flex items-center gap-1 mb-0.5 hover:text-indigo-600 hover:underline underline-offset-2">
+                            <Link2 className="w-2.5 h-2.5" />{item.parent_code}
+                          </Link>
+                        )}
+                        {isPersonal && item.related_code && item.backlog_item_id && (
+                          <Link to={`/backlog?item=${item.backlog_item_id}`} onClick={e => e.stopPropagation()}
+                            title={`Buka item terkait di Backlog: ${item.related_code} — ${item.related_title || ''}`}
+                            className="group/rel w-fit text-[11px] text-slate-500 flex items-center gap-1 mb-0.5">
+                            <Link2 className="w-2.5 h-2.5" />
+                            <span className="font-mono group-hover/rel:text-indigo-600 group-hover/rel:underline underline-offset-2">{item.related_code}</span>
+                            <span className="text-slate-400">terkait</span>
+                          </Link>
+                        )}
                         <button className="text-left group w-full"
                           onClick={e => { e.stopPropagation(); openRow(); }}>
-                          {(item.parent_code) && (
-                            <p className="text-[11px] text-slate-500 font-mono flex items-center gap-1 mb-0.5">
-                              <Link2 className="w-2.5 h-2.5" />{item.parent_code}
-                            </p>
-                          )}
-                          {isPersonal && item.related_code && (
-                            <p className="text-[11px] text-slate-500 flex items-center gap-1 mb-0.5" title={`Terkait ${item.related_code} · ${item.related_title || ''}`}>
-                              <Link2 className="w-2.5 h-2.5" /><span className="font-mono">{item.related_code}</span>
-                              <span className="text-slate-400">terkait</span>
-                            </p>
-                          )}
                           <p className={`font-medium truncate group-hover:underline group-hover:text-indigo-600 underline-offset-2 transition-colors
                             ${item.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700'}`}
                             title={item.title}>

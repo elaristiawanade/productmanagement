@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle2, CornerDownRight } from 'lucide-react';
+import { CornerDownRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -28,15 +28,18 @@ const BACKLOG_STATUSES = ['backlog', 'todo', 'in_progress', 'in_review', 'done',
 const QA_META = { not_run: { label: 'Belum Dijalankan', c: '#9AA0A9', icon: 'dashed', n: true } };
 
 // Link to the row's own record (null when the viewer cannot open that module).
-function hrefOf(item, can) {
+function hrefOf(item, can, userId) {
   if (item.source === 'backlog') return `/backlog?item=${item.id}`;
   if (item.source === 'bug') return can('bugs', 'access') ? `/bugs?bug=${item.id}` : null;
   if (item.source === 'qa') return `/qa?case=${item.id}`;
-  return null;   // a personal task lives in its owner's My Task only
+  // A personal task opens in its owner's My Task only (PIC = the owner)
+  if (item.source === 'mytask') return item.pic?.[0]?.id === userId ? `/my-tasks?ptask=${item.id}` : null;
+  return null;
 }
 
 /**
- * Open Item of one week: Item, PIC, Status, Deadline, Progress, PO Remarks. Tasks sit indented under their story.
+ * Open Item of one week: Item, PIC, Status, Deadline, Progress, PO Remarks. Only work still open comes from the server
+ * (In Review / Done / Ready to Test / Pass / Skip ... are left out); tasks sit indented under their story.
  * `editable` (the running week only) turns Status into the same dropdown the module uses, for whoever may change it
  * there: Backlog with backlog.update / update_assigned, Bug with bugs.access, My Task for its owner (or Super Admin).
  * QA status is the latest test run, so it is changed by running the test in QA Module, not here.
@@ -60,17 +63,16 @@ export default function OpenItemTable({
   }, [items]);
   const filter = toolbar ? '' : source;   // with a custom toolbar every item is shown
   const rows = useMemo(() => (items || []).filter(i => !filter || i.source === filter), [items, filter]);
+  // The server sends only work still open (no In Review / Done / Ready to Test / Pass / Skip), for every week.
   const summary = useMemo(() => {
     const list = items || [];
     return {
-      open: list.filter(i => !i.done_in_week).length,
-      done: list.filter(i => i.done_in_week).length,
+      open: list.length,
       late: list.filter(i => i.is_late).length,
       missed: asOf ? list.filter(i => missedExpectation(i, asOf)).length : 0,
     };
   }, [items, asOf]);
 
-  const weekWord = editable ? 'minggu ini' : 'minggu itu';
   const canBacklog = can('backlog', 'update') || can('backlog', 'update_assigned');
   const canBug = can('bugs', 'access');
   const canPersonal = (item) => user?.role === 'super_admin' || item.pic?.[0]?.id === user?.id;
@@ -115,7 +117,7 @@ export default function OpenItemTable({
           </>
         )}
         <span className="ml-auto text-xs text-slate-500">
-          {summary.open} terbuka · {summary.done} selesai {weekWord}
+          {summary.open} terbuka
           {summary.late > 0 && <span className="text-red-600 font-medium"> · {summary.late} lewat deadline</span>}
           {summary.missed > 0 && <span className="text-red-600 font-medium"> · {summary.missed} lewat ekspektasi</span>}
         </span>
@@ -138,14 +140,14 @@ export default function OpenItemTable({
             <tbody className="divide-y divide-slate-50">
               {rows.map(item => {
                 const src = SOURCE_OF[item.source];
-                const href = hrefOf(item, can);
+                const href = hrefOf(item, can, user?.id);
                 const child = !!item.parent_id && !filter;   // indent only while the story is shown too
                 const title = (
-                  <span className={`font-medium truncate ${item.done_in_week ? 'text-slate-500' : 'text-slate-700'} ${href ? 'group-hover:underline group-hover:text-indigo-600 underline-offset-2' : ''}`}
+                  <span className={`font-medium truncate text-slate-700 ${href ? 'group-hover:underline group-hover:text-indigo-600 underline-offset-2' : ''}`}
                     title={item.title}>{item.title}</span>
                 );
                 return (
-                  <tr key={`${item.source}-${item.id}`} className={`hover:bg-slate-50 ${item.done_in_week ? 'bg-emerald-50/30' : ''}`}>
+                  <tr key={`${item.source}-${item.id}`} className="hover:bg-slate-50">
                     <td className="px-5 py-2.5">
                       <div className={`flex items-center gap-2 min-w-0 ${child ? 'pl-6' : ''}`}>
                         {child && <CornerDownRight className="w-3.5 h-3.5 text-slate-300 shrink-0" />}
@@ -154,11 +156,6 @@ export default function OpenItemTable({
                         {href ? <Link to={href} className="group min-w-0 flex">{title}</Link> : <span className="min-w-0 flex">{title}</span>}
                         {item.source === 'qa' && item.type === 'draft' && (
                           <span className="text-[10px] px-1 rounded bg-slate-100 text-slate-500 shrink-0">draft</span>
-                        )}
-                        {item.done_in_week && (
-                          <span className="inline-flex items-center gap-0.5 text-[11px] text-emerald-700 shrink-0" title={`Selesai di ${weekWord}`}>
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Selesai
-                          </span>
                         )}
                       </div>
                     </td>

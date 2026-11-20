@@ -41,7 +41,6 @@ public class ImportController {
     private AssigneeSupport assigneeSupport;
 
     private static final Set<String> SEVERITY_VALUES = Set.of("critical", "high", "medium", "low");
-    private static final Set<String> TC_STATUS_VALUES = Set.of("draft", "active", "deprecated");
 
     @PostMapping("/jira")
     public ResponseEntity<?> importJira(
@@ -381,21 +380,36 @@ public class ImportController {
                     String description     = col(rec, "Deskripsi", "Description");
                     String steps            = col(rec, "Langkah", "Langkah-langkah", "Steps");
                     String expectedResult    = col(rec, "Expected Result", "Hasil yang Diharapkan");
-                    String status            = normalizeEnum(col(rec, "Status"), TC_STATUS_VALUES, "draft");
+                    // Code ("in_progress"), label ("In Progress") or a status from before v35 (active / deprecated);
+                    // empty or unknown imports as draft
+                    String status            = QaController.toStatus(col(rec, "Status"));
+                    if (status == null) status = "draft";
                     String priority          = normalizeEnum(col(rec, "Prioritas", "Priority"), SEVERITY_VALUES, "medium");
 
                     Long featureId = resolveFeatureId(col(rec, "Features", "Feature"), productId);
 
-                    jdbc.update(
+                    // "Assigned To": names or emails separated by commas, as the Export CSV writes them; the first one
+                    // found is the primary assignee, unknown names are left out (same lookup as the Bugs import)
+                    List<Long> assigneeIds = new ArrayList<>();
+                    for (String part : col(rec, "Assigned To", "Assignee").split(",")) {
+                        Long uid = resolveUser(part.trim());
+                        if (uid != null && !assigneeIds.contains(uid)) assigneeIds.add(uid);
+                    }
+
+                    Long testCaseId = jdbc.queryForObject(
                         "INSERT INTO qa_test_cases " +
                         "(backlog_item_id, product_id, feature_id, code, title, description, steps, expected_result, status, priority, created_by) " +
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?) RETURNING id", Long.class,
                         backlogItemId, productId, featureId, code, title,
                         description.isBlank() ? null : description,
                         steps.isBlank() ? null : steps,
                         expectedResult.isBlank() ? null : expectedResult,
                         status, priority, creatorId
                     );
+                    if (!assigneeIds.isEmpty()) {
+                        assigneeSupport.sync("qa_test_case_assignees", "test_case_id", testCaseId,
+                            assigneeIds.get(0), assigneeIds.subList(1, assigneeIds.size()));
+                    }
                     created++;
 
                 } catch (Exception rowErr) {
