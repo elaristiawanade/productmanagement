@@ -7,6 +7,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import com.producttracker.service.FeatureRoadmapSync;
+import org.springframework.transaction.support.TransactionTemplate;
+
 import java.util.stream.Collectors;
 
 import java.util.List;
@@ -18,6 +21,12 @@ public class FeatureController {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private TransactionTemplate tx;
+
+    @Autowired
+    private FeatureRoadmapSync sync;
 
     @GetMapping
     public ResponseEntity<?> list(@AuthenticationPrincipal Object principal,
@@ -36,19 +45,19 @@ public class FeatureController {
         if (product_id != null) { filters.add("f.product_id = ?"); paramList.add(product_id); }
         String where = filters.isEmpty() ? "" : "WHERE " + String.join(" AND ", filters) + " ";
         Object[] params = paramList.toArray();
+        // No Backlog figures here: a Feature's progress is set by hand through its status (FeatureRoadmapSync).
+        // (The old item_count / points columns joined backlog_items.feature_id to features.id, but that column points
+        // at product_roadmap since migration_v7, so they were never right.)
         List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT f.*, u.name AS owner_name, e.name AS epic_name, " +
-            "  COUNT(bi.id) AS item_count, " +
-            "  COALESCE(SUM(bi.story_points), 0) AS total_points, " +
-            "  COALESCE(SUM(CASE WHEN bi.status='done' THEN bi.story_points ELSE 0 END), 0) AS done_points " +
+            "SELECT f.*, u.name AS owner_name, e.name AS epic_name, rm.status AS roadmap_status " +
             "FROM features f " +
             "LEFT JOIN users u  ON u.id  = f.owner_id " +
             "LEFT JOIN epics e  ON e.id  = f.epic_id " +
-            "LEFT JOIN backlog_items bi ON bi.feature_id = f.id " +
+            "LEFT JOIN product_roadmap rm ON rm.source_feature_id = f.id " +
             where +
-            "GROUP BY f.id, u.name, e.name " +
             "ORDER BY f.product_id, f.code",
             params);
+        for (Map<String, Object> r : rows) r.put("progress", FeatureRoadmapSync.featureProgress(r.get("status"), r.get("roadmap_status")));
         return ResponseEntity.ok(rows);
     }
 
@@ -57,36 +66,47 @@ public class FeatureController {
         if (!PermissionHelper.can(principal, "features", "create")) {
             return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk menambah feature"));
         }
-        if (body.get("product_id") == null || body.get("code") == null || body.get("name") == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "product_id, code, name wajib"));
+        if (body.get("product_id") == null || body.get("name") == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "product_id dan name wajib"));
         }
         java.sql.Date targetDate;
         try { targetDate = toSqlDate(body.get("target_date")); }
         catch (IllegalArgumentException e) { return invalidTargetDate(); }
-        try {
-            boolean isRoadmapItem = Boolean.TRUE.equals(body.get("is_roadmap_item"));
-            Map<String, Object> row = jdbc.queryForMap(
-                "INSERT INTO features (product_id, epic_id, code, name, owner_id, status, priority, target_release, is_roadmap_item, target_date) " +
-                "VALUES (?,?,?,?,?,?,?,?,?,?) RETURNING *",
-                toLong(body.get("product_id")),
-                toLong(body.get("epic_id")),
-                body.get("code"),
-                body.get("name"),
-                toLong(body.get("owner_id")),
-                orDefault(body.get("status"), "not_started"),
-                orDefault(body.get("priority"), "medium"),
-                body.get("target_release"),
-                isRoadmapItem,
-                targetDate
-            );
-            if (isRoadmapItem) syncRoadmapFromFeature(row);
-            return ResponseEntity.status(201).body(row);
-        } catch (Exception e) {
-            String msg = e.getMessage() != null ? e.getMessage() : "";
-            if (msg.contains("duplicate key") || msg.contains("violates unique constraint")) {
-                return ResponseEntity.status(409).body(Map.of("error", "Kode feature sudah ada di produk ini"));
+        // A blank code is generated ({product code}FT-{n}); a typed one is used as is.
+        boolean autoCode = body.get("code") == null || body.get("code").toString().isBlank();
+        Long productId = toLong(body.get("product_id"));
+        for (int attempt = 0; ; attempt++) {
+            try {
+                String code = autoCode ? sync.nextFeatureCode(productId) : body.get("code").toString().trim();
+                // Every Feature has a roadmap row (Feature is the master), created in the same transaction.
+                Map<String, Object> row = tx.execute(st -> {
+                    Map<String, Object> created = jdbc.queryForMap(
+                        "INSERT INTO features (product_id, epic_id, code, name, owner_id, status, priority, target_release, is_roadmap_item, target_date) " +
+                        "VALUES (?,?,?,?,?,?,?,?,TRUE,?) RETURNING *",
+                        productId,
+                        toLong(body.get("epic_id")),
+                        code,
+                        body.get("name"),
+                        toLong(body.get("owner_id")),
+                        orDefault(body.get("status"), "not_started"),
+                        orDefault(body.get("priority"), "medium"),
+                        body.get("target_release"),
+                        targetDate
+                    );
+                    sync.syncRoadmap(created, true);
+                    return created;
+                });
+                return ResponseEntity.status(201).body(row);
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            } catch (Exception e) {
+                String msg = e.getMessage() != null ? e.getMessage() : "";
+                if (msg.contains("duplicate key") || msg.contains("violates unique constraint")) {
+                    if (autoCode && attempt < 2) continue;   // two creates took the same generated number: take the next one
+                    return ResponseEntity.status(409).body(Map.of("error", "Kode feature sudah ada di produk ini"));
+                }
+                return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
             }
-            return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
         }
     }
 
@@ -96,50 +116,31 @@ public class FeatureController {
         if (!PermissionHelper.can(principal, "features", "update")) {
             return ResponseEntity.status(403).body(Map.of("error", "Tidak memiliki akses untuk mengubah feature"));
         }
-        boolean isRoadmapItem = Boolean.TRUE.equals(body.get("is_roadmap_item"));
         // target_date (the Management Dashboard's "Target") is only touched when the body carries it, so a caller
         // that does not know the field (an old browser tab still on the previous frontend) keeps the stored date.
         boolean targetSent = body.containsKey("target_date");
         java.sql.Date targetDate;
         try { targetDate = toSqlDate(body.get("target_date")); }
         catch (IllegalArgumentException e) { return invalidTargetDate(); }
-        int updated = jdbc.update(
-            "UPDATE features SET name=?, epic_id=?, owner_id=?, status=?, priority=?, target_release=?, is_roadmap_item=?, " +
-            "target_date = CASE WHEN ?::boolean THEN ?::date ELSE target_date END WHERE id=?",
-            body.get("name"), toLong(body.get("epic_id")), toLong(body.get("owner_id")),
-            body.get("status"), body.get("priority"), body.get("target_release"), isRoadmapItem,
-            targetSent, targetDate, id
-        );
-        if (updated == 0) return ResponseEntity.status(404).body(Map.of("error", "Feature tidak ditemukan"));
-        Map<String, Object> row = jdbc.queryForMap("SELECT * FROM features WHERE id=?", id);
-        if (isRoadmapItem) {
-            syncRoadmapFromFeature(row);
-        } else {
-            jdbc.update("DELETE FROM product_roadmap WHERE source_feature_id=?", id);
-        }
+        List<Map<String, Object>> before = jdbc.queryForList("SELECT target_date FROM features WHERE id=?", id);
+        if (before.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "Feature tidak ditemukan"));
+        // The roadmap month only follows the Feature when this save actually changed the date (see FeatureRoadmapSync).
+        boolean dateChanged = targetSent && !java.util.Objects.equals(before.get(0).get("target_date"), targetDate);
+        // is_roadmap_item is always TRUE now: every Feature has a roadmap row, so the old "show on roadmap" flag from a
+        // stale browser tab is ignored (unchecking it used to delete the roadmap row and the Backlog links on it).
+        Map<String, Object> row = tx.execute(st -> {
+            jdbc.update(
+                "UPDATE features SET name=?, epic_id=?, owner_id=?, status=?, priority=?, target_release=?, is_roadmap_item=TRUE, " +
+                "target_date = CASE WHEN ?::boolean THEN ?::date ELSE target_date END WHERE id=?",
+                body.get("name"), toLong(body.get("epic_id")), toLong(body.get("owner_id")),
+                body.get("status"), body.get("priority"), body.get("target_release"),
+                targetSent, targetDate, id
+            );
+            Map<String, Object> updated = jdbc.queryForMap("SELECT * FROM features WHERE id=?", id);
+            sync.syncRoadmap(updated, dateChanged);
+            return updated;
+        });
         return ResponseEntity.ok(row);
-    }
-
-    // Keeps the linked product_roadmap row (created from a feature flagged as
-    // "is_roadmap_item") in sync with the feature's name/version. Other roadmap
-    // fields (status, description, sort_order, month_release_target) are owned
-    // by the Roadmap tab and left untouched on subsequent syncs.
-    private void syncRoadmapFromFeature(Map<String, Object> feature) {
-        Long featureId = toLong(feature.get("id"));
-        List<Map<String, Object>> existing = jdbc.queryForList(
-            "SELECT id FROM product_roadmap WHERE source_feature_id=?", featureId);
-        if (existing.isEmpty()) {
-            jdbc.update(
-                "INSERT INTO product_roadmap (product_id, feature_name, status, product_version, sort_order, source_feature_id) " +
-                "VALUES (?,?,?,?,0,?)",
-                feature.get("product_id"), feature.get("name"), "planned", feature.get("target_release"), featureId
-            );
-        } else {
-            jdbc.update(
-                "UPDATE product_roadmap SET feature_name=?, product_version=? WHERE source_feature_id=?",
-                feature.get("name"), feature.get("target_release"), featureId
-            );
-        }
     }
 
     @DeleteMapping("/{id}")

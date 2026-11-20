@@ -221,10 +221,12 @@ export function buildProductMarkdown(data, meta) {
       '- **Backlog** disusun sebagai pohon Epic → Story → Task/Bug: makin dalam level heading (`###` → `####` → `#####`), makin bawah posisinya di hierarki. Item *Independent* berdiri sendiri di akhir.',
       '- Kode kartu (mis. `HRS-7`, `BUG-001`, `TC-001`) dipakai untuk saling merujuk antar bagian.',
       '- Ada **dua jenis "feature"** yang berbeda:',
-      '  - **Roadmap** (bagian 4): fitur di roadmap produk. Inilah yang dipakai *Impacted Features* di kartu Backlog.',
+      '  - **Roadmap** (bagian 4): fitur di roadmap produk. Inilah yang dipakai *Impacted Features* di kartu Backlog (label relasi saja).',
       '  - **Product Features** (bagian 5, kode seperti `HRS-F1`): dipakai kolom *Feature* di Bugs Incident dan QA Test Case.',
+      '  - Keduanya disinkronkan: setiap Product Feature punya tepat satu baris Roadmap (kolom "Dari Product Feature"), dan nama, status, versi, serta progress Roadmap mengikuti Feature-nya.',
       `- Status backlog: ${BACKLOG_STATUSES.map(s => `\`${s}\``).join(', ')}. Status Epic dan Story otomatis mengikuti anaknya. **TERLAMBAT** = deadline lewat dan status bukan \`done\`, \`backlog\`, atau \`in_review\` (item yang sedang di-review tidak dianggap terlambat).`,
-      '- **Progress %** selalu dihitung otomatis (tidak diisi manual). Kartu Backlog tanpa anak: dari status (`backlog`/`todo` 0%, `in_progress` 50%, `in_review` 80%, `done` 100%, `blocked` 25%). Epic/Story yang punya anak: rata-rata progress item di bawahnya, dibobot story point. Produk: rata-rata seluruh kartu kerjanya. Test case: dari hasil run terakhir (`pass` 100%, `fail` 50%, `blocked` 25%, belum dijalankan/`pending` 0%).',
+      '- **Progress %** kartu Backlog dihitung otomatis: kartu tanpa anak dari status (`backlog`/`todo` 0%, `in_progress` 50%, `in_review` 80%, `done` 100%, `blocked` 25%); Epic/Story yang punya anak: rata-rata progress item di bawahnya, dibobot story point. Test case: dari hasil run terakhir (`pass` 100%, `fail` 50%, `blocked` 25%, belum dijalankan/`pending` 0%).',
+      '- **Progress Feature/Roadmap** diatur manual lewat status, +20% per tahap: `planned` 20%, `research` 40%, `on_progress` 60%, `testing` 80%, `active`/`offline` 100% (Feature `on_hold` tetap di persen tahap terakhir). **Progress Produk** = rata-rata progress Feature-nya. Keduanya **tidak** dihitung dari Backlog.',
       '- Stage bug bawaan: `open` → `in_progress` → `ready_to_test` → (`reopen`) → `done`; `improvement` = masukan/ide, bukan bug. Super Admin bisa menambah Stage lain (ditulis dengan kodenya). Type: `bug`, `inquiry` (laporan yang perlu klarifikasi), atau `improvement` (usulan perbaikan; bisa dibuat menjadi kartu Backlog), plus Type tambahan dari Super Admin.',
       `- Status test case: ${TC_STATUSES.map(s => `\`${s}\``).join(', ')}. Hasil test run: ${RUN_RESULTS.map(s => `\`${s}\``).join(', ')}.`,
       `- Status sprint: ${SPRINT_STATUSES.map(s => `\`${s}\``).join(', ')}.`,
@@ -265,11 +267,11 @@ export function buildProductMarkdown(data, meta) {
     '## 4. Roadmap',
     '_Fitur di roadmap produk — dipakai Impacted Features di kartu Backlog._',
     table(
-      ['Feature', 'Status', 'Versi', 'Target rilis', 'Dari Product Feature', 'Deskripsi'],
+      ['Feature', 'Status', 'Progress', 'Versi', 'Target rilis', 'Dari Product Feature', 'Deskripsi'],
       [...roadmap].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || String(a.feature_name).localeCompare(String(b.feature_name)))
         .map(r => {
           const src = r.source_feature_id ? featureById.get(r.source_feature_id) : null;
-          return [r.feature_name, r.status, r.product_version, month(r.month_release_target), src ? ref(src.code, src.name) : '', r.description];
+          return [r.feature_name, r.status, r.progress != null ? `${r.progress}%` : '', r.product_version, month(r.month_release_target), src ? ref(src.code, src.name) : '', r.description];
         }),
     ),
   );
@@ -278,9 +280,9 @@ export function buildProductMarkdown(data, meta) {
     '## 5. Product Features',
     '_Dari Products → Features — dipakai kolom Feature di Bugs Incident dan QA Test Case._',
     table(
-      ['Kode', 'Nama', 'Epic', 'Status', 'Prioritas', 'Owner', 'Target rilis'],
+      ['Kode', 'Nama', 'Epic', 'Status', 'Progress', 'Prioritas', 'Owner', 'Target rilis'],
       [...features].sort((a, b) => String(a.code).localeCompare(String(b.code), undefined, { numeric: true }))
-        .map(f => [f.code, f.name, f.epic_name, f.status, f.priority, f.owner_name, f.target_release]),
+        .map(f => [f.code, f.name, f.epic_name, f.status, f.progress != null ? `${f.progress}%` : '', f.priority, f.owner_name, f.target_release]),
     ),
   );
 

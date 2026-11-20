@@ -5,14 +5,15 @@ import DeadlineDate from '../DeadlineDate';
 import Section, { SectionNote } from './Section';
 
 // Finished feature statuses: their Target is never shown as late.
-const FINISHED = ['done', 'released'];
+const FINISHED = ['done', 'released', 'offline'];
 
-// "Features": Products -> Features of the product. Target = the feature's Target date; Progress % is derived from
-// the Backlog work linked to it (a Done/Released feature is 100%, no linked work = "—").
+// "Features": Products -> Features of the product. Target = the feature's Target date; Progress % is set by hand through
+// the feature's status (+20% per stage, the same number as Products and Roadmap show), not from the Backlog. The count
+// of Backlog items that reference the feature (Impacted Features) is shown as information only.
 export default function FeaturesSection({ features }) {
   return (
     <Section title="Features" bodyClassName=""
-      hint="Dari Products → Features. Progress dihitung dari item Backlog yang terhubung ke fitur">
+      hint="Dari Products → Features. Progress diatur lewat status fitur (Planned 20% … Active/Offline 100%), tidak dari Backlog">
       {!features ? <SectionNote>Memuat fitur...</SectionNote>
         : !features.length ? <SectionNote>Produk ini belum punya fitur.</SectionNote>
         : (
@@ -24,7 +25,7 @@ export default function FeaturesSection({ features }) {
                   <th className="text-left px-3 py-2.5">Feature</th>
                   <th className="text-left px-3 py-2.5 w-36">Status</th>
                   <th className="text-left px-3 py-2.5 w-32">Target</th>
-                  <th className="text-left px-3 py-2.5 w-[130px]" title="Rata-rata progress item Backlog yang terhubung, berbobot story point">Progress</th>
+                  <th className="text-left px-3 py-2.5 w-[130px]" title="Dari status fitur: Planned 20%, Research 40%, On Progress 60%, Testing 80%, Active/Offline 100%; On Hold tetap di persen terakhir">Progress</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -37,7 +38,7 @@ export default function FeaturesSection({ features }) {
                         <span className="font-medium text-slate-700 truncate group-hover:underline group-hover:text-indigo-600 underline-offset-2">{f.name}</span>
                       </Link>
                       <p className="text-[11px] text-slate-400 mt-0.5">
-                        {f.linked_items > 0 ? `${f.linked_items} item Backlog terhubung` : f.is_roadmap_item ? 'Belum ada item Backlog terhubung' : 'Bukan roadmap item, jadi tidak bisa dihubungkan ke Backlog'}
+                        {f.linked_items > 0 ? `${f.linked_items} item Backlog terkait (label, tidak memengaruhi progress)` : 'Belum ada item Backlog terkait'}
                       </p>
                     </td>
                     <td className="px-3 py-2.5"><StatusBadge status={f.status} size="xs" /></td>

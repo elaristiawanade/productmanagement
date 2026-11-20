@@ -14,10 +14,12 @@ export const STATUS_MAP = {
   completed:  { label: 'Completed',   c: '#1F9D55', icon: 'check' },
   // Feature
   not_started:    { label: 'Not Started', c: '#7C8494', icon: 'dashed', n: true },
+  research:       { label: 'Research',    c: '#8B5CF6', icon: 'dashed' },
   in_development: { label: 'In Dev',      c: '#3E63DD', icon: 'half' },
   testing:        { label: 'Testing',     c: '#D9891A', icon: 'tq' },
   released:       { label: 'Released',    c: '#1F9D55', icon: 'check' },
   on_hold:        { label: 'On Hold',     c: '#E8740F', icon: 'blocked' },
+  offline:        { label: 'Offline',     c: '#E5484D', icon: 'blocked' },
   // QA
   pass:    { label: 'Pass',    c: '#1F9D55', icon: 'check' },
   fail:    { label: 'Fail',    c: '#E5484D', icon: 'blocked' },
