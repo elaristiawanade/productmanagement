@@ -41,7 +41,10 @@ public class ProgressSupport {
         return STATUS_PCT.getOrDefault(status == null ? "" : status.toString(), 0);
     }
 
-    /** null for a deprecated test case (retired, no progress to show). */
+    /**
+     * From the latest run only; the test case status (Draft … Finish, migration_v35) does not change the number.
+     * null for a test case still on the status `deprecated` from before v35 (retired, no progress to show).
+     */
     public static Integer testCasePct(Object testCaseStatus, Object lastResult) {
         if ("deprecated".equals(testCaseStatus)) return null;
         return RUN_PCT.getOrDefault(lastResult == null ? "" : lastResult.toString(), 0);

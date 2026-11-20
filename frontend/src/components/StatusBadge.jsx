@@ -20,7 +20,10 @@ export const STATUS_MAP = {
   released:       { label: 'Released',    c: '#1F9D55', icon: 'check' },
   on_hold:        { label: 'On Hold',     c: '#E8740F', icon: 'blocked' },
   offline:        { label: 'Offline',     c: '#E5484D', icon: 'blocked' },
-  // QA
+  // QA test case (migration_v35): draft / finish here, todo / in_progress / in_review are the Backlog keys above
+  draft:   { label: 'Draft',   c: '#9AA0A9', icon: 'dashed', n: true },
+  finish:  { label: 'Finish',  c: '#1F9D55', icon: 'check' },
+  // QA test run
   pass:    { label: 'Pass',    c: '#1F9D55', icon: 'check' },
   fail:    { label: 'Fail',    c: '#E5484D', icon: 'blocked' },
   pending: { label: 'Pending', c: '#7C8494', icon: 'dashed', n: true },

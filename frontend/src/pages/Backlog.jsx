@@ -990,9 +990,10 @@ function RelatedCards({ item, initiallyOpen = false, onBeforeLeave }) {
                       <RelatedRow key={tc.id} to={`/qa?case=${tc.id}`} onBeforeLeave={onBeforeLeave}>
                         <span className="font-mono text-xs text-slate-400 shrink-0">{tc.code}</span>
                         <span className="text-sm text-slate-800 truncate flex-1 min-w-0 group-hover:underline group-hover:text-indigo-600 underline-offset-2" title={tc.title}>{tc.title}</span>
-                        {tc.status === 'deprecated' && <span className="shrink-0 text-[11px] text-slate-400">deprecated</span>}
+                        {/* Test case status (Draft … Finish), then the result of its latest run */}
+                        <span className="shrink-0" title="Status test case"><StatusBadge size="xs" status={tc.status} /></span>
                         {tc.last_result
-                          ? <StatusBadge size="xs" status={tc.last_result} />
+                          ? <span className="shrink-0" title="Hasil run terakhir"><StatusBadge size="xs" status={tc.last_result} /></span>
                           : <span className="shrink-0 text-[11px] text-slate-400">Belum di-run</span>}
                       </RelatedRow>
                     ))}

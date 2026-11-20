@@ -55,7 +55,8 @@ import java.util.*;
  * <p>Inclusion rules: Backlog skips epics and anything in status `backlog` (not planned yet); a Done item only
  * counts in the week it became Done. A task whose story is also listed is placed right under it (parent_id), for
  * indentation. Bugs skip tickets already turned into a Backlog item (that item is listed instead); a closed Stage
- * only counts in the week it closed. QA skips deprecated test cases; a test case is finished by a Pass run.
+ * only counts in the week it closed. QA skips deprecated test cases (status from before migration_v35); a test case is
+ * finished by a Pass run, its PIC is its assignees (else the latest tester / author) and In Review / Finish are never late.
  */
 @Service
 public class WeeklySnapshotService {
@@ -242,11 +243,15 @@ public class WeeklySnapshotService {
     }
 
     private List<Map<String, Object>> qaRows(long productId, Timestamp start, Timestamp end, LocalDate lateBefore) {
-        // PIC: whoever ran the latest test, else whoever wrote the test case (test cases have no assignee).
+        // PIC: the test case's assignees (migration_v35). A test case nobody is assigned to keeps the rule from before
+        // assignees existed: whoever ran the latest test, else whoever wrote the test case.
+        String pic = picJson(
+            "SELECT a.user_id, a.is_primary FROM qa_test_case_assignees a WHERE a.test_case_id = tc.id " +
+            "UNION SELECT COALESCE(lr.tester_id, tc.created_by), TRUE WHERE COALESCE(lr.tester_id, tc.created_by) IS NOT NULL " +
+            "  AND NOT EXISTS (SELECT 1 FROM qa_test_case_assignees a2 WHERE a2.test_case_id = tc.id)");
         List<Map<String, Object>> rows = jdbc.queryForList(
             "SELECT tc.id, tc.code, tc.title, tc.deadline, tc.status AS tc_status, lr.result, lr.run_at, " +
-            "  COALESCE((SELECT json_build_array(json_build_object('id', u.id, 'name', u.name, 'color', u.avatar_color)) " +
-            "    FROM users u WHERE u.id = COALESCE(lr.tester_id, tc.created_by)), '[]'::json)::text AS pic " +
+            pic + " " +
             "FROM qa_test_cases tc " +
             "LEFT JOIN LATERAL (SELECT r.result, COALESCE(r.executed_at, r.created_at) AS run_at, r.tester_id " +
             "  FROM qa_test_runs r WHERE r.test_case_id = tc.id AND COALESCE(r.executed_at, r.created_at) < ? " +
@@ -262,7 +267,8 @@ public class WeeklySnapshotService {
             Map<String, Object> row = row("qa", num(r.get("id")), str(r.get("tc_status")), str(r.get("code")),
                 str(r.get("title")), str(r.get("pic")), result == null ? "not_run" : result, r.get("deadline"),
                 ProgressSupport.testCasePct(r.get("tc_status"), result), passed);
-            row.put("is_late", isLate(r.get("deadline"), lateBefore, passed));
+            // In Review / Finish are never late, like In Review on a Backlog card
+            row.put("is_late", isLate(r.get("deadline"), lateBefore, passed || CLOSED_QA_STATUS.contains(str(r.get("tc_status")))));
             (passed ? finished : out).add(row);
         }
         out.addAll(finished);
@@ -474,6 +480,12 @@ public class WeeklySnapshotService {
     private static final Set<String> HIDDEN_WORK_STATUS = Set.of("in_review", "done");
     /** QA results that are not shown: passed (finished) or skipped (the test will not be run). */
     private static final Set<String> HIDDEN_QA_RESULT = Set.of("pass", "skip");
+    /**
+     * QA test case statuses (migration_v35) that count as handed in, like In Review / Done on a Backlog card: never late
+     * (qaRows) and not shown (stillOpen). A QA row carries the test case status in `type` (frozen rows too, as it was
+     * when the week was frozen; weeks frozen before v35 hold the old draft / active, which stay shown).
+     */
+    private static final Set<String> CLOSED_QA_STATUS = Set.of("in_review", "finish");
     /** Bug stage shown although it is not flagged counts_open: an idea / request still waiting to be picked up. */
     private static final String IMPROVEMENT_STAGE = "improvement";
 
@@ -483,7 +495,7 @@ public class WeeklySnapshotService {
      * without losing data, and an item that goes back (In Review → In Progress, Ready to Test → Re-Open) shows again.
      * <ul>
      *   <li>Backlog and My Task: not In Review or Done (status `backlog` is never listed, see {@link #buildItems}).</li>
-     *   <li>QA: latest run not Pass or Skip.</li>
+     *   <li>QA: latest run not Pass or Skip, and the test case not In Review or Finish.</li>
      *   <li>Bug: a stage flagged counts_open (Open, In Progress, Re-Open by default; Super Admin sets it in Admin →
      *       Bug Stages), or Improvement. An unknown stage counts as open, as in {@link #bugRows}.</li>
      * </ul>
@@ -503,7 +515,8 @@ public class WeeklySnapshotService {
             boolean open;
             switch (source == null ? "" : source) {
                 case "backlog": case "mytask": open = !HIDDEN_WORK_STATUS.contains(status); break;
-                case "qa":                     open = !HIDDEN_QA_RESULT.contains(status); break;
+                case "qa":                     open = !HIDDEN_QA_RESULT.contains(status)
+                                                   && !CLOSED_QA_STATUS.contains(str(r.get("type"))); break;
                 case "bug":                    open = IMPROVEMENT_STAGE.equals(status) || countsOpen.getOrDefault(status, true); break;
                 default:                       open = true;
             }

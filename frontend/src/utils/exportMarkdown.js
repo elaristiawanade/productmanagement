@@ -16,7 +16,7 @@ import { flattenBacklogTree } from './backlogHierarchy';
 
 const BACKLOG_STATUSES = ['backlog', 'todo', 'in_progress', 'in_review', 'done', 'blocked'];
 const BUG_STAGES       = ['open', 'in_progress', 'ready_to_test', 'reopen', 'done', 'improvement'];
-const TC_STATUSES      = ['draft', 'active', 'deprecated'];
+const TC_STATUSES      = ['draft', 'todo', 'in_progress', 'in_review', 'finish'];
 const SPRINT_STATUSES  = ['planned', 'active', 'completed'];
 const RUN_RESULTS      = ['pass', 'fail', 'blocked', 'pending', 'skip'];
 const TYPE_LABEL = { epic: 'Epic', story: 'Story', task: 'Task', bug: 'Bug', independent: 'Independent' };
@@ -228,7 +228,7 @@ export function buildProductMarkdown(data, meta) {
       '- **Progress %** kartu Backlog dihitung otomatis: kartu tanpa anak dari status (`backlog`/`todo` 0%, `in_progress` 50%, `in_review` 80%, `done` 100%, `blocked` 25%); Epic/Story yang punya anak: rata-rata progress item di bawahnya, dibobot story point. Test case: dari hasil run terakhir (`pass` 100%, `fail` 50%, `blocked` 25%, belum dijalankan/`pending` 0%).',
       '- **Progress Feature/Roadmap** diatur manual lewat status, +20% per tahap: `planned` 20%, `research` 40%, `on_progress` 60%, `testing` 80%, `active`/`offline` 100% (Feature `on_hold` tetap di persen tahap terakhir). **Progress Produk** = rata-rata progress Feature-nya. Keduanya **tidak** dihitung dari Backlog.',
       '- Stage bug bawaan: `open` → `in_progress` → `ready_to_test` → (`reopen`) → `done`; `improvement` = masukan/ide, bukan bug. Super Admin bisa menambah Stage lain (ditulis dengan kodenya). Type: `bug`, `inquiry` (laporan yang perlu klarifikasi), atau `improvement` (usulan perbaikan; bisa dibuat menjadi kartu Backlog), plus Type tambahan dari Super Admin.',
-      `- Status test case: ${TC_STATUSES.map(s => `\`${s}\``).join(', ')}. Hasil test run: ${RUN_RESULTS.map(s => `\`${s}\``).join(', ')}.`,
+      `- Status test case: ${TC_STATUSES.map(s => `\`${s}\``).join(', ')} (nama status kartu Backlog, ditambah \`draft\` dan \`finish\`; \`in_review\` dan \`finish\` tidak dianggap terlambat; progress test case tetap dari hasil run terakhir, bukan dari status). Test case bisa di-assign ke lebih dari satu orang. Hasil test run: ${RUN_RESULTS.map(s => `\`${s}\``).join(', ')}.`,
       `- Status sprint: ${SPRINT_STATUSES.map(s => `\`${s}\``).join(', ')}.`,
       '- "Perubahan" di riwayat = catatan otomatis sistem (status/stage/assignee berubah); "Komentar" = ditulis user.',
       '- Link mengarah ke kartu asli di PO Tracker (perlu login).',
@@ -392,6 +392,7 @@ export function buildProductMarkdown(data, meta) {
         [
           pairs([['Status', enumv(tc.status)], ['Progress', tc.progress != null ? `${tc.progress}%` : ''], ['Prioritas', one(tc.priority)]]),
           pairs([['Backlog item', ref(tc.item_code, tc.item_title)], ['Feature', featureRef(tc)]]),
+          pairs([['Assignee', names(tc.assignees, '')], ['Deadline', tc.deadline ? day(tc.deadline) : '']]),
           pairs([['Author', one(tc.created_by_name)], ['Dibuat', dt(tc.created_at)], ['Diperbarui', dt(tc.updated_at)]]),
           pairs([['Link', link(`/qa?case=${tc.id}`)]]),
         ].filter(Boolean).join('\n'),
