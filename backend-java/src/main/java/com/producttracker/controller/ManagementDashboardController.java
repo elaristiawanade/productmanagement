@@ -27,7 +27,8 @@ import java.util.*;
  *   GET /api/management/weeks?product_id=        the current week plus every frozen week, newest first, and
  *                                                tracking_start (first tracked week; earlier weeks stay empty)
  *   GET /api/management/open-items?product_id=&week=yyyy-MM-dd
- *                                                Open Item of one week (any day of it; default this week).
+ *                                                Open Item of one week (any day of it; default this week):
+ *                                                only work still open (WeeklySnapshotService#stillOpen).
  *                                                This week is live, a past week comes from its frozen copy.
  *                                                Each item carries its PO remark; the week carries its note.
  *   PUT /api/management/remarks                  {product_id, item_source, item_id, expected_date?, remark?}
@@ -206,6 +207,8 @@ public class ManagementDashboardController {
             header = week(weekStart, frozen.get("source").toString(), frozen.get("captured_at"));
             items = weekly.frozenItems(num(frozen.get("id")));
         }
+        // Only work still being worked on (no In Review / Done / Ready to Test / Pass / Skip ...), for both kinds of week.
+        items = weekly.stillOpen(items);
         attachRemarks(productId, weekStart, items);
         boolean editor = canEdit(principal, productId);
         Map<String, Object> out = new LinkedHashMap<>(header);

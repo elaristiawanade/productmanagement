@@ -28,7 +28,8 @@ import java.util.*;
 /**
  * "Open Item (weekly basis)" of the Management Dashboard: per product and week, the work that was open during the
  * week plus the work finished in it. Four sources, always in this order: Backlog, My Task (personal_tasks), QA
- * Module (test cases), Bug.
+ * Module (test cases), Bug. The rows are built and frozen complete; the dashboard then SHOWS only the work still
+ * being worked on ({@link #stillOpen}: no In Review / Done / Ready to Test / Pass / Skip ...).
  *
  * <p>The CURRENT week is computed live on every request ({@link #buildItems}). Once a week is over it is FROZEN:
  * {@link #captureWeek} copies its rows into weekly_snapshots / weekly_snapshot_items and they never change again,
@@ -463,6 +464,56 @@ public class WeeklySnapshotService {
             m.put("is_late", Boolean.TRUE.equals(r.get("is_late")));
             m.put("sort_order", r.get("sort_order"));
             out.add(m);
+        }
+        return out;
+    }
+
+    // ── What the dashboard shows ─────────────────────────────────────────────
+
+    /** Backlog / My Task statuses that are not shown: waiting for review, or finished. */
+    private static final Set<String> HIDDEN_WORK_STATUS = Set.of("in_review", "done");
+    /** QA results that are not shown: passed (finished) or skipped (the test will not be run). */
+    private static final Set<String> HIDDEN_QA_RESULT = Set.of("pass", "skip");
+    /** Bug stage shown although it is not flagged counts_open: an idea / request still waiting to be picked up. */
+    private static final String IMPROVEMENT_STAGE = "improvement";
+
+    /**
+     * Keeps only the work that is still being worked on, for the Open Item tables (the running week and frozen weeks
+     * alike). It filters what is SHOWN: frozen rows stay complete in weekly_snapshot_items, so the rule can change
+     * without losing data, and an item that goes back (In Review → In Progress, Ready to Test → Re-Open) shows again.
+     * <ul>
+     *   <li>Backlog and My Task: not In Review or Done (status `backlog` is never listed, see {@link #buildItems}).</li>
+     *   <li>QA: latest run not Pass or Skip.</li>
+     *   <li>Bug: a stage flagged counts_open (Open, In Progress, Re-Open by default; Super Admin sets it in Admin →
+     *       Bug Stages), or Improvement. An unknown stage counts as open, as in {@link #bugRows}.</li>
+     * </ul>
+     * Anything finished in the week (done_in_week) is dropped too. A task whose story was dropped loses its parent_id,
+     * so it is shown on its own instead of indented under a row that is not there.
+     */
+    public List<Map<String, Object>> stillOpen(List<Map<String, Object>> items) {
+        Map<String, Boolean> countsOpen = new HashMap<>();
+        for (Map<String, Object> s : jdbc.queryForList("SELECT code, counts_open FROM bug_stages")) {
+            countsOpen.put(str(s.get("code")), Boolean.TRUE.equals(s.get("counts_open")));
+        }
+        List<Map<String, Object>> out = new ArrayList<>();
+        Set<Long> shownBacklog = new HashSet<>();
+        for (Map<String, Object> r : items) {
+            if (Boolean.TRUE.equals(r.get("done_in_week"))) continue;
+            String source = str(r.get("source")), status = str(r.get("status"));
+            boolean open;
+            switch (source == null ? "" : source) {
+                case "backlog": case "mytask": open = !HIDDEN_WORK_STATUS.contains(status); break;
+                case "qa":                     open = !HIDDEN_QA_RESULT.contains(status); break;
+                case "bug":                    open = IMPROVEMENT_STAGE.equals(status) || countsOpen.getOrDefault(status, true); break;
+                default:                       open = true;
+            }
+            if (!open) continue;
+            out.add(r);
+            if ("backlog".equals(source)) shownBacklog.add(num(r.get("id")));
+        }
+        for (Map<String, Object> r : out) {
+            Object parent = r.get("parent_id");
+            if (parent != null && !shownBacklog.contains(num(parent))) r.put("parent_id", null);
         }
         return out;
     }
