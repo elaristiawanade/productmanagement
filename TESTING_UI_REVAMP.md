@@ -536,3 +536,23 @@ Perubahan tampilan saja (PRD 3.16, v3.28; dibuat 18 Nov 2026, sebelumnya PR #30 
 - ✅ Tidak berubah: bar kapasitas Dashboard (hijau/kuning/merah), status/badge/prioritas, warna avatar
 - ✅ Backlog: **Group: Status** di baris tab, tidak lagi terdampar di baris filter
 - ✅ Dicek lewat screenshot headless Chrome (terang, gelap, HP) di Backlog, Products, Sprints, My Tasks
+
+## 40. Badge notifikasi di tab browser (judul + ikon)
+
+Fitur baru (PRD 3.13, v3.29). Frontend saja, **tanpa migrasi** dan tanpa perubahan backend; memakai polling `GET /api/notifications/unread-count` yang sudah ada (tidak ada request tambahan). Diuji 20 Nov 2026 di headless Chrome sebagai Dimas (developer), di Vite dev (StrictMode) dan di build Docker :8500. Notifikasi uji berawalan `[e2e] tab badge` dan sudah dihapus.
+
+- ✅ 0 belum dibaca: judul tab tetap `Product Tracker — Internal Dev`, ikon tab logo biasa; halaman Login juga
+- ✅ Notif baru masuk (tab dibiarkan): dalam ≤30 detik judul jadi `(1) Product Tracker — Internal Dev` dan ikon tab mendapat titik merah berangka; badge lonceng ikut 1
+- ✅ Kembali ke tab PO Tracker: angka langsung diperbarui (±0,3 detik), tidak menunggu polling 30 detik
+- ✅ 12 belum dibaca: judul `(12) …` (angka pas, maks `99+`), ikon tab `9+`; tidak ada awalan ganda `(1) (1)`
+- ✅ Baca satu notif dari dropdown → `(11) …`; **Tandai semua** → judul dan logo kembali normal
+- ✅ Pindah halaman (mis. ke Backlog) tidak menghapus angka
+- ✅ Logout → judul dan logo kembali normal
+- ✅ Polling gagal (backend mati/restart): tidak ada toast "Terjadi kesalahan" tiap 30 detik, angka terakhir tetap tampil
+- ✅ Ikon tab terbaca di ukuran 16 px dan 32 px (dicek lewat screenshot); tidak ada error di console
+- ✅ **Diuji user di lokal (20 Nov 2026): oke** — login Admin, bekerja di tab lain:
+  - Budi (PO) meng-assign item → tab langsung menampilkan `(1) Product Tracker — Internal Dev` + titik merah di ikon; klik notif di lonceng → angka hilang
+  - assignment + mention `@[Admin]` → `(2) …`; **Tandai semua** → judul dan logo kembali normal
+  - data uji (item HRS-109, komentar, notifikasi) sudah dihapus
+- ⚠️ Browser hanya mengizinkan web mengubah judul dan ikon tab (tidak bisa menaruh angka di kanan tab). Chrome memperlambat timer tab latar, jadi angka bisa muncul sampai ±1 menit setelah notif masuk; tab yang "ditidurkan" browser (Memory Saver Chrome / Sleeping Tabs Edge) baru diperbarui saat dibuka lagi
+- 🧑 **Production:** rebuild frontend saja (lewat mentor); tidak ada migrasi
